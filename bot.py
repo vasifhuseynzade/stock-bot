@@ -6,9 +6,12 @@ import yfinance as yf
 import pandas as pd
 
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID = int(os.getenv("CHAT_ID", "0"))
 
-PORTFOLIO_FILE = "portfolio.json"
+if not TOKEN or CHAT_ID == 0:
+    raise Exception("❌ Missing TOKEN or CHAT_ID")
+
+PORTFOLIO_FILE = "/tmp/portfolio.json"
 
 # ---------------- PORTFOLIO ----------------
 
@@ -19,13 +22,19 @@ def load_portfolio():
         return json.load(f)
 
 def save_portfolio(data):
-    with open(PORTFOLIO_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    try:
+        temp_file = PORTFOLIO_FILE + ".tmp"
+        with open(temp_file, "w") as f:
+            json.dump(data, f, indent=4)
+        os.replace(temp_file, PORTFOLIO_FILE)
+    except Exception as e:
+        print("❌ Error saving portfolio:", e)
 
 portfolio = load_portfolio()
 last_update_id = None
 last_signals = {}
 last_alerts = {}
+last_reset_day = None
 
 # ---------------- TELEGRAM ----------------
 
@@ -135,10 +144,21 @@ def get_updates():
 
 WATCHLIST = ["MSFT","INTC","AMPL","MGNI","PATH","INOD","SERV","PGY","CEVA","MCHP","AVAV"]
 
-def analyze(ticker):
-    df = yf.Ticker(ticker).history(period="3mo")
+def analyze(ticker, market):
+    for attempt in range(2):  # retry once
+        try:
+            df = yf.Ticker(ticker).history(period="3mo")
 
-    if len(df) < 50:
+            if df.empty or len(df) < 50:
+                return None
+
+            break  # success
+
+        except Exception as e:
+            print(f"Retry {ticker}: {e}")
+            time.sleep(1)
+
+    else:
         return None
 
     close = df["Close"]
@@ -153,7 +173,6 @@ def analyze(ticker):
     avg_vol = volume.rolling(20).mean().iloc[-1]
     vol_now = volume.iloc[-1]
 
-    market = market_condition()
 
     if market == "BEAR":
         return None
@@ -212,15 +231,30 @@ def atr(df, period=14):
 
 def get_price(ticker):
     try:
-        df = yf.Ticker(ticker).history(period="1d")
-        return df["Close"].iloc[-1]
-    except:
+        df = yf.Ticker(ticker).history(period="1d", interval="1m")
+
+
+        if df.empty:
+            return None
+
+        return float(df["Close"].iloc[-1])
+
+    except Exception as e:
+        print(f"Price error {ticker}: {e}")
         return None
 
 # ---------------- SMART ALERTS ----------------
 
 def smart_alerts(ticker):
-    df = yf.Ticker(ticker).history(period="1mo")
+    try:
+        df = yf.Ticker(ticker).history(period="1mo")
+
+        if df.empty or len(df) < 20:
+            return None
+
+    except Exception as e:
+        print(f"Alert error {ticker}: {e}")
+        return None
 
     if len(df) < 20:
         return None
@@ -252,20 +286,28 @@ def smart_alerts(ticker):
 # ---------------- MARKET ----------------
 
 def market_condition():
-    spy = yf.Ticker("SPY").history(period="3mo")
-    qqq = yf.Ticker("QQQ").history(period="3mo")
+    try:
+        spy = yf.Ticker("SPY").history(period="3mo")
+        qqq = yf.Ticker("QQQ").history(period="3mo")
 
-    spy_price = spy["Close"].iloc[-1]
-    spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
+        if spy.empty or qqq.empty:
+            return "UNCERTAIN"
 
-    qqq_price = qqq["Close"].iloc[-1]
-    qqq_ma50 = qqq["Close"].rolling(50).mean().iloc[-1]
+        spy_price = spy["Close"].iloc[-1]
+        spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
 
-    if spy_price > spy_ma50 and qqq_price > qqq_ma50:
-        return "BULL"
-    elif spy_price < spy_ma50 and qqq_price < qqq_ma50:
-        return "BEAR"
-    else:
+        qqq_price = qqq["Close"].iloc[-1]
+        qqq_ma50 = qqq["Close"].rolling(50).mean().iloc[-1]
+
+        if spy_price > spy_ma50 and qqq_price > qqq_ma50:
+            return "BULL"
+        elif spy_price < spy_ma50 and qqq_price < qqq_ma50:
+            return "BEAR"
+        else:
+            return "UNCERTAIN"
+
+    except Exception as e:
+        print("Market error:", e)
         return "UNCERTAIN"
 
 # ---------------- POSITION MANAGEMENT ----------------
@@ -317,11 +359,22 @@ last_scan = 0
 
 while True:
     try:
+        current_day = int(time.time() // 86400)
+
+        if last_reset_day is None or last_reset_day != current_day:
+            last_signals.clear()
+            last_alerts.clear()
+            last_reset_day = current_day
+
         get_updates()
         manage_positions()
 
         if time.time() - last_scan > 300:
+
+            market = market_condition()
+
             for t in WATCHLIST:
+                time.sleep(1)
 
                 if t in portfolio["positions"]:
                     continue
@@ -335,7 +388,7 @@ while True:
                     last_alerts[t] = alert
                     send(alert)
 
-                result = analyze(t)
+                result = analyze(t, market)
 
                 if result:
                     if t in last_signals:
