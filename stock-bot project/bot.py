@@ -412,6 +412,8 @@ def manage_positions():
 
 last_scan = 0
 
+send("🚀 BOT STARTED - NEW VERSION LIVE")
+
 while True:
     try:
 
