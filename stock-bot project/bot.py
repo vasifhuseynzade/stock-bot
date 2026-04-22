@@ -11,15 +11,20 @@ CHAT_ID = int(os.getenv("CHAT_ID", "0"))
 if not TOKEN or CHAT_ID == 0:
     raise Exception("❌ Missing TOKEN or CHAT_ID")
 
-PORTFOLIO_FILE = "/tmp/portfolio.json"
+PORTFOLIO_FILE = "/data/portfolio.json"
 
 # ---------------- PORTFOLIO ----------------
 
 def load_portfolio():
     if not os.path.exists(PORTFOLIO_FILE):
         return {"cash": 4000, "positions": {}}
-    with open(PORTFOLIO_FILE, "r") as f:
-        return json.load(f)
+
+    try:
+        with open(PORTFOLIO_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print("❌ Corrupted portfolio file, resetting:", e)
+        return {"cash": 4000, "positions": {}}
 
 def save_portfolio(data):
     try:
@@ -41,7 +46,11 @@ last_reset_day = None
 def send(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=5)
+        res = requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=5)
+
+        if res.status_code != 200:
+            print("Telegram failed:", res.text)
+
     except Exception as e:
         print("Telegram error:", e)
 
@@ -142,7 +151,20 @@ def get_updates():
 
 # ---------------- ANALYSIS ----------------
 
-WATCHLIST = ["MSFT","INTC","AMPL","MGNI","PATH","INOD","SERV","PGY","CEVA","MCHP","AVAV"]
+CORE_STOCKS = {"AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN","PLTR","SOFI","HOOD","DKNG","COIN"}
+RISKY_STOCKS = {"AMPL","MGNI","INOD","SERV","PGY","CEVA","AVAV"}
+
+WATCHLIST = [
+    # CORE (reliable, main profit drivers)
+    "AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN",
+    "PLTR","SOFI","HOOD","DKNG","COIN",
+
+    # GROWTH / VOLATILE (good swings)
+    "SNOW","NET","CRWD","SHOP",
+
+    # YOUR PICKS (high risk / big moves)
+    "INTC","MCHP","AVAV","AMPL","MGNI","INOD","SERV","PGY","CEVA"
+]
 
 def analyze(ticker, market):
     for attempt in range(2):  # retry once
@@ -152,12 +174,11 @@ def analyze(ticker, market):
             if df.empty or len(df) < 50:
                 return None
 
-            break  # success
+            break
 
         except Exception as e:
             print(f"Retry {ticker}: {e}")
-            time.sleep(1)
-
+            time.sleep(1.2)
     else:
         return None
 
@@ -173,17 +194,21 @@ def analyze(ticker, market):
     avg_vol = volume.rolling(20).mean().iloc[-1]
     vol_now = volume.iloc[-1]
 
-
+    # ❌ Skip bad market
     if market == "BEAR":
         return None
 
     atr_val = atr(df).iloc[-1]
 
+    # ---------------- SCORE ----------------
     score = 0
+
     if price > ma50:
         score += 20
+
     if price < ma20 and rsi_val < 40:
         score += 30
+
     if vol_now > avg_vol * 1.5:
         score += 20
 
@@ -192,23 +217,49 @@ def analyze(ticker, market):
 
     portfolio_cash = portfolio["cash"]
 
+    # ---------------- ALLOCATION ----------------
     if market == "BULL":
-        allocation = 0.25 if score >= 60 else 0.15
+        base_alloc = 0.25 if score >= 60 else 0.15
     elif market == "UNCERTAIN":
-        allocation = 0.10
+        base_alloc = 0.10
     else:
-        allocation = 0.05
+        base_alloc = 0.05
 
-    capital = portfolio_cash * allocation
-    shares = int(capital / price)
+    if ticker in CORE_STOCKS:
+        allocation = base_alloc
+    elif ticker in RISKY_STOCKS:
+        allocation = base_alloc * 0.5
+    else:
+        allocation = base_alloc * 0.75
 
-    if shares == 0:
+    # ---------------- STOP FIRST (IMPORTANT) ----------------
+    stop = price - (1.5 * atr_val)
+
+    if stop >= price:
         return None
 
-    stop = price - (1.5 * atr_val)
+    risk_per_share = price - stop
+    if risk_per_share <= 0:
+        return None
+
+    # ---------------- RISK CONTROL ----------------
+    max_risk = portfolio_cash * 0.02  # 2% risk per trade
+
+    shares_risk = int(max_risk / risk_per_share)
+
+    # ---------------- CAPITAL CAP ----------------
+    max_capital = portfolio_cash * allocation
+    shares_cap = int(max_capital / price)
+
+    # ---------------- FINAL SHARES ----------------
+    shares = min(shares_risk, shares_cap)
+
+    if shares <= 0:
+        return None
+
+    # ---------------- TARGET ----------------
     target = price + (2 * (price - stop))
 
-    risk_per_share = price - stop
     total_risk = risk_per_share * shares
 
     return ticker, price, rsi_val, shares, stop, target, total_risk, score, market
@@ -340,7 +391,11 @@ def manage_positions():
                 send(f"🟢 {ticker} profit lock")
 
         if price < pos["stop"]:
+            shares = pos["shares"]
+            portfolio["cash"] += shares * price
+
             send(f"🔴 EXIT {ticker} @ {round(price,2)}")
+
             del portfolio["positions"][ticker]
 
             if ticker in last_signals:
@@ -359,6 +414,7 @@ last_scan = 0
 
 while True:
     try:
+
         current_day = int(time.time() // 86400)
 
         if last_reset_day is None or last_reset_day != current_day:
@@ -374,7 +430,7 @@ while True:
             market = market_condition()
 
             for t in WATCHLIST:
-                time.sleep(1)
+                time.sleep(1.2)
 
                 if t in portfolio["positions"]:
                     continue
