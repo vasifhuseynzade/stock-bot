@@ -5,8 +5,8 @@ import os
 import yfinance as yf
 import pandas as pd
 
-TOKEN = "8644659149:AAFMv5XwLEsYQlP_JPrqJOxVSe4Z_teuMp8"
-CHAT_ID = "1918330212"
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 PORTFOLIO_FILE = "portfolio.json"
 
