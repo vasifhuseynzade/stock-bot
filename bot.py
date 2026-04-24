@@ -11,64 +11,102 @@ CHAT_ID = int(os.getenv("CHAT_ID", "0"))
 if not TOKEN or CHAT_ID == 0:
     raise Exception("❌ Missing TOKEN or CHAT_ID")
 
-PORTFOLIO_FILE = "/data/portfolio.json"
+PORTFOLIO_FILE = "portfolio.json"
+
+# ---------------- GLOBAL ----------------
+portfolio = None
+last_update_id = None
+SIGNALS_FILE = "signals.json"
+
+def load_signals():
+    if not os.path.exists(SIGNALS_FILE):
+        return {}
+    try:
+        with open(SIGNALS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_signals():
+    temp = SIGNALS_FILE + ".tmp"
+    with open(temp, "w") as f:
+        json.dump(last_signals, f)
+    os.replace(temp, SIGNALS_FILE)
+
+last_signals = load_signals()
+cooldowns = {}
+last_reset_day = None
 
 # ---------------- PORTFOLIO ----------------
-
 def load_portfolio():
     if not os.path.exists(PORTFOLIO_FILE):
         return {"cash": 4000, "positions": {}}
-
     try:
         with open(PORTFOLIO_FILE, "r") as f:
             return json.load(f)
-    except Exception as e:
-        print("❌ Corrupted portfolio file, resetting:", e)
+    except:
         return {"cash": 4000, "positions": {}}
 
 def save_portfolio(data):
-    try:
-        temp_file = PORTFOLIO_FILE + ".tmp"
-        with open(temp_file, "w") as f:
-            json.dump(data, f, indent=4)
-        os.replace(temp_file, PORTFOLIO_FILE)
-    except Exception as e:
-        print("❌ Error saving portfolio:", e)
+    temp = PORTFOLIO_FILE + ".tmp"
+    with open(temp, "w") as f:
+        json.dump(data, f, indent=4)
+    os.replace(temp, PORTFOLIO_FILE)
 
 portfolio = load_portfolio()
-last_update_id = None
-last_signals = {}
-last_alerts = {}
-last_reset_day = None
 
 # ---------------- TELEGRAM ----------------
-
 def send(msg):
     try:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        res = requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=5)
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": msg},
+            timeout=5
+        )
+    except:
+        pass
 
-        if res.status_code != 200:
-            print("Telegram failed:", res.text)
+# ---------------- TELEGRAM INPUT ----------------
+def get_updates():
+    global last_update_id
 
-    except Exception as e:
-        print("Telegram error:", e)
+    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+
+    if last_update_id:
+        url += f"?offset={last_update_id + 1}"
+
+    try:
+        res = requests.get(url, timeout=5).json()
+    except:
+        return
+
+    for u in res.get("result", []):
+        last_update_id = u["update_id"]
+
+        if "message" in u:
+            handle_command(u["message"].get("text", ""))
 
 # ---------------- COMMANDS ----------------
-
 def handle_command(text):
     global portfolio
 
     parts = text.lower().split()
 
+    # basic validation
     if len(parts) < 5:
         return
 
-    # -------- BUY --------
-    if parts[0] == "bought":
+    try:
+        action = parts[0]
         ticker = parts[1].upper()
         shares = int(parts[2])
         price = float(parts[4])
+    except:
+        send("❌ Invalid command format")
+        return
+
+    # -------- BUY --------
+    if action == "bought":
 
         cost = shares * price
 
@@ -80,106 +118,117 @@ def handle_command(text):
 
         if ticker in portfolio["positions"]:
             pos = portfolio["positions"][ticker]
-            total_shares = pos["shares"] + shares
-            avg_price = ((pos["shares"] * pos["price"]) + (shares * price)) / total_shares
 
-            portfolio["positions"][ticker]["shares"] = total_shares
-            portfolio["positions"][ticker]["price"] = avg_price
+            total_shares = pos["shares"] + shares
+            avg_price = (
+                (pos["shares"] * pos["price"]) + (shares * price)
+            ) / total_shares
+
+            pos["shares"] = total_shares
+            pos["price"] = avg_price
+
         else:
             portfolio["positions"][ticker] = {
                 "shares": shares,
                 "price": price,
-                "stop": price * 0.95
+                "stop": price * 0.95,
+                "highest": price,
+                "partial_taken": False
             }
 
         save_portfolio(portfolio)
 
-        send(f"✅ BOUGHT {ticker} {shares} @ {price}\nCash: ${round(portfolio['cash'],2)}")
+        send(
+            f"✅ BOUGHT {ticker}\n"
+            f"Shares: {shares} @ {price}\n"
+            f"Cash left: ${round(portfolio['cash'],2)}"
+        )
 
     # -------- SELL --------
-    elif parts[0] == "sold":
-        ticker = parts[1].upper()
-        shares = int(parts[2])
-        price = float(parts[4])
+    elif action == "sold":
 
         if ticker not in portfolio["positions"]:
             send("❌ No position to sell")
             return
 
-        shares_owned = portfolio["positions"][ticker]["shares"]
+        pos = portfolio["positions"][ticker]
 
-        if shares > shares_owned:
-            send(f"❌ Cannot sell {shares}, only have {shares_owned}")
+        if shares > pos["shares"]:
+            send(f"❌ You only have {pos['shares']} shares")
             return
 
-        entry = portfolio["positions"][ticker]["price"]
+        entry = pos["price"]
         profit = (price - entry) * shares
 
         portfolio["cash"] += shares * price
+        pos["shares"] -= shares
 
-        remaining = shares_owned - shares
-
-        if remaining > 0:
-            portfolio["positions"][ticker]["shares"] = remaining
-        else:
+        if pos["shares"] <= 0:
             del portfolio["positions"][ticker]
 
         save_portfolio(portfolio)
 
-        send(f"💰 SOLD {ticker} {shares}\nProfit: ${round(profit,2)}\nBalance: ${round(portfolio['cash'],2)}")
+        send(
+            f"💰 SOLD {ticker}\n"
+            f"Shares: {shares} @ {price}\n"
+            f"P/L: ${round(profit,2)}\n"
+            f"Cash: ${round(portfolio['cash'],2)}"
+        )
 
-# ---------------- TELEGRAM UPDATES ----------------
+# ---------------- INDICATORS ----------------
+def rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = -delta.clip(upper=0).rolling(period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
-def get_updates():
-    global last_update_id
+def atr(df, period=14):
+    tr = pd.concat([
+        df['High'] - df['Low'],
+        abs(df['High'] - df['Close'].shift()),
+        abs(df['Low'] - df['Close'].shift())
+    ], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
 
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    if last_update_id:
-        url += f"?offset={last_update_id + 1}"
-
+# ---------------- DATA ----------------
+def get_price(ticker):
     try:
-        res = requests.get(url, timeout=5).json()
+        df = yf.Ticker(ticker).history(period="1d", interval="1m")
+        if df.empty:
+            return None
+        return float(df["Close"].iloc[-1])
     except:
-        return
+        return None
 
-    for update in res.get("result", []):
-        last_update_id = update["update_id"]
+# ---------------- MARKET ----------------
+def market_condition():
+    try:
+        spy = yf.Ticker("SPY").history(period="3mo")
+        qqq = yf.Ticker("QQQ").history(period="3mo")
 
-        if "message" in update:
-            text = update["message"].get("text", "")
-            handle_command(text)
+        if spy.empty or qqq.empty:
+            return "UNCERTAIN"
+
+        if spy["Close"].iloc[-1] > spy["Close"].rolling(50).mean().iloc[-1] \
+        and qqq["Close"].iloc[-1] > qqq["Close"].rolling(50).mean().iloc[-1]:
+            return "BULL"
+        elif spy["Close"].iloc[-1] < spy["Close"].rolling(50).mean().iloc[-1] \
+        and qqq["Close"].iloc[-1] < qqq["Close"].rolling(50).mean().iloc[-1]:
+            return "BEAR"
+        return "UNCERTAIN"
+    except:
+        return "UNCERTAIN"
 
 # ---------------- ANALYSIS ----------------
-
-CORE_STOCKS = {"AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN","PLTR","SOFI","HOOD","DKNG","COIN"}
-RISKY_STOCKS = {"AMPL","MGNI","INOD","SERV","PGY","CEVA","AVAV"}
-
-WATCHLIST = [
-    # CORE (reliable, main profit drivers)
-    "AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN",
-    "PLTR","SOFI","HOOD","DKNG","COIN",
-
-    # GROWTH / VOLATILE (good swings)
-    "SNOW","NET","CRWD","SHOP",
-
-    # YOUR PICKS (high risk / big moves)
-    "INTC","MCHP","AVAV","AMPL","MGNI","INOD","SERV","PGY","CEVA"
-]
+WATCHLIST = ["AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN","PLTR","COIN"]
 
 def analyze(ticker, market):
-    for attempt in range(2):  # retry once
-        try:
-            df = yf.Ticker(ticker).history(period="3mo")
-
-            if df.empty or len(df) < 50:
-                return None
-
-            break
-
-        except Exception as e:
-            print(f"Retry {ticker}: {e}")
-            time.sleep(1.2)
-    else:
+    try:
+        df = yf.Ticker(ticker).history(period="3mo")
+        if df.empty or len(df) < 50:
+            return None
+    except:
         return None
 
     close = df["Close"]
@@ -192,177 +241,59 @@ def analyze(ticker, market):
     ma50 = close.rolling(50).mean().iloc[-1]
 
     avg_vol = volume.rolling(20).mean().iloc[-1]
-    vol_now = volume.iloc[-1]
 
-    # ❌ Skip bad market
-    if market == "BEAR":
+    if market == "BEAR" or rsi_val > 70:
         return None
 
-    atr_val = atr(df).iloc[-1]
+    if pd.isna(ma20) or ma20 == 0:
+        return None
 
-    # ---------------- SCORE ----------------
+    if (price - ma20) / ma20 > 0.05:
+        return None
+
+    if len(close) < 2:
+        return None
+
+    prev_close = close.iloc[-2]
+
+    # require price to stop falling (basic confirmation)
+    if price <= prev_close:
+        return None
+
     score = 0
-
-    if price > ma50:
-        score += 20
-
-    if price < ma20 and rsi_val < 40:
-        score += 30
-
-    if vol_now > avg_vol * 1.5:
+    if price > ma50: score += 20
+    if price < ma20 and rsi_val < 45: score += 30
+    if volume.iloc[-1] > avg_vol * 1.5:
         score += 20
 
     if score < 40:
         return None
 
-    portfolio_cash = portfolio["cash"]
+    if ma20 < ma50:
+        return None
 
-    # ---------------- ALLOCATION ----------------
-    if market == "BULL":
-        base_alloc = 0.25 if score >= 60 else 0.15
-    elif market == "UNCERTAIN":
-        base_alloc = 0.10
-    else:
-        base_alloc = 0.05
+    atr_val = atr(df).iloc[-1]
 
-    if ticker in CORE_STOCKS:
-        allocation = base_alloc
-    elif ticker in RISKY_STOCKS:
-        allocation = base_alloc * 0.5
-    else:
-        allocation = base_alloc * 0.75
+    if pd.isna(atr_val):
+        return None
 
-    # ---------------- STOP FIRST (IMPORTANT) ----------------
     stop = price - (1.5 * atr_val)
-
-    if stop >= price:
+    risk = price - stop
+    if risk <= 0:
         return None
 
-    risk_per_share = price - stop
-    if risk_per_share <= 0:
-        return None
-
-    # ---------------- RISK CONTROL ----------------
-    max_risk = portfolio_cash * 0.02  # 2% risk per trade
-
-    shares_risk = int(max_risk / risk_per_share)
-
-    # ---------------- CAPITAL CAP ----------------
-    max_capital = portfolio_cash * allocation
-    shares_cap = int(max_capital / price)
-
-    # ---------------- FINAL SHARES ----------------
-    shares = min(shares_risk, shares_cap)
+    cash = portfolio["cash"]
+    shares = int((cash * 0.02) / risk)
+    shares = min(shares, int((cash * 0.2) / price))
 
     if shares <= 0:
         return None
 
-    # ---------------- TARGET ----------------
-    target = price + (2 * (price - stop))
+    target = price + 2 * risk
 
-    total_risk = risk_per_share * shares
-
-    return ticker, price, rsi_val, shares, stop, target, total_risk, score, market
-
-# ---------------- INDICATORS ----------------
-
-def rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-def atr(df, period=14):
-    high_low = df['High'] - df['Low']
-    high_close = abs(df['High'] - df['Close'].shift())
-    low_close = abs(df['Low'] - df['Close'].shift())
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    return tr.rolling(period).mean()
-
-def get_price(ticker):
-    try:
-        df = yf.Ticker(ticker).history(period="1d", interval="1m")
-
-
-        if df.empty:
-            return None
-
-        return float(df["Close"].iloc[-1])
-
-    except Exception as e:
-        print(f"Price error {ticker}: {e}")
-        return None
-
-# ---------------- SMART ALERTS ----------------
-
-def smart_alerts(ticker):
-    try:
-        df = yf.Ticker(ticker).history(period="1mo")
-
-        if df.empty or len(df) < 20:
-            return None
-
-    except Exception as e:
-        print(f"Alert error {ticker}: {e}")
-        return None
-
-    if len(df) < 20:
-        return None
-
-    close = df["Close"]
-    volume = df["Volume"]
-
-    price = close.iloc[-1]
-    prev_price = close.iloc[-2]
-
-    change_pct = (price - prev_price) / prev_price * 100
-
-    avg_vol = volume.rolling(20).mean().iloc[-1]
-    vol_now = volume.iloc[-1]
-
-    rsi_val = rsi(close).iloc[-1]
-
-    if change_pct > 5 and vol_now > avg_vol * 1.5:
-        return f"🔥 BREAKOUT {ticker}\nMove: {round(change_pct,2)}%"
-
-    if rsi_val > 70 and vol_now > avg_vol * 2:
-        return f"⚠️ HYPE {ticker}\nRSI: {round(rsi_val,1)}"
-
-    if change_pct < -5 and vol_now > avg_vol * 1.5:
-        return f"📉 DUMP {ticker}\nDrop: {round(change_pct,2)}%"
-
-    return None
-
-# ---------------- MARKET ----------------
-
-def market_condition():
-    try:
-        spy = yf.Ticker("SPY").history(period="3mo")
-        qqq = yf.Ticker("QQQ").history(period="3mo")
-
-        if spy.empty or qqq.empty:
-            return "UNCERTAIN"
-
-        spy_price = spy["Close"].iloc[-1]
-        spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
-
-        qqq_price = qqq["Close"].iloc[-1]
-        qqq_ma50 = qqq["Close"].rolling(50).mean().iloc[-1]
-
-        if spy_price > spy_ma50 and qqq_price > qqq_ma50:
-            return "BULL"
-        elif spy_price < spy_ma50 and qqq_price < qqq_ma50:
-            return "BEAR"
-        else:
-            return "UNCERTAIN"
-
-    except Exception as e:
-        print("Market error:", e)
-        return "UNCERTAIN"
+    return ticker, price, shares, stop, target, score
 
 # ---------------- POSITION MANAGEMENT ----------------
-
 def manage_positions():
     global portfolio
 
@@ -375,110 +306,124 @@ def manage_positions():
 
         entry = pos["price"]
 
+        # -------- INIT FIELDS (SAFE) --------
         if "stop" not in pos:
             pos["stop"] = entry * 0.95
+        if "highest" not in pos:
+            pos["highest"] = entry
+        if "partial_taken" not in pos:
+            pos["partial_taken"] = False
 
-        stop = pos["stop"]
+        # -------- TRACK HIGH --------
+        if price > pos["highest"]:
+            pos["highest"] = price
 
-        if price >= entry * 1.05 and stop < entry:
+        # -------- PARTIAL TAKE PROFIT --------
+        if price >= entry * 1.05 and not pos["partial_taken"] and pos["shares"] > 1:
+            sell = pos["shares"] // 2
+
+            portfolio["cash"] += sell * price
+            pos["shares"] -= sell
+
+            if pos["shares"] <= 0:
+                del portfolio["positions"][ticker]
+                save_portfolio(portfolio)
+                send(f"💰 FULL EXIT {ticker}")
+                continue
+
+            pos["partial_taken"] = True
+            send(f"💰 PARTIAL {ticker}")
+
+        # -------- BREAKEVEN --------
+        if price >= entry * 1.03 and pos["stop"] < entry:
             pos["stop"] = entry
-            send(f"🔵 {ticker} breakeven")
 
-        if price >= entry * 1.10:
-            new_stop = price * 0.95
-            if new_stop > stop:
-                pos["stop"] = new_stop
-                send(f"🟢 {ticker} profit lock")
+        # -------- TRAILING STOP --------
+        try:
+            df = yf.Ticker(ticker).history(period="3mo")
 
+            if not df.empty:
+                atr_val = atr(df).iloc[-1]
+                trail = pos["highest"] - (1.2 * atr_val)
+
+                if trail > pos["stop"]:
+                    pos["stop"] = trail
+        except:
+            pass
+
+        # -------- STOP LOSS --------
         if price < pos["stop"]:
-            shares = pos["shares"]
-            portfolio["cash"] += shares * price
-
-            send(f"🔴 EXIT {ticker} @ {round(price,2)}")
+            portfolio["cash"] += pos["shares"] * price
+            cooldowns[ticker] = time.time()
 
             del portfolio["positions"][ticker]
 
-            if ticker in last_signals:
-                del last_signals[ticker]
-
+            send(f"🔴 EXIT {ticker}")
             save_portfolio(portfolio)
             continue
 
-        portfolio["positions"][ticker] = pos
 
     save_portfolio(portfolio)
 
 # ---------------- MAIN LOOP ----------------
+send("🚀 BOT STARTED")
 
 last_scan = 0
 
-send("🚀 BOT STARTED - NEW VERSION LIVE")
-
 while True:
     try:
+        # -------- DAILY RESET --------
+        day = int(time.time() // 86400)
+        if last_reset_day != day:
+            last_reset_day = day
 
-        current_day = int(time.time() // 86400)
-
-        if last_reset_day is None or last_reset_day != current_day:
-            last_signals.clear()
-            last_alerts.clear()
-            last_reset_day = current_day
-
+        # -------- TELEGRAM + POSITIONS --------
         get_updates()
         manage_positions()
 
+        # -------- SCAN EVERY 5 MIN --------
         if time.time() - last_scan > 300:
-
             market = market_condition()
 
             for t in WATCHLIST:
-                time.sleep(1.2)
 
+                # cooldown after exit
+                if t in cooldowns and time.time() - cooldowns[t] < 1800:
+                    continue
+
+                # already holding
                 if t in portfolio["positions"]:
                     continue
 
-                alert = smart_alerts(t)
-
-                if alert:
-                    if t in last_alerts and last_alerts[t] == alert:
-                        continue
-
-                    last_alerts[t] = alert
-                    send(alert)
+                # prevent spam signals (24h cooldown)
+                if t in last_signals and time.time() - last_signals[t] < 86400:
+                    continue
 
                 result = analyze(t, market)
 
                 if result:
-                    if t in last_signals:
-                        continue
-
-                    last_signals[t] = True
-
-                    ticker, price, rsi_val, shares, stop, target, total_risk, score, market = result
+                    ticker, price, shares, stop, target, score = result
 
                     send(f"""
-🟢 ENTRY SIGNAL
+🟢 ENTRY
 
 {ticker}
-Market: {market}
-
 Price: {round(price,2)}
-RSI: {round(rsi_val,1)}
 Score: {score}
 
-Buy: {shares} shares
-Capital: ${round(shares * price,2)}
-
+Buy: {shares}
 Stop: {round(stop,2)}
 Target: {round(target,2)}
-
-Risk: ${round(total_risk,2)}
 """)
 
+                    last_signals[t] = time.time()
+                    save_signals()
+
+            # IMPORTANT: prevent spam loop
             last_scan = time.time()
 
         time.sleep(5)
 
     except Exception as e:
-        send(f"⚠️ ERROR: {e}")
+        send(f"⚠️ ERROR {e}")
         time.sleep(10)
