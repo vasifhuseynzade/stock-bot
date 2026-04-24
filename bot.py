@@ -392,63 +392,63 @@ while True:
 
             for t in WATCHLIST:
 
-    # -------- GET DATA --------
-    try:
-        df = yf.download(t, period="2d", progress=False)
-        if df is None or df.empty or len(df) < 2:
-            continue
-    except:
-        continue
+                # -------- GET DATA --------
+                try:
+                    df = yf.download(t, period="2d", progress=False)
+                    if df is None or df.empty or len(df) < 2:
+                        continue
+                except:
+                    continue
 
-    close = df["Close"]
-    price = close.iloc[-1]
-    prev_close = close.iloc[-2]
+                close = df["Close"]
+                price = close.iloc[-1]
+                prev_close = close.iloc[-2]
 
-    # -------- BREAKOUT LOGIC --------
-    move = ((price - prev_close) / prev_close) * 100
+                # -------- BREAKOUT LOGIC --------
+                move = ((price - prev_close) / prev_close) * 100
 
-    levels = [10, 15, 20]
-    breakout_triggered = False
+                levels = [10, 15, 20]
+                breakout_triggered = False
 
-    for lvl in levels:
-        if move >= lvl:
-            if t not in breakout_memory:
-                breakout_memory[t] = set()
+                for lvl in levels:
+                    if move >= lvl:
+                        if t not in breakout_memory:
+                            breakout_memory[t] = set()
 
-            if lvl not in breakout_memory[t]:
-                send(f"🔥 BREAKOUT {t}\nMove: {round(move,2)}%")
-                breakout_memory[t].add(lvl)
-                breakout_triggered = True
+                        if lvl not in breakout_memory[t]:
+                            send(f"🔥 BREAKOUT {t}\nMove: {round(move,2)}%")
+                            breakout_memory[t].add(lvl)
+                            breakout_triggered = True
 
-    # -------- RESET --------
-    if move < 8:
-        breakout_memory.pop(t, None)
+                # -------- RESET --------
+                if move < 8:
+                    breakout_memory.pop(t, None)
 
-    # 🚨 IMPORTANT: STOP HERE IF BREAKOUT
-    if breakout_triggered:
-        continue
+                # 🚨 STOP IF BREAKOUT
+                if breakout_triggered:
+                    continue
 
-    # -------- RSI FILTER --------
-    rsi_val = rsi(close).iloc[-1]
-    if pd.isna(rsi_val) or rsi_val > 70:
-        continue
+                # -------- RSI FILTER --------
+                rsi_val = rsi(close).iloc[-1]
+                if pd.isna(rsi_val) or rsi_val > 70:
+                    continue
 
-    # -------- EXISTING LOGIC --------
-    if t in cooldowns and time.time() - cooldowns[t] < 1800:
-        continue
+                # -------- EXISTING LOGIC --------
+                if t in cooldowns and time.time() - cooldowns[t] < 1800:
+                    continue
 
-    if t in portfolio["positions"]:
-        continue
+                if t in portfolio["positions"]:
+                    continue
 
-    if t in last_signals and time.time() - last_signals[t] < 86400:
-        continue
+                if t in last_signals and time.time() - last_signals[t] < 86400:
+                    continue
 
-    result = analyze(t, market)
+                result = analyze(t, market)
 
-    if result:
-        ticker, price, shares, stop, target, score = result
+                if result:
+                    ticker, price, shares, stop, target, score = result
 
-        send(f"""
+                    send(f"""
 🟢 ENTRY
 
 {ticker}
@@ -460,5 +460,14 @@ Stop: {round(stop,2)}
 Target: {round(target,2)}
 """)
 
-        last_signals[t] = time.time()
-        save_signals()
+                    last_signals[t] = time.time()
+                    save_signals()
+
+            # -------- UPDATE SCAN TIMER --------
+            last_scan = time.time()
+
+        time.sleep(10)
+
+    except Exception as e:
+        send(f"⚠️ ERROR {e}")
+        time.sleep(10)
