@@ -36,6 +36,7 @@ def save_signals():
 last_signals = load_signals()
 cooldowns = {}
 last_reset_day = None
+breakout_memory = {}
 
 # ---------------- PORTFOLIO ----------------
 def load_portfolio():
@@ -198,7 +199,8 @@ def get_price(ticker):
         if df.empty:
             return None
         return float(df["Close"].iloc[-1])
-    except:
+    except Exception as e:
+        print(f"PRICE ERROR {ticker}: {e}")
         return None
 
 # ---------------- MARKET ----------------
@@ -207,7 +209,7 @@ def market_condition():
         spy = yf.Ticker("SPY").history(period="3mo")
         qqq = yf.Ticker("QQQ").history(period="3mo")
 
-        if spy.empty or qqq.empty:
+        if spy is None or qqq is None or spy.empty or qqq.empty:
             return "UNCERTAIN"
 
         if spy["Close"].iloc[-1] > spy["Close"].rolling(50).mean().iloc[-1] \
@@ -216,8 +218,11 @@ def market_condition():
         elif spy["Close"].iloc[-1] < spy["Close"].rolling(50).mean().iloc[-1] \
         and qqq["Close"].iloc[-1] < qqq["Close"].rolling(50).mean().iloc[-1]:
             return "BEAR"
+
         return "UNCERTAIN"
-    except:
+
+    except Exception as e:
+        print(f"MARKET ERROR: {e}")
         return "UNCERTAIN"
 
 # ---------------- ANALYSIS ----------------
@@ -387,24 +392,63 @@ while True:
 
             for t in WATCHLIST:
 
-                # cooldown after exit
-                if t in cooldowns and time.time() - cooldowns[t] < 1800:
-                    continue
+    # -------- GET DATA --------
+    try:
+        df = yf.download(t, period="2d", progress=False)
+        if df is None or df.empty or len(df) < 2:
+            continue
+    except:
+        continue
 
-                # already holding
-                if t in portfolio["positions"]:
-                    continue
+    close = df["Close"]
+    price = close.iloc[-1]
+    prev_close = close.iloc[-2]
 
-                # prevent spam signals (24h cooldown)
-                if t in last_signals and time.time() - last_signals[t] < 86400:
-                    continue
+    # -------- BREAKOUT LOGIC --------
+    move = ((price - prev_close) / prev_close) * 100
 
-                result = analyze(t, market)
+    levels = [10, 15, 20]
+    breakout_triggered = False
 
-                if result:
-                    ticker, price, shares, stop, target, score = result
+    for lvl in levels:
+        if move >= lvl:
+            if t not in breakout_memory:
+                breakout_memory[t] = set()
 
-                    send(f"""
+            if lvl not in breakout_memory[t]:
+                send(f"🔥 BREAKOUT {t}\nMove: {round(move,2)}%")
+                breakout_memory[t].add(lvl)
+                breakout_triggered = True
+
+    # -------- RESET --------
+    if move < 8:
+        breakout_memory.pop(t, None)
+
+    # 🚨 IMPORTANT: STOP HERE IF BREAKOUT
+    if breakout_triggered:
+        continue
+
+    # -------- RSI FILTER --------
+    rsi_val = rsi(close).iloc[-1]
+    if pd.isna(rsi_val) or rsi_val > 70:
+        continue
+
+    # -------- EXISTING LOGIC --------
+    if t in cooldowns and time.time() - cooldowns[t] < 1800:
+        continue
+
+    if t in portfolio["positions"]:
+        continue
+
+    if t in last_signals and time.time() - last_signals[t] < 86400:
+        continue
+
+    result = analyze(t, market)
+
+    if result:
+        ticker, price, shares, stop, target, score = result
+
+        send(f"""
 🟢 ENTRY
 
 {ticker}
@@ -416,14 +460,5 @@ Stop: {round(stop,2)}
 Target: {round(target,2)}
 """)
 
-                    last_signals[t] = time.time()
-                    save_signals()
-
-            # IMPORTANT: prevent spam loop
-            last_scan = time.time()
-
-        time.sleep(5)
-
-    except Exception as e:
-        send(f"⚠️ ERROR {e}")
-        time.sleep(10)
+        last_signals[t] = time.time()
+        save_signals()
