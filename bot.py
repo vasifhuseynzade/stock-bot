@@ -38,6 +38,63 @@ cooldowns = {}
 last_reset_day = None
 breakout_memory = {}
 
+# ---------------- NEW FILE ----------------
+TRADES_FILE = "trades.json"
+
+def load_trades():
+    if not os.path.exists(TRADES_FILE):
+        return []
+    try:
+        with open(TRADES_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_trade(trade):
+    trades = load_trades()
+    trades.append(trade)
+
+    temp = TRADES_FILE + ".tmp"
+    with open(temp, "w") as f:
+        json.dump(trades, f, indent=4)
+
+    os.replace(temp, TRADES_FILE)
+
+# ---------------- ANALYTICS ----------------
+def weekly_performance():
+    trades = load_trades()
+    now = time.time()
+    week_ago = now - 7 * 86400
+    return round(sum(t["profit"] for t in trades if t["exit_time"] >= week_ago), 2)
+
+def win_rate():
+    trades = load_trades()
+    if not trades:
+        return 0
+    wins = sum(1 for t in trades if t["profit"] > 0)
+    return round((wins / len(trades)) * 100, 2)
+
+def ticker_stats():
+    trades = load_trades()
+    stats = {}
+
+    for t in trades:
+        stats.setdefault(t["ticker"], 0)
+        stats[t["ticker"]] += t["profit"]
+
+    best = max(stats.items(), key=lambda x: x[1], default=("None", 0))
+    worst = min(stats.items(), key=lambda x: x[1], default=("None", 0))
+
+    return best, worst
+
+def avg_trade_duration():
+    trades = load_trades()
+    if not trades:
+        return 0
+
+    avg = sum(t["duration_sec"] for t in trades) / len(trades)
+    return round(avg / 3600, 2)
+
 # ---------------- PORTFOLIO ----------------
 def load_portfolio():
     if not os.path.exists(PORTFOLIO_FILE):
@@ -91,6 +148,45 @@ def get_updates():
 def handle_command(text):
     global portfolio
 
+    text_lower = text.lower()
+
+    # ----- ANALYTICS COMMANDS -----
+    if text_lower == "pnl":
+        send(f"📊 Weekly P/L: ${weekly_performance()}")
+        return
+
+    elif text_lower == "winrate":
+        send(f"🏆 Win Rate: {win_rate()}%")
+        return
+
+    elif text_lower == "stats":
+        best, worst = ticker_stats()
+        send(f"📈 Best: {best[0]} (${round(best[1],2)})\n📉 Worst: {worst[0]} (${round(worst[1],2)})")
+        return
+
+    elif text_lower == "duration":
+        send(f"⏱ Avg Trade Duration: {avg_trade_duration()} hrs")
+        return
+
+    elif text_lower == "summary":
+        pnl = weekly_performance()
+        wr = win_rate()
+        best, worst = ticker_stats()
+        duration = avg_trade_duration()
+
+        send(f"""
+📊 SUMMARY
+
+P/L (7d): ${pnl}
+Win Rate: {wr}%
+Avg Duration: {duration} hrs
+
+Best: {best[0]} (${round(best[1],2)})
+Worst: {worst[0]} (${round(worst[1],2)})
+""")
+        return
+
+    # ----- ORIGINAL COMMAND LOGIC -----
     parts = text.lower().split()
 
     # basic validation
@@ -134,7 +230,8 @@ def handle_command(text):
                 "price": price,
                 "stop": price * 0.95,
                 "highest": price,
-                "partial_taken": False
+                "partial_taken": False,
+                "entry_time": time.time()
             }
 
         save_portfolio(portfolio)
@@ -160,6 +257,19 @@ def handle_command(text):
 
         entry = pos["price"]
         profit = (price - entry) * shares
+
+        trade = {
+            "ticker": ticker,
+            "entry_price": entry,
+            "exit_price": price,
+            "shares": shares,
+            "profit": round(profit, 2),
+            "entry_time": pos.get("entry_time", time.time()),
+            "exit_time": time.time(),
+            "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+        }
+
+        save_trade(trade)
 
         portfolio["cash"] += shares * price
         pos["shares"] -= shares
@@ -225,9 +335,30 @@ def market_condition():
         print(f"MARKET ERROR: {e}")
         return "UNCERTAIN"
 
-# ---------------- ANALYSIS ----------------
-WATCHLIST = ["AAPL","NVDA","TSLA","META","AMD","MSFT","AMZN","PLTR","COIN"]
+# ---------------- WATCHLIST ----------------
 
+STRONG = [
+"AAPL","MSFT","NVDA","META","GOOGL",
+"AMZN","AVGO","TSLA","CRM","ADBE",
+"NOW","AMD","INTC","QCOM","MU",
+"LRCX","ASML","ORCL","NFLX","PANW"
+]
+
+MEDIUM = [
+"PLTR","SNOW","COIN","SHOP","UBER",
+"PYPL","SQ","ROKU","ZS","DDOG","ENPH",
+"NET","CRWD","OKTA","DOCU","MDB"
+]
+
+WEAK = [
+"MCHP","INOD","PGY","AFRM","RIOT",
+"MARA","SOFI","UPST","AI","FUBO",
+"CEVA","SERV","BKKT","BKSY"
+]
+
+WATCHLIST = STRONG + MEDIUM + WEAK
+
+# ---------------- ANALYSIS ----------------
 def analyze(ticker, market):
     try:
         df = yf.Ticker(ticker).history(period="3mo")
@@ -247,7 +378,15 @@ def analyze(ticker, market):
 
     avg_vol = volume.rolling(20).mean().iloc[-1]
 
-    if market == "BEAR" or rsi_val > 70:
+    # ✅ NEW — breakout detection
+    recent_high = close.iloc[-21:-1].max()
+    breakout = price > recent_high
+
+    # ✅ MODIFIED — market + RSI logic
+    if market == "BEAR":
+        return None
+
+    if not breakout and rsi_val > 70:
         return None
 
     if pd.isna(ma20) or ma20 == 0:
@@ -261,8 +400,8 @@ def analyze(ticker, market):
 
     prev_close = close.iloc[-2]
 
-    # require price to stop falling (basic confirmation)
-    if price <= prev_close:
+    # require price to stop falling (only for pullbacks)
+    if not breakout and price <= prev_close:
         return None
 
     score = 0
@@ -271,10 +410,15 @@ def analyze(ticker, market):
     if volume.iloc[-1] > avg_vol * 1.5:
         score += 20
 
+    # ✅ NEW — breakout bonus
+    if breakout:
+        score += 30
+
     if score < 40:
         return None
 
-    if ma20 < ma50:
+    # ✅ MODIFIED — allow breakout even if MA trend not perfect
+    if not breakout and ma20 < ma50:
         return None
 
     atr_val = atr(df).iloc[-1]
@@ -288,7 +432,16 @@ def analyze(ticker, market):
         return None
 
     cash = portfolio["cash"]
-    shares = int((cash * 0.02) / risk)
+    if ticker in STRONG:
+        risk_pct = 0.03
+    elif ticker in MEDIUM:
+        risk_pct = 0.02
+    elif ticker in WEAK:
+        risk_pct = 0.01
+    else:
+        return None
+    
+    shares = int((cash * risk_pct) / risk)
     shares = min(shares, int((cash * 0.2) / price))
 
     if shares <= 0:
@@ -358,16 +511,27 @@ def manage_positions():
 
         # -------- STOP LOSS --------
         if price < pos["stop"]:
+            trade = {
+                "ticker": ticker,
+                "entry_price": entry,
+                "exit_price": price,
+                "shares": pos["shares"],
+                "profit": round((price - entry) * pos["shares"], 2),
+                "entry_time": pos.get("entry_time", time.time()),
+                "exit_time": time.time(),
+                "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+            }
+
+            save_trade(trade)
+
             portfolio["cash"] += pos["shares"] * price
             cooldowns[ticker] = time.time()
 
             del portfolio["positions"][ticker]
 
-            send(f"🔴 EXIT {ticker}")
+            send(f"🔴 EXIT {ticker}\nP/L: ${trade['profit']}")
             save_portfolio(portfolio)
             continue
-
-
     save_portfolio(portfolio)
 
 # ---------------- MAIN LOOP ----------------
@@ -400,12 +564,18 @@ while True:
                 except:
                     continue
 
-                close = df["Close"]
+                close = df["Close"].dropna()
+
+                if len(close) < 2:
+                    continue
+
                 price = close.iloc[-1]
                 prev_close = close.iloc[-2]
 
                 # -------- BREAKOUT LOGIC --------
                 move = ((price - prev_close) / prev_close) * 100
+                if prev_close == 0:
+                    continue
 
                 levels = [10, 15, 20]
                 breakout_triggered = False
@@ -424,13 +594,10 @@ while True:
                 if move < 8:
                     breakout_memory.pop(t, None)
 
-                # 🚨 STOP IF BREAKOUT
-                if breakout_triggered:
-                    continue
 
                 # -------- RSI FILTER --------
                 rsi_val = rsi(close).iloc[-1]
-                if pd.isna(rsi_val) or rsi_val > 70:
+                if pd.isna(rsi_val):
                     continue
 
                 # -------- EXISTING LOGIC --------
