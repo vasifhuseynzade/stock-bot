@@ -90,10 +90,16 @@ def ticker_stats():
 def avg_trade_duration():
     trades = load_trades()
     if not trades:
-        return 0
+        return "0 hrs"
 
     avg = sum(t["duration_sec"] for t in trades) / len(trades)
-    return round(avg / 3600, 2)
+    hours = avg / 3600
+
+    if hours >= 72:
+        days = hours / 24
+        return f"{round(days,2)} days ({round(hours,2)} hrs)"
+
+    return f"{round(hours,2)} hrs"
 
 # ---------------- PORTFOLIO ----------------
 def load_portfolio():
@@ -165,7 +171,7 @@ def handle_command(text):
         return
 
     elif text_lower == "duration":
-        send(f"⏱ Avg Trade Duration: {avg_trade_duration()} hrs")
+        send(f"⏱ Avg Trade Duration: {avg_trade_duration()}")
         return
 
     elif text_lower == "summary":
@@ -179,11 +185,41 @@ def handle_command(text):
 
 P/L (7d): ${pnl}
 Win Rate: {wr}%
-Avg Duration: {duration} hrs
+Avg Duration: {duration}
 
 Best: {best[0]} (${round(best[1],2)})
 Worst: {worst[0]} (${round(worst[1],2)})
 """)
+        return
+
+    elif text_lower == "portfolio":
+        cash = portfolio["cash"]
+        positions = portfolio["positions"]
+
+        if not positions:
+            send(f"💼 PORTFOLIO\n\nCash: ${round(cash,2)}\nNo open positions")
+            return
+
+        msg = f"💼 PORTFOLIO\n\nCash: ${round(cash,2)}\n\n"
+
+        for t, pos in positions.items():
+            price = get_price(t)
+            if price is None:
+                price = pos["price"]
+
+            entry = pos["price"]
+            shares = pos["shares"]
+            pnl = (price - entry) * shares
+
+            msg += (
+                f"{t}\n"
+                f"Shares: {shares}\n"
+                f"Entry: {round(entry,2)}\n"
+                f"Now: {round(price,2)}\n"
+                f"P/L: ${round(pnl,2)}\n\n"
+            )
+
+        send(msg)
         return
 
     # ----- ORIGINAL COMMAND LOGIC -----
