@@ -615,6 +615,7 @@ def manage_positions():
 
 # ---------------- MAIN LOOP ----------------
 send("🚀 BOT STARTED")
+send(f"SERVER TIME: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
 
 last_scan = 0
 
