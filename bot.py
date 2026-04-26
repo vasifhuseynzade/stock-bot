@@ -634,8 +634,8 @@ while True:
         current_hour = time.localtime().tm_hour
         current_min = time.localtime().tm_min
 
-        # run once near market close (example: 15:55)
-        if current_hour == 15 and current_min >= 55 and time.time() - last_scan > 300:
+        # run once near market close (example: 19:55)
+        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
             market = market_condition()
 
             for t in WATCHLIST:
