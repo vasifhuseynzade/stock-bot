@@ -261,13 +261,32 @@ Worst: {worst[0]} (${round(worst[1],2)})
             pos["price"] = avg_price
 
         else:
+            try:
+                df = yf.Ticker(ticker).history(period="3mo")
+
+                if not df.empty:
+                    atr_val = atr(df).iloc[-1]
+
+                    if not pd.isna(atr_val):
+                        stop = price - (1.5 * atr_val)
+                        risk = price - stop
+                        target = price + 2 * risk
+                    else:
+                        target = price * 1.10  # fallback
+                else:
+                    target = price * 1.10  # fallback
+
+            except:
+                target = price * 1.10  # fallback
+
             portfolio["positions"][ticker] = {
                 "shares": shares,
                 "price": price,
                 "stop": price * 0.95,
                 "highest": price,
                 "partial_taken": False,
-                "entry_time": time.time()
+                "entry_time": time.time(),
+                "target": target
             }
 
         save_portfolio(portfolio)
@@ -488,6 +507,7 @@ def analyze(ticker, market):
     return ticker, price, shares, stop, target, score
 
 # ---------------- POSITION MANAGEMENT ----------------
+# ---------------- POSITION MANAGEMENT ----------------
 def manage_positions():
     global portfolio
 
@@ -495,6 +515,7 @@ def manage_positions():
         pos = portfolio["positions"][ticker]
 
         price = get_price(ticker)
+
         if price is None:
             continue
 
@@ -507,6 +528,28 @@ def manage_positions():
             pos["highest"] = entry
         if "partial_taken" not in pos:
             pos["partial_taken"] = False
+
+        # ✅ ADD TARGET EXIT RIGHT HERE
+        if "target" in pos and price >= pos["target"]:
+            trade = {
+                "ticker": ticker,
+                "entry_price": entry,
+                "exit_price": price,
+                "shares": pos["shares"],
+                "profit": round((price - entry) * pos["shares"], 2),
+                "entry_time": pos.get("entry_time", time.time()),
+                "exit_time": time.time(),
+                "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+            }
+
+            save_trade(trade)
+
+            portfolio["cash"] += pos["shares"] * price
+            del portfolio["positions"][ticker]
+
+            send(f"🎯 TARGET HIT {ticker}\nP/L: ${trade['profit']}")
+            save_portfolio(portfolio)
+            continue
 
         # -------- TRACK HIGH --------
         if price > pos["highest"]:
@@ -538,7 +581,7 @@ def manage_positions():
 
             if not df.empty:
                 atr_val = atr(df).iloc[-1]
-                trail = pos["highest"] - (1.2 * atr_val)
+                trail = pos["highest"] - (2.5 * atr_val)
 
                 if trail > pos["stop"]:
                     pos["stop"] = trail
@@ -587,7 +630,11 @@ while True:
         manage_positions()
 
         # -------- SCAN EVERY 5 MIN --------
-        if time.time() - last_scan > 300:
+        current_hour = time.localtime().tm_hour
+        current_min = time.localtime().tm_min
+
+        # run once near market close (example: 15:55)
+        if current_hour == 15 and current_min >= 55 and time.time() - last_scan > 300:
             market = market_condition()
 
             for t in WATCHLIST:
