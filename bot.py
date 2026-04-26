@@ -11,12 +11,12 @@ CHAT_ID = int(os.getenv("CHAT_ID", "0"))
 if not TOKEN or CHAT_ID == 0:
     raise Exception("❌ Missing TOKEN or CHAT_ID")
 
-PORTFOLIO_FILE = "portfolio.json"
+PORTFOLIO_FILE = "/data/portfolio.json"
 
 # ---------------- GLOBAL ----------------
 portfolio = None
 last_update_id = None
-SIGNALS_FILE = "signals.json"
+SIGNALS_FILE = "/data/signals.json"
 
 def load_signals():
     if not os.path.exists(SIGNALS_FILE):
@@ -39,7 +39,7 @@ last_reset_day = None
 breakout_memory = {}
 
 # ---------------- NEW FILE ----------------
-TRADES_FILE = "trades.json"
+TRADES_FILE = "/data/trades.json"
 
 def load_trades():
     if not os.path.exists(TRADES_FILE):
