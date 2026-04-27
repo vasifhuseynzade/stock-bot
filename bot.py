@@ -127,8 +127,8 @@ def send(msg):
             data={"chat_id": CHAT_ID, "text": msg},
             timeout=5
         )
-    except:
-        pass
+    except Exception as e:
+        print(f"[analyze] ERROR: {e}")
 
 # ---------------- TELEGRAM INPUT ----------------
 def get_updates():
@@ -360,7 +360,7 @@ def atr(df, period=14):
 # ---------------- DATA ----------------
 def get_price(ticker):
     try:
-        df = yf.Ticker(ticker).history(period="1d", interval="1m")
+        df = yf.Ticker(ticker).history(period="1d", interval="2m")
         if df.empty:
             return None
         return float(df["Close"].iloc[-1])
@@ -419,7 +419,8 @@ def analyze(ticker, market):
         df = yf.Ticker(ticker).history(period="3mo")
         if df.empty or len(df) < 50:
             return None
-    except:
+    except Exception as e:
+        print(f"[analyze] ERROR: {e}")
         return None
 
     close = df["Close"]
@@ -447,7 +448,7 @@ def analyze(ticker, market):
     if pd.isna(ma20) or ma20 == 0:
         return None
 
-    if (price - ma20) / ma20 > 0.05:
+    if not breakout and (price - ma20) / ma20 > 0.05:
         return None
 
     if len(close) < 2:
@@ -576,17 +577,10 @@ def manage_positions():
             pos["stop"] = entry
 
         # -------- TRAILING STOP --------
-        try:
-            df = yf.Ticker(ticker).history(period="3mo")
+        trail = pos["highest"] * 0.95
 
-            if not df.empty:
-                atr_val = atr(df).iloc[-1]
-                trail = pos["highest"] - (2.5 * atr_val)
-
-                if trail > pos["stop"]:
-                    pos["stop"] = trail
-        except:
-            pass
+        if trail > pos["stop"]:
+            pos["stop"] = trail
 
         # -------- STOP LOSS --------
         if price < pos["stop"]:
