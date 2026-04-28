@@ -16,15 +16,19 @@ PORTFOLIO_FILE = "/data/portfolio.json"
 # ---------------- GLOBAL ----------------
 portfolio = None
 last_update_id = None
-SIGNALS_FILE = "/data/signals.json"
 
+SIGNALS_FILE = "/data/signals.json"
+TRADES_FILE = "/data/trades.json"
+
+# -------- SIGNALS --------
 def load_signals():
     if not os.path.exists(SIGNALS_FILE):
         return {}
     try:
         with open(SIGNALS_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        print(f"[load_signals] ERROR: {e}")
         return {}
 
 def save_signals():
@@ -33,21 +37,15 @@ def save_signals():
         json.dump(last_signals, f)
     os.replace(temp, SIGNALS_FILE)
 
-last_signals = load_signals()
-cooldowns = {}
-last_reset_day = None
-breakout_memory = {}
-
-# ---------------- NEW FILE ----------------
-TRADES_FILE = "/data/trades.json"
-
+# -------- TRADES --------
 def load_trades():
     if not os.path.exists(TRADES_FILE):
         return []
     try:
         with open(TRADES_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        print(f"[load_trades] ERROR: {e}")
         return []
 
 def save_trade(trade):
@@ -59,6 +57,12 @@ def save_trade(trade):
         json.dump(trades, f, indent=4)
 
     os.replace(temp, TRADES_FILE)
+
+# -------- RUNTIME STATE --------
+last_signals = load_signals()
+cooldowns = {}
+last_reset_day = None
+breakout_memory = {}
 
 # ---------------- ANALYTICS ----------------
 def weekly_performance():
@@ -108,7 +112,8 @@ def load_portfolio():
     try:
         with open(PORTFOLIO_FILE, "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        print(f"[load_portfolio] ERROR: {e}")
         return {"cash": 4000, "positions": {}}
 
 def save_portfolio(data):
@@ -141,7 +146,8 @@ def get_updates():
 
     try:
         res = requests.get(url, timeout=5).json()
-    except:
+    except Exception as e:
+        print(f"[context] ERROR: {e}")
         return
 
     for u in res.get("result", []):
@@ -234,7 +240,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
         ticker = parts[1].upper()
         shares = int(parts[2])
         price = float(parts[4])
-    except:
+    except (ValueError, IndexError) as e:
+        print(f"[handle_command parse] ERROR: {e} | text={text}")
         send("❌ Invalid command format")
         return
 
@@ -261,6 +268,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
             pos["price"] = avg_price
 
         else:
+            stop = None
+
             try:
                 df = yf.Ticker(ticker).history(period="3mo")
 
@@ -276,13 +285,14 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 else:
                     target = price * 1.10  # fallback
 
-            except:
+            except Exception as e:
+                print(f"[buy{ticker}] ERROR: {e}")
                 target = price * 1.10  # fallback
 
             portfolio["positions"][ticker] = {
                 "shares": shares,
                 "price": price,
-                "stop": price * 0.95,
+                "stop": stop if stop is not None else price * 0.95,
                 "highest": price,
                 "partial_taken": False,
                 "entry_time": time.time(),
@@ -639,7 +649,8 @@ while True:
                     df = yf.download(t, period="2d", progress=False)
                     if df is None or df.empty or len(df) < 2:
                         continue
-                except:
+                except Exception as e:
+                    print(f"[context] ERROR: {e}")
                     continue
 
                 close = df["Close"].dropna()
