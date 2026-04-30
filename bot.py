@@ -214,7 +214,7 @@ Worst: {worst[0]} (${round(worst[1],2)})
         msg = f"💼 PORTFOLIO\n\nCash: ${round(cash,2)}\n\n"
 
         for t, pos in positions.items():
-            price = get_price(t)
+            price = get_prices_batch([t]).get(t)
             if price is None:
                 price = pos["price"]
 
@@ -396,7 +396,7 @@ def get_prices_batch(tickers):
 
 def get_historical(ticker, limit=120):
     try:
-        url = f"https://financialmodelingprep.com/stable/historical-chart/1min?symbol={ticker}&from=2026-04-28&to=2026-04-30&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/stable/historical-price-eod/full?symbol={ticker}&apikey={FMP_API_KEY}"
 
         r = SESSION.get(url, timeout=10)
         r.raise_for_status()
@@ -404,7 +404,6 @@ def get_historical(ticker, limit=120):
         data = r.json()
 
         if not isinstance(data, list) or len(data) == 0:
-            print(f"[NO DATA] {ticker}")
             return None
 
         df = pd.DataFrame(data)
@@ -418,8 +417,6 @@ def get_historical(ticker, limit=120):
         })
 
         df = df.iloc[::-1].tail(limit)
-
-        print(f"[DATA OK] {ticker} rows={len(df)}")
 
         return df
 
@@ -691,7 +688,7 @@ while True:
         current_min = time.localtime().tm_min
 
         # run once near market close (example: 19:55)
-        if time.time() - last_scan > 300:  # every 5 min
+        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
             market = market_condition()
 
             for t in WATCHLIST:
