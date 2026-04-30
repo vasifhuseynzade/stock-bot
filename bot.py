@@ -2,14 +2,19 @@ import requests
 import time
 import json
 import os
-import yfinance as yf
 import pandas as pd
 
+FMP_API_KEY = os.getenv("FMP_API_KEY")
+FMP_BASE = "https://financialmodelingprep.com/api/v3"
+SESSION = requests.Session()
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID", "0"))
 
 if not TOKEN or CHAT_ID == 0:
     raise Exception("❌ Missing TOKEN or CHAT_ID")
+
+if not FMP_API_KEY:
+    raise Exception("❌ Missing FMP_API_KEY")
 
 PORTFOLIO_FILE = "/data/portfolio.json"
 
@@ -271,9 +276,9 @@ Worst: {worst[0]} (${round(worst[1],2)})
             stop = None
 
             try:
-                df = yf.Ticker(ticker).history(period="3mo")
+                df = get_historical(ticker, limit=120)
 
-                if not df.empty:
+                if df is not None and not df.empty:
                     atr_val = atr(df).iloc[-1]
 
                     if not pd.isna(atr_val):
@@ -368,12 +373,69 @@ def atr(df, period=14):
     return tr.rolling(period).mean()
 
 # ---------------- DATA ----------------
+def get_prices_batch(tickers):
+    try:
+        symbols = ",".join(tickers)
+
+        url = f"{FMP_BASE}/quote/{symbols}?apikey={FMP_API_KEY}"
+
+        r = SESSION.get(url, timeout=5)
+        r.raise_for_status()
+
+        data = r.json()
+
+        prices = {}
+        for item in data:
+            prices[item["symbol"]] = item["price"]
+
+        return prices
+
+    except Exception as e:
+        print(f"BATCH PRICE ERROR: {e}")
+        return {}
+
+def get_historical(ticker, limit=120):
+    try:
+        url = f"{FMP_BASE}/historical-price-full/{ticker}?timeseries={limit}&apikey={FMP_API_KEY}"
+
+        r = SESSION.get(url, timeout=10)
+        r.raise_for_status()
+
+        data = r.json()
+
+        if "historical" not in data:
+            return None
+
+        df = pd.DataFrame(data["historical"])
+
+        df = df.rename(columns={
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume"
+        })
+
+        df = df.iloc[::-1]
+
+        return df
+
+    except Exception as e:
+        print(f"HIST ERROR {ticker}: {e}")
+        return None
+
 def get_price(ticker):
     try:
-        df = yf.Ticker(ticker).history(period="1d", interval="2m")
-        if df.empty:
+        url = f"{FMP_BASE}/quote/{ticker}?apikey={FMP_API_KEY}"
+        r = SESSION.get(url, timeout=5)
+        r.raise_for_status()
+
+        data = r.json()
+        if not data:
             return None
-        return float(df["Close"].iloc[-1])
+
+        return float(data[0]["price"])
+
     except Exception as e:
         print(f"PRICE ERROR {ticker}: {e}")
         return None
@@ -381,8 +443,8 @@ def get_price(ticker):
 # ---------------- MARKET ----------------
 def market_condition():
     try:
-        spy = yf.Ticker("SPY").history(period="3mo")
-        qqq = yf.Ticker("QQQ").history(period="3mo")
+        spy = get_historical("SPY", limit=60)
+        qqq = get_historical("QQQ", limit=60)
 
         if spy is None or qqq is None or spy.empty or qqq.empty:
             return "UNCERTAIN"
@@ -426,8 +488,8 @@ WATCHLIST = STRONG + MEDIUM + WEAK
 # ---------------- ANALYSIS ----------------
 def analyze(ticker, market):
     try:
-        df = yf.Ticker(ticker).history(period="3mo")
-        if df.empty or len(df) < 50:
+        df = get_historical(ticker, limit=120)
+        if df is None or df.empty or len(df) < 50:
             return None
     except Exception as e:
         print(f"[analyze] ERROR: {e}")
@@ -518,14 +580,17 @@ def analyze(ticker, market):
     return ticker, price, shares, stop, target, score
 
 # ---------------- POSITION MANAGEMENT ----------------
-# ---------------- POSITION MANAGEMENT ----------------
 def manage_positions():
     global portfolio
 
-    for ticker in list(portfolio["positions"].keys()):
-        pos = portfolio["positions"][ticker]
+    tickers = list(portfolio["positions"].keys())
+    if not tickers:
+        return
+    prices = get_prices_batch(tickers)
 
-        price = get_price(ticker)
+    for ticker in tickers:
+        pos = portfolio["positions"][ticker]
+        price = prices.get(ticker)
 
         if price is None:
             continue
@@ -646,7 +711,7 @@ while True:
 
                 # -------- GET DATA --------
                 try:
-                    df = yf.download(t, period="2d", progress=False)
+                    df = get_historical(t, limit=3)
                     if df is None or df.empty or len(df) < 2:
                         continue
                 except Exception as e:
