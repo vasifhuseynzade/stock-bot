@@ -5,6 +5,7 @@ import os
 import pandas as pd
 
 FMP_API_KEY = os.getenv("FMP_API_KEY")
+FMP_BASE = "https://financialmodelingprep.com/api/v3"
 SESSION = requests.Session()
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID", "0"))
@@ -395,19 +396,15 @@ def get_prices_batch(tickers):
 
 def get_historical(ticker, limit=120):
     try:
-        url = f"https://financialmodelingprep.com/stable/historical-price-eod/{ticker}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/stable/historical-chart/1min/{ticker}?apikey={FMP_API_KEY}"
 
         r = SESSION.get(url, timeout=10)
         r.raise_for_status()
 
         data = r.json()
 
-        # 🔥 HANDLE BOTH FORMATS
-        if isinstance(data, dict) and "historical" in data:
-            data = data["historical"]
-
         if not isinstance(data, list) or len(data) == 0:
-            print(f"[NO DATA] {ticker} -> {data}")
+            print(f"[NO DATA] {ticker}")
             return None
 
         df = pd.DataFrame(data)
@@ -421,6 +418,8 @@ def get_historical(ticker, limit=120):
         })
 
         df = df.iloc[::-1].tail(limit)
+
+        print(f"[DATA OK] {ticker} rows={len(df)}")
 
         return df
 
@@ -474,9 +473,8 @@ WEAK = [
 WATCHLIST = STRONG + MEDIUM + WEAK
 
 # ---------------- ANALYSIS ----------------
-def analyze(ticker, market):
+def analyze(ticker, market, df):
     try:
-        df = get_historical(ticker, limit=120)
         if df is None or df.empty:
             print(f"[ANALYZE SKIP] {ticker} - no data")
             return None
@@ -693,19 +691,16 @@ while True:
         current_min = time.localtime().tm_min
 
         # run once near market close (example: 19:55)
-        if True:
+        if time.time() - last_scan > 300:  # every 5 min
             market = market_condition()
 
             for t in WATCHLIST:
 
                 # -------- GET DATA --------
                 try:
-                    df = get_historical(t, limit=3)
+                    df = get_historical(t, limit=120)
                     if df is None or df.empty or len(df) < 2:
                         continue
-
-                    print(f"[DATA OK] {t} rows={len(df)}")
-
                 except Exception as e:
                     print(f"[context] ERROR: {e}")
                     continue
@@ -756,7 +751,7 @@ while True:
                 if t in last_signals and time.time() - last_signals[t] < 86400:
                     continue
 
-                result = analyze(t, market)
+                result = analyze(t, market, df)
 
                 if result:
                     ticker, price, shares, stop, target, score = result
@@ -779,8 +774,8 @@ Target: {round(target,2)}
             # -------- UPDATE SCAN TIMER --------
             last_scan = time.time()
 
-        time.sleep(10)
+        time.sleep(25)
 
     except Exception as e:
         send(f"⚠️ ERROR {e}")
-        time.sleep(10)
+        time.sleep(25)
