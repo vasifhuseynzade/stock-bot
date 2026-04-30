@@ -526,7 +526,7 @@ def analyze(ticker, market, df):
     if breakout:
         score += 30
 
-    if score < 40:
+    if score < 10:
         return None
 
     # ✅ MODIFIED — allow breakout even if MA trend not perfect
@@ -688,7 +688,7 @@ while True:
         current_min = time.localtime().tm_min
 
         # run once near market close (example: 19:55)
-        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
+        if time.time() - last_scan > 60:
             market = market_condition()
 
             for t in WATCHLIST:
