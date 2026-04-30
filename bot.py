@@ -396,17 +396,18 @@ def get_prices_batch(tickers):
 
 def get_historical(ticker, limit=120):
     try:
-        url = f"{FMP_BASE}/historical-price-full/{ticker}?timeseries={limit}&apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/historical-chart/1day/{ticker}?apikey={FMP_API_KEY}"
 
         r = SESSION.get(url, timeout=10)
         r.raise_for_status()
 
         data = r.json()
 
-        if "historical" not in data:
+        if not isinstance(data, list) or len(data) == 0:
+            print(f"[HIST EMPTY] {ticker}")
             return None
 
-        df = pd.DataFrame(data["historical"])
+        df = pd.DataFrame(data)
 
         df = df.rename(columns={
             "open": "Open",
@@ -416,7 +417,14 @@ def get_historical(ticker, limit=120):
             "volume": "Volume"
         })
 
-        df = df.iloc[::-1]
+        df = df.iloc[::-1].tail(limit)
+
+        # ✅ DEBUG + SAFETY CHECK
+        if len(df) < 50:
+            print(f"[HIST TOO SHORT] {ticker} rows={len(df)}")
+            return None
+
+        print(f"[HIST OK] {ticker} rows={len(df)}")  # 👈 TEMP debug
 
         return df
 
@@ -489,7 +497,8 @@ WATCHLIST = STRONG + MEDIUM + WEAK
 def analyze(ticker, market):
     try:
         df = get_historical(ticker, limit=120)
-        if df is None or df.empty or len(df) < 50:
+        if df is None or df.empty:
+            print(f"[ANALYZE SKIP] {ticker} - no data")
             return None
     except Exception as e:
         print(f"[analyze] ERROR: {e}")
@@ -704,7 +713,7 @@ while True:
         current_min = time.localtime().tm_min
 
         # run once near market close (example: 19:55)
-        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
+        if True:
             market = market_condition()
 
             for t in WATCHLIST:
