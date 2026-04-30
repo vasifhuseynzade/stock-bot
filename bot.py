@@ -5,7 +5,6 @@ import os
 import pandas as pd
 
 FMP_API_KEY = os.getenv("FMP_API_KEY")
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
 SESSION = requests.Session()
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID", "0"))
@@ -396,15 +395,19 @@ def get_prices_batch(tickers):
 
 def get_historical(ticker, limit=120):
     try:
-        url = f"https://financialmodelingprep.com/api/v3/historical-chart/1day/{ticker}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/stable/historical-price-eod?symbol={ticker}&apikey={FMP_API_KEY}"
 
         r = SESSION.get(url, timeout=10)
         r.raise_for_status()
 
         data = r.json()
 
+        # 🔥 HANDLE BOTH FORMATS
+        if isinstance(data, dict) and "historical" in data:
+            data = data["historical"]
+
         if not isinstance(data, list) or len(data) == 0:
-            print(f"[HIST EMPTY] {ticker}")
+            print(f"[NO DATA] {ticker} -> {data}")
             return None
 
         df = pd.DataFrame(data)
@@ -419,33 +422,10 @@ def get_historical(ticker, limit=120):
 
         df = df.iloc[::-1].tail(limit)
 
-        # ✅ DEBUG + SAFETY CHECK
-        if len(df) < 50:
-            print(f"[HIST TOO SHORT] {ticker} rows={len(df)}")
-            return None
-
-        print(f"[HIST OK] {ticker} rows={len(df)}")  # 👈 TEMP debug
-
         return df
 
     except Exception as e:
         print(f"HIST ERROR {ticker}: {e}")
-        return None
-
-def get_price(ticker):
-    try:
-        url = f"{FMP_BASE}/quote/{ticker}?apikey={FMP_API_KEY}"
-        r = SESSION.get(url, timeout=5)
-        r.raise_for_status()
-
-        data = r.json()
-        if not data:
-            return None
-
-        return float(data[0]["price"])
-
-    except Exception as e:
-        print(f"PRICE ERROR {ticker}: {e}")
         return None
 
 # ---------------- MARKET ----------------
@@ -723,6 +703,9 @@ while True:
                     df = get_historical(t, limit=3)
                     if df is None or df.empty or len(df) < 2:
                         continue
+
+                    print(f"[DATA OK] {t} rows={len(df)}")
+
                 except Exception as e:
                     print(f"[context] ERROR: {e}")
                     continue
