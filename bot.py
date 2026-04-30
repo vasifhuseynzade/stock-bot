@@ -396,7 +396,7 @@ def get_prices_batch(tickers):
 
 def get_historical(ticker, limit=120):
     try:
-        url = f"https://financialmodelingprep.com/stable/historical-chart/1min/{ticker}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/stable/historical-chart/1min?symbol={ticker}&from=2026-04-28&to=2026-04-30&apikey={FMP_API_KEY}"
 
         r = SESSION.get(url, timeout=10)
         r.raise_for_status()
