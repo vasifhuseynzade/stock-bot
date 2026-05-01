@@ -159,10 +159,10 @@ def get_updates():
         last_update_id = u["update_id"]
 
         if "message" in u:
-            handle_command(u["message"].get("text", ""))
+            handle_command(u["message"].get("text", ""), None)
 
 # ---------------- COMMANDS ----------------
-def handle_command(text):
+def handle_command(text, entry_data=None):
     global portfolio
 
     text_lower = text.lower()
@@ -304,7 +304,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 "partial_taken": False,
                 "entry_time": time.time(),
                 "target": target,
-                "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None
+                "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None,
+                "entry_data": entry_data if entry_data else {}
             }
 
         save_portfolio(portfolio)
@@ -339,7 +340,10 @@ Worst: {worst[0]} (${round(worst[1],2)})
             "profit": round(profit, 2),
             "entry_time": pos.get("entry_time", time.time()),
             "exit_time": time.time(),
-            "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+            "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
+            "exit_reason": "manual",
+            "entry_data": pos.get("entry_data", {}),
+            "id": str(time.time())
         }
 
         save_trade(trade)
@@ -604,7 +608,10 @@ def manage_positions():
                 "profit": round((price - entry) * pos["shares"], 2),
                 "entry_time": pos.get("entry_time", time.time()),
                 "exit_time": time.time(),
-                "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
+                "exit_reason": "target",
+                "entry_data": pos.get("entry_data", {}),
+                "id": str(time.time())
             }
 
             save_trade(trade)
@@ -623,6 +630,22 @@ def manage_positions():
         # -------- PARTIAL TAKE PROFIT --------
         if price >= entry * 1.05 and not pos["partial_taken"] and pos["shares"] > 1:
             sell = pos["shares"] // 2
+
+            trade = {
+                "ticker": ticker,
+                "entry_price": entry,
+                "exit_price": price,
+                "shares": sell,
+                "profit": round((price - entry) * sell, 2),
+                "entry_time": pos.get("entry_time", time.time()),
+                "exit_time": time.time(),
+                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
+                "exit_reason": "partial",
+                "entry_data": pos.get("entry_data", {}),
+                "id": str(time.time())
+            }
+
+            save_trade(trade)
 
             portfolio["cash"] += sell * price
             pos["shares"] -= sell
@@ -659,7 +682,10 @@ def manage_positions():
                 "profit": round((price - entry) * pos["shares"], 2),
                 "entry_time": pos.get("entry_time", time.time()),
                 "exit_time": time.time(),
-                "duration_sec": int(time.time() - pos.get("entry_time", time.time()))
+                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
+                "exit_reason": "stop",
+                "entry_data": pos.get("entry_data", {}),
+                "id": str(time.time())
             }
 
             save_trade(trade)
@@ -760,6 +786,18 @@ while True:
 
                 if result:
                     ticker, price, shares, stop, target, score = result
+
+                    entry_data = {
+                        "rsi": round(rsi_val, 2),
+                        "score": score,
+                        "market": market,
+                        "atr": round((price - stop) / 1.5, 4),  # reconstruct ATR
+                        "breakout": price > df["Close"].iloc[-21:-1].max(),
+                        "volume_ratio": round(
+                            df["Volume"].iloc[-1] /
+                            df["Volume"].rolling(20).mean().iloc[-1], 2
+                        )
+                    }
 
                     capital = shares * price
                     risk_amount = (price - stop) * shares
