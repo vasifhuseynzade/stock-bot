@@ -276,6 +276,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
             stop = None
 
             try:
+                atr_val = None
+
                 df = get_historical(ticker, limit=120)
 
                 if df is not None and not df.empty:
@@ -301,7 +303,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 "highest": price,
                 "partial_taken": False,
                 "entry_time": time.time(),
-                "target": target
+                "target": target,
+                "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None
             }
 
         save_portfolio(portfolio)
@@ -418,6 +421,8 @@ def get_historical(ticker, limit=120):
 
         df = df.iloc[::-1].tail(limit)
 
+        print(f"[DATA OK] {ticker} | rows={len(df)} | last={df['Close'].iloc[-1]:.2f}")
+
         return df
 
     except Exception as e:
@@ -526,7 +531,7 @@ def analyze(ticker, market, df):
     if breakout:
         score += 30
 
-    if score < 10:
+    if score < 40:
         return None
 
     # ✅ MODIFIED — allow breakout even if MA trend not perfect
@@ -636,10 +641,13 @@ def manage_positions():
             pos["stop"] = entry
 
         # -------- TRAILING STOP --------
-        trail = pos["highest"] * 0.95
+        atr_val = pos.get("atr")
 
-        if trail > pos["stop"]:
-            pos["stop"] = trail
+        if atr_val is not None:
+            trail = pos["highest"] - (2.5 * atr_val)
+
+            if trail > pos["stop"] and trail < price:
+                pos["stop"] = trail
 
         # -------- STOP LOSS --------
         if price < pos["stop"]:
@@ -688,7 +696,7 @@ while True:
         current_min = time.localtime().tm_min
 
         # run once near market close (example: 19:55)
-        if time.time() - last_scan > 60:
+        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
             market = market_condition()
 
             for t in WATCHLIST:
@@ -729,8 +737,8 @@ while True:
                             breakout_triggered = True
 
                 # -------- RESET --------
-                if move < 8:
-                    breakout_memory.pop(t, None)
+                if move < 8 and t in breakout_memory:
+                    breakout_memory.pop(t)
 
 
                 # -------- RSI FILTER --------
@@ -753,16 +761,26 @@ while True:
                 if result:
                     ticker, price, shares, stop, target, score = result
 
+                    capital = shares * price
+                    risk_amount = (price - stop) * shares
+
                     send(f"""
 🟢 ENTRY
 
 {ticker}
+Market: {market}
+
 Price: {round(price,2)}
+RSI: {round(rsi_val,1)}
 Score: {score}
 
-Buy: {shares}
+Buy: {shares} shares
+Capital: ${round(capital,2)}
+
 Stop: {round(stop,2)}
 Target: {round(target,2)}
+
+Risk: ${round(risk_amount,2)}
 """)
 
                     last_signals[t] = time.time()
