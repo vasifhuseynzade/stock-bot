@@ -296,6 +296,8 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 print(f"[buy{ticker}] ERROR: {e}")
                 target = price * 1.10  # fallback
 
+            signal_data = last_signals.get(ticker, {}).get("entry_data", {})
+
             portfolio["positions"][ticker] = {
                 "shares": shares,
                 "price": price,
@@ -305,7 +307,7 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 "entry_time": time.time(),
                 "target": target,
                 "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None,
-                "entry_data": entry_data if entry_data else {}
+                "entry_data": signal_data
             }
 
         save_portfolio(portfolio)
@@ -718,8 +720,15 @@ while True:
         manage_positions()
 
         # -------- SCAN EVERY 5 MIN --------
-        current_hour = time.localtime().tm_hour
-        current_min = time.localtime().tm_min
+        now = time.localtime()
+
+        # ❌ Skip weekends
+        if now.tm_wday >= 5:
+            time.sleep(60)
+            continue
+
+        current_hour = now.tm_hour
+        current_min = now.tm_min
 
         # run once near market close (example: 19:55)
         if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
@@ -779,7 +788,7 @@ while True:
                 if t in portfolio["positions"]:
                     continue
 
-                if t in last_signals and time.time() - last_signals[t] < 86400:
+                if t in last_signals and time.time() - last_signals[t]["time"] < 86400:
                     continue
 
                 result = analyze(t, market, df)
@@ -821,7 +830,10 @@ Target: {round(target,2)}
 Risk: ${round(risk_amount,2)}
 """)
 
-                    last_signals[t] = time.time()
+                    last_signals[t] = {
+                        "time": time.time(),
+                        "entry_data": entry_data
+                    }
                     save_signals()
 
             # -------- UPDATE SCAN TIMER --------
