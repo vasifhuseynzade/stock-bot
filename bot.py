@@ -233,6 +233,20 @@ Worst: {worst[0]} (${round(worst[1],2)})
         send(msg)
         return
 
+    elif text_lower == "showportfolio_raw":
+        send(json.dumps(portfolio, indent=2))
+        return
+
+    elif text_lower == "showtrades":
+        send(json.dumps(load_trades(), indent=2))
+        send(data[:4000])
+        return
+
+    elif text_lower == "showsignals":
+        send(json.dumps(last_signals, indent=2))
+        send(data[:4000])
+        return
+
     # ----- ORIGINAL COMMAND LOGIC -----
     parts = text.lower().split()
 
