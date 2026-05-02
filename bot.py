@@ -238,13 +238,25 @@ Worst: {worst[0]} (${round(worst[1],2)})
         return
 
     elif text_lower == "showtrades":
-        send(json.dumps(load_trades(), indent=2))
+        data = json.dumps(load_trades(), indent=2)
         send(data[:4000])
         return
 
     elif text_lower == "showsignals":
-        send(json.dumps(last_signals, indent=2))
+        data = json.dumps(last_signals, indent=2)
         send(data[:4000])
+        return
+
+    elif text_lower == "download_trades":
+        try:
+            with open(TRADES_FILE, "rb") as f:
+                requests.post(
+                    f"https://api.telegram.org/bot{TOKEN}/sendDocument",
+                    files={"document": f},
+                    data={"chat_id": CHAT_ID}
+                )
+        except Exception as e:
+            send(f"❌ ERROR sending file: {e}")
         return
 
     # ----- ORIGINAL COMMAND LOGIC -----
