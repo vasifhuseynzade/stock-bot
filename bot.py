@@ -259,6 +259,22 @@ Worst: {worst[0]} (${round(worst[1],2)})
             send(f"❌ ERROR sending file: {e}")
         return
 
+    elif text_lower.startswith("setcash"):
+        parts = text_lower.split()
+
+        if len(parts) != 2:
+            send("❌ Usage: setcash 1670.15")
+            return
+
+        try:
+            amount = float(parts[1])
+            portfolio["cash"] = amount
+            save_portfolio(portfolio)
+            send(f"💰 Cash updated to ${amount}")
+        except ValueError:
+            send("❌ Invalid number")
+        return
+
     # ----- ORIGINAL COMMAND LOGIC -----
     parts = text.lower().split()
 
@@ -322,7 +338,11 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 print(f"[buy{ticker}] ERROR: {e}")
                 target = price * 1.10  # fallback
 
-            signal_data = last_signals.get(ticker, {}).get("entry_data", {})
+            signal = last_signals.get(ticker, {})
+            if isinstance(signal, dict):
+                signal_data = signal.get("entry_data", {})
+            else:
+                signal_data = {}
 
             portfolio["positions"][ticker] = {
                 "shares": shares,
@@ -335,6 +355,7 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None,
                 "entry_data": signal_data
             }
+
 
         save_portfolio(portfolio)
 
@@ -814,8 +835,16 @@ while True:
                 if t in portfolio["positions"]:
                     continue
 
-                if t in last_signals and time.time() - last_signals[t]["time"] < 86400:
-                    continue
+                signal = last_signals.get(t)
+
+                if signal:
+                    if isinstance(signal, dict):
+                        if time.time() - signal.get("time", 0) < 86400:
+                            continue
+                    else:
+                        # old format (float)
+                        if time.time() - signal < 86400:
+                            continue
 
                 result = analyze(t, market, df)
 
