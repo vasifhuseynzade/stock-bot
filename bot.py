@@ -4,6 +4,15 @@ import json
 import os
 import pandas as pd
 
+def safe_convert(obj):
+    if isinstance(obj, dict):
+        return {k: safe_convert(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [safe_convert(v) for v in obj]
+    elif hasattr(obj, "item"):  # numpy types
+        return obj.item()
+    return obj
+
 FMP_API_KEY = os.getenv("FMP_API_KEY")
 FMP_BASE = "https://financialmodelingprep.com/api/v3"
 SESSION = requests.Session()
@@ -39,7 +48,7 @@ def load_signals():
 def save_signals():
     temp = SIGNALS_FILE + ".tmp"
     with open(temp, "w") as f:
-        json.dump(last_signals, f)
+        json.dump(safe_convert(last_signals), f)
     os.replace(temp, SIGNALS_FILE)
 
 # -------- TRADES --------
@@ -59,7 +68,7 @@ def save_trade(trade):
 
     temp = TRADES_FILE + ".tmp"
     with open(temp, "w") as f:
-        json.dump(trades, f, indent=4)
+        json.dump(safe_convert(trades), f, indent=4)
 
     os.replace(temp, TRADES_FILE)
 
@@ -247,6 +256,12 @@ Worst: {worst[0]} (${round(worst[1],2)})
         send(data[:4000])
         return
 
+    elif text_lower == "resetsignals":
+        last_signals.clear()
+        save_signals()
+        send("🔄 Signals reset (history cleared, trades safe)")
+        return
+
     elif text_lower == "download_trades":
         try:
             with open(TRADES_FILE, "rb") as f:
@@ -339,8 +354,9 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 target = price * 1.10  # fallback
 
             signal = last_signals.get(ticker, {})
+
             if isinstance(signal, dict):
-                signal_data = signal.get("entry_data", {})
+                signal_data = safe_convert(signal.get("entry_data", {}))
             else:
                 signal_data = {}
 
@@ -856,11 +872,11 @@ while True:
                         "score": score,
                         "market": market,
                         "atr": round((price - stop) / 1.5, 4),  # reconstruct ATR
-                        "breakout": price > df["Close"].iloc[-21:-1].max(),
+                        "breakout": bool(price > df["Close"].iloc[-21:-1].max()),
                         "volume_ratio": round(
                             df["Volume"].iloc[-1] /
                             df["Volume"].rolling(20).mean().iloc[-1], 2
-                        )
+                        ))
                     }
 
                     capital = shares * price
@@ -887,7 +903,7 @@ Risk: ${round(risk_amount,2)}
 
                     last_signals[t] = {
                         "time": time.time(),
-                        "entry_data": entry_data
+                        "entry_data": safe_convert(entry_data)
                     }
                     save_signals()
 
