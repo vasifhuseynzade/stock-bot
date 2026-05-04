@@ -876,7 +876,7 @@ while True:
                         "volume_ratio": round(
                             df["Volume"].iloc[-1] /
                             df["Volume"].rolling(20).mean().iloc[-1], 2
-                        ))
+                        )
                     }
 
                     capital = shares * price
