@@ -133,7 +133,7 @@ def load_portfolio():
 def save_portfolio(data):
     temp = PORTFOLIO_FILE + ".tmp"
     with open(temp, "w") as f:
-        json.dump(data, f, indent=4)
+        json.dump(safe_convert(data), f, indent=4)
     os.replace(temp, PORTFOLIO_FILE)
 
 portfolio = load_portfolio()
@@ -243,7 +243,7 @@ Worst: {worst[0]} (${round(worst[1],2)})
         return
 
     elif text_lower == "showportfolio_raw":
-        send(json.dumps(portfolio, indent=2))
+        send(json.dumps(safe_convert(portfolio), indent=2))
         return
 
     elif text_lower == "showtrades":
@@ -260,6 +260,31 @@ Worst: {worst[0]} (${round(worst[1],2)})
         last_signals.clear()
         save_signals()
         send("🔄 Signals reset (history cleared, trades safe)")
+        return
+
+    elif text_lower == "setupstats":
+        trades = load_trades()
+
+        breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
+        pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
+
+        def stats(trades_list):
+            if not trades_list:
+                return "0 trades"
+
+            total = sum(t["profit"] for t in trades_list)
+            win = sum(1 for t in trades_list if t["profit"] > 0)
+            wr = (win / len(trades_list)) * 100
+
+            return f"{len(trades_list)} trades | P/L: ${round(total,2)} | WR: {round(wr,2)}%"
+
+        msg = (
+            f"📊 SETUP STATS\n\n"
+            f"Breakout: {stats(breakout)}\n"
+            f"Pullback: {stats(pullback)}"
+        )
+
+        send(msg)
         return
 
     elif text_lower == "download_trades":
@@ -371,7 +396,6 @@ Worst: {worst[0]} (${round(worst[1],2)})
                 "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None,
                 "entry_data": signal_data
             }
-
 
         save_portfolio(portfolio)
 
@@ -663,37 +687,13 @@ def manage_positions():
         if "partial_taken" not in pos:
             pos["partial_taken"] = False
 
-        # ✅ ADD TARGET EXIT RIGHT HERE
-        if "target" in pos and price >= pos["target"]:
-            trade = {
-                "ticker": ticker,
-                "entry_price": entry,
-                "exit_price": price,
-                "shares": pos["shares"],
-                "profit": round((price - entry) * pos["shares"], 2),
-                "entry_time": pos.get("entry_time", time.time()),
-                "exit_time": time.time(),
-                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
-                "exit_reason": "target",
-                "entry_data": pos.get("entry_data", {}),
-                "id": str(time.time())
-            }
-
-            save_trade(trade)
-
-            portfolio["cash"] += pos["shares"] * price
-            del portfolio["positions"][ticker]
-
-            send(f"🎯 TARGET HIT {ticker}\nP/L: ${trade['profit']}")
-            save_portfolio(portfolio)
-            continue
 
         # -------- TRACK HIGH --------
         if price > pos["highest"]:
             pos["highest"] = price
 
         # -------- PARTIAL TAKE PROFIT --------
-        if price >= entry * 1.05 and not pos["partial_taken"] and pos["shares"] > 1:
+        if price >= entry * 1.08 and not pos["partial_taken"] and pos["shares"] > 1:
             sell = pos["shares"] // 2
 
             trade = {
@@ -732,7 +732,13 @@ def manage_positions():
         atr_val = pos.get("atr")
 
         if atr_val is not None:
-            trail = pos["highest"] - (2.5 * atr_val)
+            # stronger trailing after profit
+            if price >= entry * 1.05:
+                multiplier = 2.0   # tighter once in profit
+            else:
+                multiplier = 2.5   # looser early
+
+            trail = pos["highest"] - (multiplier * atr_val)
 
             if trail > pos["stop"] and trail < price:
                 pos["stop"] = trail
@@ -838,7 +844,6 @@ while True:
                 if move < 8 and t in breakout_memory:
                     breakout_memory.pop(t)
 
-
                 # -------- RSI FILTER --------
                 rsi_val = rsi(close).iloc[-1]
                 if pd.isna(rsi_val):
@@ -873,6 +878,7 @@ while True:
                         "market": market,
                         "atr": round((price - stop) / 1.5, 4),  # reconstruct ATR
                         "breakout": bool(price > df["Close"].iloc[-21:-1].max()),
+                        "setup_type": "breakout" if price > df["Close"].iloc[-21:-1].max() else "pullback",
                         "volume_ratio": round(
                             df["Volume"].iloc[-1] /
                             df["Volume"].rolling(20).mean().iloc[-1], 2
@@ -915,3 +921,4 @@ Risk: ${round(risk_amount,2)}
     except Exception as e:
         send(f"⚠️ ERROR {e}")
         time.sleep(25)
+
