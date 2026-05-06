@@ -162,7 +162,7 @@ portfolio = load_portfolio()
 # ---------------- TELEGRAM ----------------
 def send(msg):
     try:
-        requests.post(
+        SESSION.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             data={"chat_id": CHAT_ID, "text": msg},
             timeout=5
@@ -494,29 +494,32 @@ def atr(df, period=14):
 
 # ---------------- DATA ----------------
 def get_prices_batch(tickers):
-    try:
-        symbols = ",".join(tickers)
+    prices = {}
 
-        url = f"{FMP_BASE}/quote/{symbols}?apikey={FMP_API_KEY}"
+    for ticker in tickers:
+        try:
+            url = f"{FMP_BASE}/quote?symbol={ticker}&apikey={FMP_API_KEY}"
 
-        print(f"[QUOTE UPDATE] {time.strftime('%H:%M:%S')}")
+            r = SESSION.get(url, timeout=5)
+            r.raise_for_status()
 
-        r = SESSION.get(url, timeout=5)
-        r.raise_for_status()
+            data = r.json()
 
-        data = r.json()
-        print(data)
+            print(f"[RAW] {ticker} -> {data}")
 
-        prices = {}
-        for item in data:
-            prices[item["symbol"]] = item["price"]
-            print(f"[PRICE] {item['symbol']} = {item['price']}")
+            # stable endpoint returns list
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
 
-        return prices
+                if "price" in item:
+                    prices[ticker] = item["price"]
 
-    except Exception as e:
-        print(f"BATCH PRICE ERROR: {e}")
-        return {}
+                    print(f"[PRICE] {ticker} = {item['price']}")
+
+        except Exception as e:
+            print(f"[PRICE ERROR] {ticker}: {e}")
+
+    return prices
 
 def get_historical(ticker, limit=120):
     try:
