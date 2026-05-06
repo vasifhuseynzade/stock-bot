@@ -180,7 +180,7 @@ def get_updates():
         url += f"?offset={last_update_id + 1}"
 
     try:
-        res = requests.get(url, timeout=5).json()
+        res = SESSION.get(url, timeout=5).json()
     except Exception as e:
         print(f"[context] ERROR: {e}")
         return
@@ -601,6 +601,8 @@ WEAK = [
 "CEVA","SERV","BKKT","BKSY"
 ]
 
+MIN_CASH_REQUIRED = 100
+
 WATCHLIST = STRONG + MEDIUM + WEAK
 
 # ---------------- ANALYSIS ----------------
@@ -773,6 +775,8 @@ def manage_positions():
                 continue
 
             pos["partial_taken"] = True
+            save_portfolio(portfolio)
+
             send(f"💰 PARTIAL {ticker}")
 
         # -------- BREAKEVEN --------
@@ -795,7 +799,7 @@ def manage_positions():
                 pos["stop"] = trail
 
         # -------- STOP LOSS --------
-        if price < pos["stop"]:
+        if price <= pos["stop"]:
             trade = {
                 "ticker": ticker,
                 "entry_price": entry,
@@ -905,6 +909,9 @@ while True:
                     continue
 
                 if t in portfolio["positions"]:
+                    continue
+
+                if portfolio["cash"] < MIN_CASH_REQUIRED:
                     continue
 
                 signal = last_signals.get(t)
