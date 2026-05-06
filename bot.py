@@ -14,7 +14,7 @@ def safe_convert(obj):
     return obj
 
 FMP_API_KEY = os.getenv("FMP_API_KEY")
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+FMP_BASE = "https://financialmodelingprep.com/stable"
 SESSION = requests.Session()
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID", "0"))
@@ -29,10 +29,10 @@ PORTFOLIO_FILE = "/data/portfolio.json"
 
 # ---------------- GLOBAL ----------------
 portfolio = None
-last_update_id = None
 
 SIGNALS_FILE = "/data/signals.json"
 TRADES_FILE = "/data/trades.json"
+UPDATES_FILE = "/data/updates.json"
 
 # -------- SIGNALS --------
 def load_signals():
@@ -72,8 +72,29 @@ def save_trade(trade):
 
     os.replace(temp, TRADES_FILE)
 
+def load_update_id():
+    if not os.path.exists(UPDATES_FILE):
+        return None
+
+    try:
+        with open(UPDATES_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("last_update_id")
+    except:
+        return None
+
+def save_update_id(update_id):
+    temp = UPDATES_FILE + ".tmp"
+
+    with open(temp, "w") as f:
+        json.dump({"last_update_id": update_id}, f)
+
+    os.replace(temp, UPDATES_FILE)
+
 # -------- RUNTIME STATE --------
 last_signals = load_signals()
+last_update_id = load_update_id()
+
 cooldowns = {}
 last_reset_day = None
 breakout_memory = {}
@@ -166,6 +187,7 @@ def get_updates():
 
     for u in res.get("result", []):
         last_update_id = u["update_id"]
+        save_update_id(last_update_id)
 
         if "message" in u:
             handle_command(u["message"].get("text", ""), None)
@@ -176,10 +198,12 @@ def handle_command(text, entry_data=None):
 
     text_lower = text.lower()
 
+
     # ----- ANALYTICS COMMANDS -----
     if text_lower == "pnl":
         send(f"📊 Weekly P/L: ${weekly_performance()}")
         return
+
 
     elif text_lower == "winrate":
         send(f"🏆 Win Rate: {win_rate()}%")
@@ -475,6 +499,8 @@ def get_prices_batch(tickers):
 
         url = f"{FMP_BASE}/quote/{symbols}?apikey={FMP_API_KEY}"
 
+        print(f"[QUOTE UPDATE] {time.strftime('%H:%M:%S')}")
+
         r = SESSION.get(url, timeout=5)
         r.raise_for_status()
 
@@ -483,6 +509,7 @@ def get_prices_batch(tickers):
         prices = {}
         for item in data:
             prices[item["symbol"]] = item["price"]
+            print(f"[PRICE] {item['symbol']} = {item['price']}")
 
         return prices
 
@@ -514,7 +541,12 @@ def get_historical(ticker, limit=120):
 
         df = df.iloc[::-1].tail(limit)
 
-        print(f"[DATA OK] {ticker} | rows={len(df)} | last={df['Close'].iloc[-1]:.2f}")
+        print(
+            f"[DATA OK] {ticker} | "
+            f"date={df.iloc[-1].get('date', 'N/A')} | "
+            f"rows={len(df)} | "
+            f"last={df['Close'].iloc[-1]:.2f}"
+        )
 
         return df
 
@@ -674,6 +706,13 @@ def manage_positions():
         pos = portfolio["positions"][ticker]
         price = prices.get(ticker)
 
+        print(
+            f"[MANAGE] {ticker} | "
+            f"price={round(price,2)} | "
+            f"stop={round(pos['stop'],2)} | "
+            f"high={round(pos['highest'],2)}"
+        )
+
         if price is None:
             continue
 
@@ -691,8 +730,16 @@ def manage_positions():
         # -------- TRACK HIGH --------
         if price > pos["highest"]:
             pos["highest"] = price
+            print(f"[NEW HIGH] {ticker} -> {price}")
 
         # -------- PARTIAL TAKE PROFIT --------
+        print(
+            f"[PARTIAL CHECK] {ticker} | "
+            f"price={price} | "
+            f"trigger={round(entry * 1.08,2)} | "
+            f"taken={pos['partial_taken']}"
+        )
+
         if price >= entry * 1.08 and not pos["partial_taken"] and pos["shares"] > 1:
             sell = pos["shares"] // 2
 
