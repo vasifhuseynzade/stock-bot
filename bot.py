@@ -497,7 +497,7 @@ def get_prices_batch(tickers):
     try:
         symbols = ",".join(tickers)
 
-        url = f"{FMP_BASE}/quote?symbol={symbols}&apikey={FMP_API_KEY}"
+        url = f"{FMP_BASE}/quote/{symbols}?apikey={FMP_API_KEY}"
 
         print(f"[QUOTE UPDATE] {time.strftime('%H:%M:%S')}")
 
@@ -508,8 +508,8 @@ def get_prices_batch(tickers):
         print(data)
 
         prices = {}
-        for symbol, item in data.items():
-            prices[symbol] = item.get("price")
+        for item in data:
+            prices[item["symbol"]] = item["price"]
             print(f"[PRICE] {item['symbol']} = {item['price']}")
 
         return prices
