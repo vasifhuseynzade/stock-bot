@@ -497,7 +497,7 @@ def get_prices_batch(tickers):
     try:
         symbols = ",".join(tickers)
 
-        url = f"{FMP_BASE}/quote/{symbols}?apikey={FMP_API_KEY}"
+        url = f"{FMP_BASE}/quote?symbol={symbols}&apikey={FMP_API_KEY}"
 
         print(f"[QUOTE UPDATE] {time.strftime('%H:%M:%S')}")
 
@@ -708,7 +708,7 @@ def manage_positions():
 
         print(
             f"[MANAGE] {ticker} | "
-            f"price={round(price,2)} | "
+            f"price={price} | "
             f"stop={round(pos['stop'],2)} | "
             f"high={round(pos['highest'],2)}"
         )
