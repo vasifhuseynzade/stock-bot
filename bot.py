@@ -505,6 +505,7 @@ def get_prices_batch(tickers):
         r.raise_for_status()
 
         data = r.json()
+        print(data)
 
         prices = {}
         for item in data:
