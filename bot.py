@@ -508,8 +508,8 @@ def get_prices_batch(tickers):
         print(data)
 
         prices = {}
-        for item in data:
-            prices[item["symbol"]] = item["price"]
+        for symbol, item in data.items():
+            prices[symbol] = item.get("price")
             print(f"[PRICE] {item['symbol']} = {item['price']}")
 
         return prices
