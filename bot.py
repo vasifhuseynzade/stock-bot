@@ -301,6 +301,7 @@ missing_price_counts: Dict[str, int] = {}
 
 PANIC_MODE = False
 LAST_HEARTBEAT = now_ts()
+LAST_SCAN_ATTEMPT = 0
 
 NYSE = mcal.get_calendar("NYSE")
  
@@ -4734,7 +4735,7 @@ def maybe_save_daily_equity_snapshot() -> None:
 
 def main() -> None:
 
-    global LAST_HEARTBEAT
+    global LAST_HEARTBEAT, LAST_SCAN_ATTEMPT
 
     startup_checks()
 
@@ -4788,13 +4789,20 @@ def main() -> None:
 
  
 
-            # Run once near US market close: 15:55 New York time.
+            # Run once near US market close: 16:10 New York time.
 
             last_scan_day = get_meta("last_scan_day")
 
             today = ny_now().date().isoformat()
 
-            if current_hour == 15 and current_min >= 55 and last_scan_day != today:
+            if (
+                current_hour == 17
+                and current_min >= 00
+                and last_scan_day != today
+                and now_ts() - LAST_SCAN_ATTEMPT > 300
+            ):
+
+                LAST_SCAN_ATTEMPT = now_ts()
 
                 scanned_ok = scan_market()
 
