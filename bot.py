@@ -1820,7 +1820,7 @@ def get_prices_batch(tickers: List[str]) -> Dict[str, float]:
 
                 prices[ticker] = price
 
-                print(f"[PRICE] {ticker} = {price}")
+                print(f"💲 PRICE | {ticker} = {price}")
 
  
 
@@ -1922,7 +1922,7 @@ def get_historical(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
         print(
 
-            f"[DATA OK] {nticker} | "
+            f"[📚 DATA OK] {nticker} | "
 
             f"date={df.iloc[-1]['date'].date().isoformat()} | "
 
@@ -3343,7 +3343,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         if not positions:
 
-            send(f"PORTFOLIO\n\nCash: {format_money(cash)}\nNo open positions")
+            send(f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\nNo open positions")
 
             return
 
@@ -3373,7 +3373,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             msg += (
 
-                f"{ticker}\n"
+                f"📦 {ticker}\n"
 
                 f"Shares: {shares}\n"
 
@@ -3381,13 +3381,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
                 f"Now: {round(current_price, 2)}\n"
 
-                f"Stop: {round(pos['stop'], 2)}\n"
+                f"🛡️ Stop: {round(pos['stop'], 2)}\n"
 
-                f"High: {round(pos['highest'], 2)}\n"
+                f"📈 High: {round(pos['highest'], 2)}\n"
 
-                f"R now: {None if r_now is None else round(r_now, 2)}\n"
+                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\n"
 
-                f"P/L: {format_money(pnl)}\n\n"
+                f"💰 P/L: {format_money(pnl)}\n\n"
 
             )
 
@@ -3803,7 +3803,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         ok, msg = record_buy(ticker, shares, price, update_id=update_id)
 
-        send(("OK: " if ok else "ERROR: ") + msg)
+        send(("OK: " if ok else "❌ ERROR: ") + msg)
 
         return
 
@@ -4179,7 +4179,7 @@ def manage_positions() -> None:
 
         if new_highest > old_highest:
 
-            print(f"[NEW HIGH] {ticker} -> {new_highest}")
+            print(f"[📈 NEW HIGH] {ticker} -> {new_highest}")
 
             pos["highest"] = new_highest
 
@@ -4254,7 +4254,7 @@ def manage_positions() -> None:
 
             if trade:
                 send(
-                    f"EXIT {ticker}\n"
+                    f"📉 EXIT {ticker}\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
                 )
@@ -4307,7 +4307,7 @@ def manage_positions() -> None:
 
             if trade:
 
-                send(f"PARTIAL {ticker}\nShares: {sell_shares}\nP/L: {format_money(trade['profit'])}\nR: {trade.get('r_multiple')}")
+                send(f"💰 PARTIAL {ticker}\nShares: {sell_shares}\nP/L: {format_money(trade['profit'])}\nR: {trade.get('r_multiple')}")
 
  
 
@@ -4376,9 +4376,16 @@ def scan_market() -> bool:
 
     market = market_condition()
 
-    print(f"[MARKET] {market}")
+    market_emoji = "🟡"
 
- 
+    if market == "BULL":
+        market_emoji = "🐂"
+
+    elif market == "BEAR":
+        market_emoji = "🐻"
+
+    print(f"{market_emoji} MARKET | {market}")
+
 
     cooldowns = get_cooldowns()
 
@@ -4390,11 +4397,11 @@ def scan_market() -> bool:
 
     if PANIC_MODE:
        print("[SCAN BLOCKED] PANIC_MODE")
-       return
+       return True
 
     if daily_drawdown_exceeded():
-       print("[SCAN BLOCKED] DAILY LOSS LIMIT")
-       return
+       print("[🚨 SCAN BLOCKED] DAILY LOSS LIMIT")
+       return True
 
     for ticker in WATCHLIST:
 
@@ -4619,7 +4626,7 @@ def scan_market() -> bool:
 
             send(
 
-                "ENTRY SIGNAL\n\n"
+                "📈 ENTRY SIGNAL\n\n"
 
                 f"{ticker}\n"
 
@@ -4657,7 +4664,7 @@ def scan_market() -> bool:
 
         except Exception as exc:
 
-            logger.exception(f"[SCAN ERROR] {ticker}: {exc}")
+            logger.exception(f"[❌ SCAN ERROR] {ticker}: {exc}")
 
             traceback.print_exc()
 
@@ -4740,7 +4747,7 @@ def main() -> None:
     startup_checks()
 
     send(
-        f"BOT STARTED\n"
+        f"🚀 BOT STARTED\n"
         f"Strategy: {STRATEGY_VERSION}\n"
         f"Panic Mode: {PANIC_MODE}"
     )
@@ -4789,14 +4796,14 @@ def main() -> None:
 
  
 
-            # Run once near US market close: 16:10 New York time.
+            # Run once near US market close: 18:00 New York time.
 
             last_scan_day = get_meta("last_scan_day")
 
             today = ny_now().date().isoformat()
 
             if (
-                current_hour == 17
+                current_hour == 18
                 and current_min >= 00
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
