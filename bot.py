@@ -2020,7 +2020,7 @@ def earnings_status(ticker: str, days: int = 7) -> str:
 
  
 
-            for item in data[:200]:
+            for item in data:
 
                 if not isinstance(item, dict):
 
@@ -2284,7 +2284,7 @@ def open_risk_details() -> Dict[str, float]:
 
  
 
-        current_stop_risk = max(0.0, pos["price"] - pos.get("stop", pos["price"]))
+        current_stop_risk = max(0.0, current_price - pos.get("stop", current_price))
 
         current_stop_risk_dollars += current_stop_risk * pos["shares"]
 
@@ -4340,13 +4340,15 @@ def should_skip_for_existing_signal(ticker: str) -> bool:
 
  
 
-def scan_market() -> None:
+def scan_market() -> bool:
 
     global last_signals
 
     refresh_portfolio()
 
     last_signals = load_signals()
+
+    fresh_count = 0
 
     today = ny_date_str()
 
@@ -4455,6 +4457,7 @@ def scan_market() -> None:
 
                 continue
 
+            fresh_count += 1
  
 
             close = df["Close"].dropna()
@@ -4659,7 +4662,7 @@ def scan_market() -> None:
 
             send(f"WARNING: scan error for {ticker}: {exc}")
 
- 
+    return fresh_count > 0
 
 # -----------------------------------------------------------------------------
 
@@ -4792,9 +4795,13 @@ def main() -> None:
             today = ny_now().date().isoformat()
 
             if current_hour == 15 and current_min >= 55 and last_scan_day != today:
-                scan_market()
-                set_meta("last_scan_day", today)
 
+                scanned_ok = scan_market()
+
+                if scanned_ok:
+                    set_meta("last_scan_day", today)
+                else:
+                    print("[SCAN NOT MARKED DONE] No fresh daily data")
 
             time.sleep(25)
 
