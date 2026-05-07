@@ -1,982 +1,4825 @@
-import requests
-import time
+from __future__ import annotations
+
+ 
+
 import json
+import math
 import os
+import re
+import sqlite3
+import time
+import uuid
+import traceback
+import pandas_market_calendars as mcal
+import logging
+from logging.handlers import RotatingFileHandler
+from contextlib import contextmanager
+from datetime import datetime, timedelta
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+ 
+
 import pandas as pd
 
-def safe_convert(obj):
-    if isinstance(obj, dict):
-        return {k: safe_convert(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [safe_convert(v) for v in obj]
-    elif hasattr(obj, "item"):  # numpy types
-        return obj.item()
-    return obj
+import requests
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# CONFIG
+
+# -----------------------------------------------------------------------------
+
+ 
+
+DATA_DIR = os.getenv("DATA_DIR", "/data")
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+ 
+
+DB_FILE = os.getenv("DB_FILE", os.path.join(DATA_DIR, "bot_state.sqlite3"))
+
+ 
+
+# Legacy JSON paths are only used for one-time migration if present.
+
+PORTFOLIO_FILE = os.path.join(DATA_DIR, "portfolio.json")
+
+SIGNALS_FILE = os.path.join(DATA_DIR, "signals.json")
+
+TRADES_FILE = os.path.join(DATA_DIR, "trades.json")
+
+UPDATES_FILE = os.path.join(DATA_DIR, "updates.json")
+
+EQUITY_FILE = os.path.join(DATA_DIR, "equity.json")
+
+HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.txt")
+
 
 FMP_API_KEY = os.getenv("FMP_API_KEY")
-FMP_BASE = "https://financialmodelingprep.com/stable"
-SESSION = requests.Session()
+
+FMP_BASE = os.getenv(
+    "FMP_BASE",
+    "https://financialmodelingprep.com/stable"
+)
+
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID", "0"))
+
+ 
+
+try:
+
+    CHAT_ID = int(os.getenv("CHAT_ID", "0"))
+
+except ValueError as exc:
+
+    raise RuntimeError("CHAT_ID must be an integer") from exc
+
+ 
 
 if not TOKEN or CHAT_ID == 0:
-    raise Exception("❌ Missing TOKEN or CHAT_ID")
+
+    raise RuntimeError("Missing TOKEN or CHAT_ID")
+
+ 
 
 if not FMP_API_KEY:
-    raise Exception("❌ Missing FMP_API_KEY")
 
-PORTFOLIO_FILE = "/data/portfolio.json"
+    raise RuntimeError("Missing FMP_API_KEY")
 
-# ---------------- GLOBAL ----------------
-portfolio = None
+ 
 
-SIGNALS_FILE = "/data/signals.json"
-TRADES_FILE = "/data/trades.json"
-UPDATES_FILE = "/data/updates.json"
+SESSION = requests.Session()
 
-# -------- SIGNALS --------
-def load_signals():
-    if not os.path.exists(SIGNALS_FILE):
+NY_TZ = ZoneInfo("America/New_York")
+
+ 
+
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v1.3")
+
+INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
+
+ 
+
+# Risk / execution controls.
+
+MIN_CASH_REQUIRED = float(os.getenv("MIN_CASH_REQUIRED", "100"))
+
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "6"))
+
+MAX_TOTAL_RISK = float(os.getenv("MAX_TOTAL_RISK", "0.06"))
+
+MAX_POSITION_EQUITY_PCT = float(os.getenv("MAX_POSITION_EQUITY_PCT", "0.20"))
+
+CASH_USAGE_BUFFER = float(os.getenv("CASH_USAGE_BUFFER", "0.98"))
+
+SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", str(24 * 3600)))
+
+STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
+
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
+ 
+
+# Data / calendar controls.
+
+REQUIRE_FRESH_DAILY_CANDLE = os.getenv("REQUIRE_FRESH_DAILY_CANDLE", "1") != "0"
+
+FAIL_CLOSED_ON_EARNINGS_UNKNOWN = os.getenv("FAIL_CLOSED_ON_EARNINGS_UNKNOWN", "1") != "0"
+
+MANAGE_ONLY_REGULAR_HOURS = os.getenv("MANAGE_ONLY_REGULAR_HOURS", "1") != "0"
+
+PRICE_MISSING_ALERT_THRESHOLD = int(os.getenv("PRICE_MISSING_ALERT_THRESHOLD", "3"))
+
+ 
+
+# Telegram safety.
+
+MAX_TELEGRAM_MESSAGE = 3900
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# WATCHLIST
+
+# -----------------------------------------------------------------------------
+
+ 
+
+STRONG = [
+
+    "AAPL", "MSFT", "NVDA", "META", "GOOGL",
+
+    "AMZN", "AVGO", "TSLA", "CRM", "ADBE",
+
+    "NOW", "AMD", "INTC", "QCOM", "MU",
+
+    "LRCX", "ASML", "ORCL", "NFLX", "PANW",
+
+]
+
+ 
+
+MEDIUM = [
+
+    "PLTR", "SNOW", "COIN", "SHOP", "UBER",
+
+    "PYPL", "SQ", "ROKU", "ZS", "DDOG", "ENPH",
+
+    "NET", "CRWD", "OKTA", "DOCU", "MDB",
+
+]
+
+ 
+
+WEAK = [
+
+    "MCHP", "INOD", "PGY", "AFRM", "RIOT",
+
+    "MARA", "SOFI", "UPST", "AI", "FUBO",
+
+    "CEVA", "SERV", "BKKT", "BKSY",
+
+]
+
+ 
+
+WATCHLIST = STRONG + MEDIUM + WEAK
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# GENERAL HELPERS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def safe_convert(obj: Any) -> Any:
+
+    """Convert numpy/pandas scalar values to JSON-serializable Python values."""
+
+    if isinstance(obj, dict):
+
+        return {k: safe_convert(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+
+        return [safe_convert(v) for v in obj]
+
+    if hasattr(obj, "item"):
+
+        return obj.item()
+
+    return obj
+
+ 
+
+ 
+
+def json_dumps(data: Any) -> str:
+
+    return json.dumps(safe_convert(data), separators=(",", ":"), allow_nan=False)
+
+ 
+
+ 
+
+def json_loads_dict(raw: Optional[str]) -> Dict[str, Any]:
+
+    if not raw:
+
         return {}
+
     try:
-        with open(SIGNALS_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[load_signals] ERROR: {e}")
+
+        data = json.loads(raw)
+
+        return data if isinstance(data, dict) else {}
+
+    except Exception:
+
         return {}
 
-def save_signals():
-    temp = SIGNALS_FILE + ".tmp"
-    with open(temp, "w") as f:
-        json.dump(safe_convert(last_signals), f)
-    os.replace(temp, SIGNALS_FILE)
+ 
 
-# -------- TRADES --------
-def load_trades():
-    if not os.path.exists(TRADES_FILE):
-        return []
-    try:
-        with open(TRADES_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[load_trades] ERROR: {e}")
+ 
+
+def json_loads_list(raw: Optional[str]) -> List[Any]:
+
+    if not raw:
+
         return []
 
-def save_trade(trade):
-    trades = load_trades()
-    trades.append(trade)
+    try:
 
-    temp = TRADES_FILE + ".tmp"
-    with open(temp, "w") as f:
-        json.dump(safe_convert(trades), f, indent=4)
+        data = json.loads(raw)
 
-    os.replace(temp, TRADES_FILE)
+        return data if isinstance(data, list) else []
 
-def load_update_id():
-    if not os.path.exists(UPDATES_FILE):
-        return None
+    except Exception:
+
+        return []
+
+ 
+
+ 
+
+def is_finite_positive(value: float) -> bool:
+
+    return math.isfinite(value) and value > 0
+
+ 
+
+ 
+
+def normalize_ticker(ticker: str) -> Optional[str]:
+
+    ticker = ticker.strip().upper()
+
+    # Allows normal US tickers plus dash/dot variants like BRK.B or BRK-B.
+
+    if re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]{0,14}", ticker):
+
+        return ticker
+
+    return None
+
+ 
+
+ 
+def now_ts() -> float:
+    return time.time()
+
+
+portfolio: Dict[str, Any] = {"cash": INITIAL_CASH, "positions": {}}
+last_signals: Dict[str, Any] = {}
+missing_price_counts: Dict[str, int] = {}
+
+PANIC_MODE = False
+LAST_HEARTBEAT = now_ts()
+
+NYSE = mcal.get_calendar("NYSE")
+ 
+
+ 
+
+def ny_now() -> datetime:
+
+    return datetime.now(NY_TZ)
+
+ 
+
+ 
+
+def ny_date_str(ts: Optional[float] = None) -> str:
+
+    dt = datetime.fromtimestamp(ts if ts is not None else now_ts(), NY_TZ)
+
+    return dt.date().isoformat()
+
+ 
+AUDIT_LOG = os.path.join(DATA_DIR, "audit.log")
+
+LOG_FILE = os.path.join(DATA_DIR, "bot.log")
+
+logger = logging.getLogger("trading_bot")
+logger.setLevel(logging.INFO)
+
+handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=5_000_000,
+    backupCount=3
+)
+
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(message)s"
+)
+
+handler.setFormatter(formatter)
+
+if not logger.handlers:
+    logger.addHandler(handler)
+
+def audit(event: str, details: str = "") -> None:
+    try:
+        ts = ny_now().strftime("%Y-%m-%d %H:%M:%S %Z")
+
+        line = f"{ts} | {event}"
+
+        if details:
+            line += f" | {details}"
+
+        with open(AUDIT_LOG, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    except Exception as exc:
+        print(f"[AUDIT ERROR] {exc}")
+
+
+def format_money(value: float) -> str:
+    return f"${round(value, 2)}"
+
+def heartbeat() -> None:
+    try:
+        with open(HEARTBEAT_FILE, "w", encoding="utf-8") as f:
+            f.write(str(now_ts()))
+    except Exception as exc:
+        print(f"[HEARTBEAT ERROR] {exc}")
+
+
+# -----------------------------------------------------------------------------
+
+# SQLITE PERSISTENCE
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def db_connect() -> sqlite3.Connection:
+
+    conn = sqlite3.connect(DB_FILE, timeout=30, check_same_thread=False)
+
+    conn.row_factory = sqlite3.Row
+
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    conn.execute("PRAGMA busy_timeout = 30000")
+
+    return conn
+
+ 
+
+ 
+
+@contextmanager
+
+def db_tx() -> Iterable[sqlite3.Connection]:
+
+    conn = db_connect()
 
     try:
-        with open(UPDATES_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("last_update_id")
-    except:
-        return None
 
-def save_update_id(update_id):
-    temp = UPDATES_FILE + ".tmp"
+        conn.execute("BEGIN IMMEDIATE")
 
-    with open(temp, "w") as f:
-        json.dump({"last_update_id": update_id}, f)
+        yield conn
 
-    os.replace(temp, UPDATES_FILE)
+        conn.commit()
 
-# -------- RUNTIME STATE --------
-last_signals = load_signals()
-last_update_id = load_update_id()
+    except Exception:
 
-cooldowns = {}
-last_reset_day = None
-breakout_memory = {}
+        conn.rollback()
 
-# ---------------- ANALYTICS ----------------
-def weekly_performance():
-    trades = load_trades()
-    now = time.time()
-    week_ago = now - 7 * 86400
-    return round(sum(t["profit"] for t in trades if t["exit_time"] >= week_ago), 2)
+        raise
 
-def win_rate():
-    trades = load_trades()
-    if not trades:
-        return 0
-    wins = sum(1 for t in trades if t["profit"] > 0)
-    return round((wins / len(trades)) * 100, 2)
+    finally:
 
-def ticker_stats():
-    trades = load_trades()
-    stats = {}
+        conn.close()
 
-    for t in trades:
-        stats.setdefault(t["ticker"], 0)
-        stats[t["ticker"]] += t["profit"]
+ 
 
-    best = max(stats.items(), key=lambda x: x[1], default=("None", 0))
-    worst = min(stats.items(), key=lambda x: x[1], default=("None", 0))
+ 
 
-    return best, worst
+def init_db() -> None:
 
-def avg_trade_duration():
-    trades = load_trades()
-    if not trades:
-        return "0 hrs"
+    conn = db_connect()
 
-    avg = sum(t["duration_sec"] for t in trades) / len(trades)
-    hours = avg / 3600
-
-    if hours >= 72:
-        days = hours / 24
-        return f"{round(days,2)} days ({round(hours,2)} hrs)"
-
-    return f"{round(hours,2)} hrs"
-
-# ---------------- PORTFOLIO ----------------
-def load_portfolio():
-    if not os.path.exists(PORTFOLIO_FILE):
-        return {"cash": 4000, "positions": {}}
     try:
-        with open(PORTFOLIO_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[load_portfolio] ERROR: {e}")
-        return {"cash": 4000, "positions": {}}
 
-def save_portfolio(data):
-    temp = PORTFOLIO_FILE + ".tmp"
-    with open(temp, "w") as f:
-        json.dump(safe_convert(data), f, indent=4)
-    os.replace(temp, PORTFOLIO_FILE)
+        conn.execute("PRAGMA journal_mode = WAL")
 
-portfolio = load_portfolio()
+        conn.execute("PRAGMA synchronous = FULL")
 
-# ---------------- TELEGRAM ----------------
-def send(msg):
-    try:
-        SESSION.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg},
-            timeout=5
+        conn.executescript(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS meta (
+
+                key TEXT PRIMARY KEY,
+
+                value TEXT NOT NULL
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS account (
+
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+
+                cash REAL NOT NULL CHECK (cash >= 0)
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS positions (
+
+                ticker TEXT PRIMARY KEY,
+
+                position_id TEXT NOT NULL UNIQUE,
+
+                strategy_version TEXT NOT NULL,
+
+                shares INTEGER NOT NULL CHECK (shares > 0),
+
+                entry_price REAL NOT NULL CHECK (entry_price > 0),
+
+                initial_stop REAL NOT NULL CHECK (initial_stop > 0),
+
+                stop REAL NOT NULL CHECK (stop > 0),
+
+                highest REAL NOT NULL CHECK (highest > 0),
+
+                partial_taken INTEGER NOT NULL DEFAULT 0 CHECK (partial_taken IN (0,1)),
+
+                entry_time REAL NOT NULL,
+
+                atr REAL,
+
+                risk_per_share REAL,
+
+                entry_data_json TEXT NOT NULL DEFAULT '{}'
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS trades (
+
+                id TEXT PRIMARY KEY,
+
+                position_id TEXT,
+
+                strategy_version TEXT,
+
+                ticker TEXT NOT NULL,
+
+                entry_price REAL NOT NULL,
+
+                exit_price REAL NOT NULL,
+
+                shares INTEGER NOT NULL CHECK (shares > 0),
+
+                profit REAL NOT NULL,
+
+                entry_time REAL NOT NULL,
+
+                exit_time REAL NOT NULL,
+
+                duration_sec INTEGER NOT NULL,
+
+                exit_reason TEXT NOT NULL,
+
+                entry_data_json TEXT NOT NULL DEFAULT '{}',
+
+                risk_per_share REAL,
+
+                r_multiple REAL,
+
+                created_at REAL NOT NULL,
+
+                UNIQUE(position_id, exit_time, exit_reason)
+
+
+            );
+
+ 
+
+            CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker);
+
+            CREATE INDEX IF NOT EXISTS idx_trades_position_id ON trades(position_id);
+
+            CREATE INDEX IF NOT EXISTS idx_trades_exit_time ON trades(exit_time);
+
+ 
+
+            CREATE TABLE IF NOT EXISTS signals (
+
+                ticker TEXT PRIMARY KEY,
+
+                time REAL NOT NULL,
+
+                entry_data_json TEXT NOT NULL DEFAULT '{}'
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS equity_snapshots (
+
+                snapshot_date TEXT PRIMARY KEY,
+
+                time REAL NOT NULL,
+
+                equity REAL NOT NULL,
+
+                cash REAL NOT NULL,
+
+                positions_value REAL NOT NULL
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS processed_updates (
+
+                update_id INTEGER PRIMARY KEY,
+
+                processed_at REAL NOT NULL,
+
+                status TEXT NOT NULL
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS cooldowns (
+
+                ticker TEXT PRIMARY KEY,
+
+                time REAL NOT NULL
+
+            );
+
+ 
+
+            CREATE TABLE IF NOT EXISTS breakout_memory (
+
+                ticker TEXT PRIMARY KEY,
+
+                levels_json TEXT NOT NULL DEFAULT '[]'
+
+            );
+
+            """
+
         )
-    except Exception as e:
-        print(f"[analyze] ERROR: {e}")
 
-# ---------------- TELEGRAM INPUT ----------------
-def get_updates():
-    global last_update_id
+        row = conn.execute("SELECT cash FROM account WHERE id = 1").fetchone()
+
+        if row is None:
+
+            conn.execute("INSERT INTO account(id, cash) VALUES (1, ?)", (INITIAL_CASH,))
+
+        conn.commit()
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def get_meta(key: str, default: Optional[str] = None) -> Optional[str]:
+
+    conn = db_connect()
+
+    try:
+
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+
+        return row["value"] if row else default
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def set_meta(key: str, value: str) -> None:
+
+    with db_tx() as conn:
+
+        conn.execute(
+
+            "INSERT INTO meta(key, value) VALUES (?, ?) "
+
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+
+            (key, value),
+
+        )
+
+ 
+
+ 
+
+def get_cash(conn: sqlite3.Connection) -> float:
+
+    row = conn.execute("SELECT cash FROM account WHERE id = 1").fetchone()
+
+    if row is None:
+
+        raise RuntimeError("Account row missing")
+
+    return float(row["cash"])
+
+ 
+
+ 
+
+def set_cash_tx(conn: sqlite3.Connection, cash: float) -> None:
+
+    if not math.isfinite(cash) or cash < 0:
+
+        raise ValueError("Cash must be finite and non-negative")
+
+    conn.execute("UPDATE account SET cash = ? WHERE id = 1", (round(cash, 6),))
+
+ 
+
+ 
+
+def row_to_position(row: sqlite3.Row) -> Dict[str, Any]:
+
+    return {
+
+        "position_id": row["position_id"],
+
+        "strategy_version": row["strategy_version"],
+
+        "shares": int(row["shares"]),
+
+        "price": float(row["entry_price"]),
+
+        "initial_stop": float(row["initial_stop"]),
+
+        "stop": float(row["stop"]),
+
+        "highest": float(row["highest"]),
+
+        "partial_taken": bool(row["partial_taken"]),
+
+        "entry_time": float(row["entry_time"]),
+
+        "atr": None if row["atr"] is None else float(row["atr"]),
+
+        "risk_per_share": None if row["risk_per_share"] is None else float(row["risk_per_share"]),
+
+        "entry_data": json_loads_dict(row["entry_data_json"]),
+
+    }
+
+ 
+
+ 
+
+def load_portfolio() -> Dict[str, Any]:
+
+    conn = db_connect()
+
+    try:
+
+        cash = get_cash(conn)
+
+        rows = conn.execute("SELECT * FROM positions ORDER BY ticker").fetchall()
+
+        positions = {row["ticker"]: row_to_position(row) for row in rows}
+
+        return {"cash": cash, "positions": positions}
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def refresh_portfolio() -> None:
+
+    global portfolio
+
+    portfolio = load_portfolio()
+
+ 
+
+ 
+
+def upsert_position_tx(conn: sqlite3.Connection, ticker: str, pos: Dict[str, Any]) -> None:
+
+    entry_data_json = json_dumps(pos.get("entry_data", {}))
+
+    conn.execute(
+
+        """
+
+        INSERT INTO positions(
+
+            ticker, position_id, strategy_version, shares, entry_price,
+
+            initial_stop, stop, highest, partial_taken, entry_time,
+
+            atr, risk_per_share, entry_data_json
+
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        ON CONFLICT(ticker) DO UPDATE SET
+
+            position_id = excluded.position_id,
+
+            strategy_version = excluded.strategy_version,
+
+            shares = excluded.shares,
+
+            entry_price = excluded.entry_price,
+
+            initial_stop = excluded.initial_stop,
+
+            stop = excluded.stop,
+
+            highest = excluded.highest,
+
+            partial_taken = excluded.partial_taken,
+
+            entry_time = excluded.entry_time,
+
+            atr = excluded.atr,
+
+            risk_per_share = excluded.risk_per_share,
+
+            entry_data_json = excluded.entry_data_json
+
+        """,
+
+        (
+
+            ticker,
+
+            pos["position_id"],
+
+            pos.get("strategy_version", STRATEGY_VERSION),
+
+            int(pos["shares"]),
+
+            float(pos["price"]),
+
+            float(pos["initial_stop"]),
+
+            float(pos["stop"]),
+
+            float(pos["highest"]),
+
+            1 if pos.get("partial_taken") else 0,
+
+            float(pos["entry_time"]),
+
+            None if pos.get("atr") is None else float(pos["atr"]),
+
+            None if pos.get("risk_per_share") is None else float(pos["risk_per_share"]),
+
+            entry_data_json,
+
+        ),
+
+    )
+
+ 
+
+ 
+
+def delete_position_tx(conn: sqlite3.Connection, ticker: str) -> None:
+
+    conn.execute("DELETE FROM positions WHERE ticker = ?", (ticker,))
+
+ 
+
+ 
+
+def load_trades() -> List[Dict[str, Any]]:
+
+    conn = db_connect()
+
+    try:
+
+        rows = conn.execute("SELECT * FROM trades ORDER BY exit_time ASC, created_at ASC").fetchall()
+
+        return [row_to_trade(row) for row in rows]
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def row_to_trade(row: sqlite3.Row) -> Dict[str, Any]:
+
+    return {
+
+        "id": row["id"],
+
+        "position_id": row["position_id"],
+
+        "strategy_version": row["strategy_version"],
+
+        "ticker": row["ticker"],
+
+        "entry_price": float(row["entry_price"]),
+
+        "exit_price": float(row["exit_price"]),
+
+        "shares": int(row["shares"]),
+
+        "profit": float(row["profit"]),
+
+        "entry_time": float(row["entry_time"]),
+
+        "exit_time": float(row["exit_time"]),
+
+        "duration_sec": int(row["duration_sec"]),
+
+        "exit_reason": row["exit_reason"],
+
+        "entry_data": json_loads_dict(row["entry_data_json"]),
+
+        "risk_per_share": None if row["risk_per_share"] is None else float(row["risk_per_share"]),
+
+        "r_multiple": None if row["r_multiple"] is None else float(row["r_multiple"]),
+
+    }
+
+ 
+
+ 
+
+def insert_trade_tx(conn: sqlite3.Connection, trade: Dict[str, Any]) -> None:
+
+    conn.execute(
+
+        """
+
+        INSERT INTO trades(
+
+            id, position_id, strategy_version, ticker, entry_price, exit_price,
+
+            shares, profit, entry_time, exit_time, duration_sec, exit_reason,
+
+            entry_data_json, risk_per_share, r_multiple, created_at
+
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+        """,
+
+        (
+
+            trade["id"],
+
+            trade.get("position_id"),
+
+            trade.get("strategy_version"),
+
+            trade["ticker"],
+
+            float(trade["entry_price"]),
+
+            float(trade["exit_price"]),
+
+            int(trade["shares"]),
+
+            float(trade["profit"]),
+
+            float(trade["entry_time"]),
+
+            float(trade["exit_time"]),
+
+            int(trade["duration_sec"]),
+
+            trade["exit_reason"],
+
+            json_dumps(trade.get("entry_data", {})),
+
+            None if trade.get("risk_per_share") is None else float(trade["risk_per_share"]),
+
+            None if trade.get("r_multiple") is None else float(trade["r_multiple"]),
+
+            now_ts(),
+
+        ),
+
+    )
+
+ 
+
+ 
+
+def load_signals() -> Dict[str, Any]:
+
+    conn = db_connect()
+
+    try:
+
+        rows = conn.execute("SELECT * FROM signals").fetchall()
+
+        return {
+
+            row["ticker"]: {
+
+                "time": float(row["time"]),
+
+                "entry_data": json_loads_dict(row["entry_data_json"]),
+
+            }
+
+            for row in rows
+
+        }
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def save_signal(ticker: str, signal_time: float, entry_data: Dict[str, Any]) -> None:
+
+    global last_signals
+
+    with db_tx() as conn:
+
+        conn.execute(
+
+            "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?) "
+
+            "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time, entry_data_json = excluded.entry_data_json",
+
+            (ticker, signal_time, json_dumps(entry_data)),
+
+        )
+
+    last_signals = load_signals()
+
+ 
+
+ 
+
+def save_signals() -> None:
+
+    """Compatibility function: persist current in-memory last_signals dict."""
+
+    with db_tx() as conn:
+
+        conn.execute("DELETE FROM signals")
+
+        for ticker, signal in last_signals.items():
+
+            if isinstance(signal, dict):
+
+                signal_time = float(signal.get("time", 0))
+
+                entry_data = signal.get("entry_data", {})
+
+            else:
+
+                signal_time = float(signal)
+
+                entry_data = {}
+
+            conn.execute(
+
+                "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?)",
+
+                (ticker, signal_time, json_dumps(entry_data)),
+
+            )
+
+ 
+
+ 
+
+def clear_signals() -> None:
+
+    global last_signals
+
+    with db_tx() as conn:
+
+        conn.execute("DELETE FROM signals")
+
+    last_signals = {}
+
+ 
+
+ 
+
+def get_cooldowns() -> Dict[str, float]:
+
+    conn = db_connect()
+
+    try:
+
+        rows = conn.execute("SELECT ticker, time FROM cooldowns").fetchall()
+
+        return {row["ticker"]: float(row["time"]) for row in rows}
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def set_cooldown(ticker: str, timestamp: float) -> None:
+
+    with db_tx() as conn:
+
+        conn.execute(
+
+            "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
+
+            "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
+
+            (ticker, timestamp),
+
+        )
+
+ 
+
+ 
+
+def get_breakout_levels(ticker: str) -> set:
+
+    conn = db_connect()
+
+    try:
+
+        row = conn.execute("SELECT levels_json FROM breakout_memory WHERE ticker = ?", (ticker,)).fetchone()
+
+        if not row:
+
+            return set()
+
+        return set(int(x) for x in json_loads_list(row["levels_json"]))
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def set_breakout_levels(ticker: str, levels: set) -> None:
+
+    with db_tx() as conn:
+
+        conn.execute(
+
+            "INSERT INTO breakout_memory(ticker, levels_json) VALUES (?, ?) "
+
+            "ON CONFLICT(ticker) DO UPDATE SET levels_json = excluded.levels_json",
+
+            (ticker, json_dumps(sorted(levels))),
+
+        )
+
+ 
+
+ 
+
+def clear_breakout_levels(ticker: str) -> None:
+
+    with db_tx() as conn:
+
+        conn.execute("DELETE FROM breakout_memory WHERE ticker = ?", (ticker,))
+
+ 
+
+ 
+
+def load_update_id() -> Optional[int]:
+
+    value = get_meta("last_update_id")
+
+    if value is None:
+
+        # One-time import from legacy updates.json if present.
+
+        try:
+
+            if os.path.exists(UPDATES_FILE):
+
+                with open(UPDATES_FILE, "r", encoding="utf-8") as f:
+
+                    data = json.load(f)
+
+                    if isinstance(data, dict) and data.get("last_update_id") is not None:
+
+                        return int(data["last_update_id"])
+
+        except Exception:
+
+            return None
+
+        return None
+
+    try:
+
+        return int(value)
+
+    except ValueError:
+
+        return None
+
+ 
+
+ 
+
+def save_update_id(update_id: int) -> None:
+
+    set_meta("last_update_id", str(int(update_id)))
+
+ 
+
+ 
+
+def is_update_processed(update_id: int) -> bool:
+
+    conn = db_connect()
+
+    try:
+
+        row = conn.execute("SELECT 1 FROM processed_updates WHERE update_id = ?", (int(update_id),)).fetchone()
+
+        return row is not None
+
+    finally:
+
+        conn.close()
+
+ 
+
+ 
+
+def mark_update_processed_tx(conn: sqlite3.Connection, update_id: Optional[int], status: str) -> None:
+
+    if update_id is None:
+
+        return
+
+    conn.execute(
+
+        "INSERT OR IGNORE INTO processed_updates(update_id, processed_at, status) VALUES (?, ?, ?)",
+
+        (int(update_id), now_ts(), status),
+
+    )
+
+    conn.execute(
+
+        "INSERT INTO meta(key, value) VALUES ('last_update_id', ?) "
+
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+
+        (str(int(update_id)),),
+
+    )
+
+ 
+
+ 
+
+def mark_update_processed(update_id: int, status: str) -> None:
+
+    with db_tx() as conn:
+
+        mark_update_processed_tx(conn, update_id, status)
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# LEGACY JSON MIGRATION
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def try_load_json(path: str, default: Any) -> Any:
+
+    try:
+
+        if not os.path.exists(path):
+
+            return default
+
+        with open(path, "r", encoding="utf-8") as f:
+
+            return json.load(f)
+
+    except Exception as exc:
+
+        print(f"[MIGRATION JSON ERROR] {path}: {exc}")
+
+        return default
+
+ 
+
+ 
+
+def migrate_legacy_json_once() -> None:
+
+    if get_meta("legacy_json_migration_done") == "1":
+
+        return
+
+ 
+
+    with db_tx() as conn:
+
+        pos_count = conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"]
+
+        trade_count = conn.execute("SELECT COUNT(*) AS n FROM trades").fetchone()["n"]
+
+        signal_count = conn.execute("SELECT COUNT(*) AS n FROM signals").fetchone()["n"]
+
+ 
+
+        if os.path.exists(PORTFOLIO_FILE) and pos_count == 0:
+
+            legacy_portfolio = try_load_json(PORTFOLIO_FILE, {})
+
+            if isinstance(legacy_portfolio, dict):
+
+                legacy_cash = legacy_portfolio.get("cash")
+
+                if isinstance(legacy_cash, (int, float)) and math.isfinite(float(legacy_cash)) and float(legacy_cash) >= 0:
+
+                    set_cash_tx(conn, float(legacy_cash))
+
+                legacy_positions = legacy_portfolio.get("positions", {})
+
+                if isinstance(legacy_positions, dict):
+
+                    for ticker, pos in legacy_positions.items():
+
+                        nticker = normalize_ticker(str(ticker))
+
+                        if nticker is None or not isinstance(pos, dict):
+
+                            continue
+
+                        try:
+
+                            entry = float(pos.get("price"))
+
+                            shares = int(pos.get("shares"))
+
+                            stop = float(pos.get("stop", entry * 0.95))
+
+                            initial_stop = float(pos.get("initial_stop", stop))
+
+                            highest = float(pos.get("highest", entry))
+
+                            risk_per_share = pos.get("risk_per_share")
+
+                            if risk_per_share is None:
+
+                                risk_per_share = entry - initial_stop
+
+                            risk_per_share = float(risk_per_share)
+
+                            if not (shares > 0 and entry > 0 and stop > 0 and initial_stop > 0 and highest > 0):
+
+                                continue
+
+                            new_pos = {
+
+                                "position_id": pos.get("position_id") or f"{nticker}_{int(time.time())}_{uuid.uuid4().hex[:8]}",
+
+                                "strategy_version": pos.get("strategy_version") or STRATEGY_VERSION,
+
+                                "shares": shares,
+
+                                "price": entry,
+
+                                "initial_stop": initial_stop,
+
+                                "stop": stop,
+
+                                "highest": max(highest, entry),
+
+                                "partial_taken": bool(pos.get("partial_taken", False)),
+
+                                "entry_time": float(pos.get("entry_time", now_ts())),
+
+                                "atr": pos.get("atr"),
+
+                                "risk_per_share": risk_per_share if risk_per_share > 0 else None,
+
+                                "entry_data": pos.get("entry_data", {}),
+
+                            }
+
+                            upsert_position_tx(conn, nticker, new_pos)
+
+                        except Exception as exc:
+
+                            print(f"[MIGRATION POSITION SKIP] {ticker}: {exc}")
+
+ 
+
+        if os.path.exists(TRADES_FILE) and trade_count == 0:
+
+            legacy_trades = try_load_json(TRADES_FILE, [])
+
+            if isinstance(legacy_trades, list):
+
+                for item in legacy_trades:
+
+                    if not isinstance(item, dict):
+
+                        continue
+
+                    try:
+
+                        ticker = normalize_ticker(str(item.get("ticker", "")))
+
+                        if ticker is None:
+
+                            continue
+
+                        shares = int(item.get("shares"))
+
+                        entry = float(item.get("entry_price"))
+
+                        exit_price = float(item.get("exit_price"))
+
+                        profit = float(item.get("profit", (exit_price - entry) * shares))
+
+                        if not (shares > 0 and entry > 0 and exit_price > 0 and math.isfinite(profit)):
+
+                            continue
+
+                        risk_per_share = item.get("risk_per_share")
+
+                        r_multiple = item.get("r_multiple")
+
+                        if risk_per_share is not None:
+
+                            risk_per_share = float(risk_per_share)
+
+                            if risk_per_share <= 0:
+
+                                risk_per_share = None
+
+                        if r_multiple is None and risk_per_share:
+
+                            r_multiple = (exit_price - entry) / risk_per_share
+
+                        trade = {
+
+                            "id": str(item.get("id") or uuid.uuid4().hex),
+
+                            "position_id": item.get("position_id"),
+
+                            "strategy_version": item.get("strategy_version") or STRATEGY_VERSION,
+
+                            "ticker": ticker,
+
+                            "entry_price": entry,
+
+                            "exit_price": exit_price,
+
+                            "shares": shares,
+
+                            "profit": round(profit, 2),
+
+                            "entry_time": float(item.get("entry_time", now_ts())),
+
+                            "exit_time": float(item.get("exit_time", now_ts())),
+
+                            "duration_sec": int(item.get("duration_sec", 0)),
+
+                            "exit_reason": item.get("exit_reason", "legacy"),
+
+                            "entry_data": item.get("entry_data", {}),
+
+                            "risk_per_share": risk_per_share,
+
+                            "r_multiple": None if r_multiple is None else round(float(r_multiple), 4),
+
+                        }
+
+                        insert_trade_tx(conn, trade)
+
+                    except Exception as exc:
+
+                        print(f"[MIGRATION TRADE SKIP] {exc}")
+
+ 
+
+        if os.path.exists(SIGNALS_FILE) and signal_count == 0:
+
+            legacy_signals = try_load_json(SIGNALS_FILE, {})
+
+            if isinstance(legacy_signals, dict):
+
+                for ticker, signal in legacy_signals.items():
+
+                    nticker = normalize_ticker(str(ticker))
+
+                    if nticker is None:
+
+                        continue
+
+                    try:
+
+                        if isinstance(signal, dict):
+
+                            signal_time = float(signal.get("time", 0))
+
+                            entry_data = signal.get("entry_data", {})
+
+                        else:
+
+                            signal_time = float(signal)
+
+                            entry_data = {}
+
+                        conn.execute(
+
+                            "INSERT OR REPLACE INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?)",
+
+                            (nticker, signal_time, json_dumps(entry_data)),
+
+                        )
+
+                    except Exception as exc:
+
+                        print(f"[MIGRATION SIGNAL SKIP] {ticker}: {exc}")
+
+ 
+
+        conn.execute(
+
+            "INSERT INTO meta(key, value) VALUES ('legacy_json_migration_done', '1') "
+
+            "ON CONFLICT(key) DO UPDATE SET value = '1'"
+
+        )
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# TELEGRAM
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def send(msg: Any) -> None:
+
+    text = str(msg)
+
+    if not text:
+
+        text = " "
+
+ 
+
+    chunks = [text[i:i + MAX_TELEGRAM_MESSAGE] for i in range(0, len(text), MAX_TELEGRAM_MESSAGE)]
+
+    for chunk in chunks:
+
+        try:
+
+            res = SESSION.post(
+
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+
+                data={"chat_id": CHAT_ID, "text": chunk},
+
+                timeout=5,
+
+            )
+
+            if res.status_code >= 400:
+
+                print(f"[TELEGRAM SEND HTTP ERROR] {res.status_code}: {res.text[:500]}")
+
+                continue
+
+            payload = res.json()
+
+            if not payload.get("ok", False):
+
+                print(f"[TELEGRAM SEND API ERROR] {payload}")
+
+        except Exception as exc:
+
+            print(f"[TELEGRAM SEND ERROR] {exc}")
+
+ 
+
+ 
+
+def send_document(path: str, caption: str = "") -> None:
+
+    try:
+
+        with open(path, "rb") as f:
+
+            res = SESSION.post(
+
+                f"https://api.telegram.org/bot{TOKEN}/sendDocument",
+
+                files={"document": f},
+
+                data={"chat_id": CHAT_ID, "caption": caption},
+
+                timeout=30,
+
+            )
+
+        if res.status_code >= 400:
+
+            send(f"ERROR sending document: HTTP {res.status_code}")
+
+            return
+
+        payload = res.json()
+
+        if not payload.get("ok", False):
+
+            send(f"ERROR sending document: {payload}")
+
+    except Exception as exc:
+
+        send(f"ERROR sending document: {exc}")
+
+ 
+
+ 
+
+def get_updates() -> None:
+
+    last_update_id = load_update_id()
 
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
 
-    if last_update_id:
+    if last_update_id is not None:
+
         url += f"?offset={last_update_id + 1}"
 
+ 
+
     try:
-        res = SESSION.get(url, timeout=5).json()
-    except Exception as e:
-        print(f"[context] ERROR: {e}")
-        return
 
-    for u in res.get("result", []):
-        last_update_id = u["update_id"]
-        save_update_id(last_update_id)
+        res = SESSION.get(url, timeout=5)
 
-        if "message" in u:
-            handle_command(u["message"].get("text", ""), None)
+        res.raise_for_status()
 
-# ---------------- COMMANDS ----------------
-def handle_command(text, entry_data=None):
-    global portfolio
+        payload = res.json()
 
-    text_lower = text.lower()
+        if not payload.get("ok", False):
 
+            print(f"[TELEGRAM GETUPDATES API ERROR] {payload}")
 
-    # ----- ANALYTICS COMMANDS -----
-    if text_lower == "pnl":
-        send(f"📊 Weekly P/L: ${weekly_performance()}")
-        return
-
-
-    elif text_lower == "winrate":
-        send(f"🏆 Win Rate: {win_rate()}%")
-        return
-
-    elif text_lower == "stats":
-        best, worst = ticker_stats()
-        send(f"📈 Best: {best[0]} (${round(best[1],2)})\n📉 Worst: {worst[0]} (${round(worst[1],2)})")
-        return
-
-    elif text_lower == "duration":
-        send(f"⏱ Avg Trade Duration: {avg_trade_duration()}")
-        return
-
-    elif text_lower == "summary":
-        pnl = weekly_performance()
-        wr = win_rate()
-        best, worst = ticker_stats()
-        duration = avg_trade_duration()
-
-        send(f"""
-📊 SUMMARY
-
-P/L (7d): ${pnl}
-Win Rate: {wr}%
-Avg Duration: {duration}
-
-Best: {best[0]} (${round(best[1],2)})
-Worst: {worst[0]} (${round(worst[1],2)})
-""")
-        return
-
-    elif text_lower == "portfolio":
-        cash = portfolio["cash"]
-        positions = portfolio["positions"]
-
-        if not positions:
-            send(f"💼 PORTFOLIO\n\nCash: ${round(cash,2)}\nNo open positions")
             return
 
-        msg = f"💼 PORTFOLIO\n\nCash: ${round(cash,2)}\n\n"
+    except Exception as exc:
 
-        for t, pos in positions.items():
-            price = get_prices_batch([t]).get(t)
-            if price is None:
-                price = pos["price"]
+        print(f"[TELEGRAM GETUPDATES ERROR] {exc}")
 
-            entry = pos["price"]
-            shares = pos["shares"]
-            pnl = (price - entry) * shares
+        return
 
-            msg += (
-                f"{t}\n"
-                f"Shares: {shares}\n"
-                f"Entry: {round(entry,2)}\n"
-                f"Now: {round(price,2)}\n"
-                f"P/L: ${round(pnl,2)}\n\n"
+ 
+
+    for update in payload.get("result", []):
+
+        update_id = update.get("update_id")
+
+        if update_id is None:
+
+            continue
+
+ 
+
+        if is_update_processed(int(update_id)):
+
+            save_update_id(int(update_id))
+
+            continue
+
+ 
+
+        message = update.get("message") or update.get("edited_message")
+
+        if not message:
+
+            mark_update_processed(int(update_id), "ignored_no_message")
+
+            continue
+
+ 
+
+        chat_id = message.get("chat", {}).get("id")
+
+        if chat_id != CHAT_ID:
+
+            print(f"[UNAUTHORIZED TELEGRAM COMMAND] chat_id={chat_id} update_id={update_id}")
+
+            mark_update_processed(int(update_id), "unauthorized")
+
+            continue
+
+ 
+
+        text = message.get("text") or ""
+
+        try:
+
+            handle_command(text, update_id=int(update_id))
+
+            # handle_command marks trade-mutating updates inside the same transaction.
+
+            if not is_update_processed(int(update_id)):
+
+                mark_update_processed(int(update_id), "processed")
+
+        except Exception as exc:
+
+            logger.exception(
+                f"[COMMAND ERROR] update_id={update_id} text={text!r}: {exc}"
             )
 
-        send(msg)
-        return
+            traceback.print_exc()
 
-    elif text_lower == "showportfolio_raw":
-        send(json.dumps(safe_convert(portfolio), indent=2))
-        return
+            send(f"ERROR processing command: {exc}")
 
-    elif text_lower == "showtrades":
-        data = json.dumps(load_trades(), indent=2)
-        send(data[:4000])
-        return
+            # Mark failed to avoid infinite crash loops; transactional trade commands roll back on error.
 
-    elif text_lower == "showsignals":
-        data = json.dumps(last_signals, indent=2)
-        send(data[:4000])
-        return
+            if not is_update_processed(int(update_id)):
 
-    elif text_lower == "resetsignals":
-        last_signals.clear()
-        save_signals()
-        send("🔄 Signals reset (history cleared, trades safe)")
-        return
+                mark_update_processed(int(update_id), "failed")
 
-    elif text_lower == "setupstats":
-        trades = load_trades()
+ 
 
-        breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
-        pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
+# -----------------------------------------------------------------------------
 
-        def stats(trades_list):
-            if not trades_list:
-                return "0 trades"
+# DATA PROVIDER
 
-            total = sum(t["profit"] for t in trades_list)
-            win = sum(1 for t in trades_list if t["profit"] > 0)
-            wr = (win / len(trades_list)) * 100
+# -----------------------------------------------------------------------------
 
-            return f"{len(trades_list)} trades | P/L: ${round(total,2)} | WR: {round(wr,2)}%"
+ 
 
-        msg = (
-            f"📊 SETUP STATS\n\n"
-            f"Breakout: {stats(breakout)}\n"
-            f"Pullback: {stats(pullback)}"
-        )
+from typing import Union
 
-        send(msg)
-        return
+def request_json(
+    url: str,
+    timeout: Union[int, Tuple[int, int]] = 5,
+    context: str = "",
+    retries: int = 1,
+) -> Any:
 
-    elif text_lower == "download_trades":
-        try:
-            with open(TRADES_FILE, "rb") as f:
-                requests.post(
-                    f"https://api.telegram.org/bot{TOKEN}/sendDocument",
-                    files={"document": f},
-                    data={"chat_id": CHAT_ID}
-                )
-        except Exception as e:
-            send(f"❌ ERROR sending file: {e}")
-        return
+    last_exc: Optional[Exception] = None
 
-    elif text_lower.startswith("setcash"):
-        parts = text_lower.split()
-
-        if len(parts) != 2:
-            send("❌ Usage: setcash 1670.15")
-            return
+    for attempt in range(retries + 1):
 
         try:
-            amount = float(parts[1])
-            portfolio["cash"] = amount
-            save_portfolio(portfolio)
-            send(f"💰 Cash updated to ${amount}")
-        except ValueError:
-            send("❌ Invalid number")
-        return
 
-    # ----- ORIGINAL COMMAND LOGIC -----
-    parts = text.lower().split()
+            res = SESSION.get(url, timeout=timeout)
 
-    # basic validation
-    if len(parts) < 5:
-        return
+            res.raise_for_status()
 
-    try:
-        action = parts[0]
-        ticker = parts[1].upper()
-        shares = int(parts[2])
-        price = float(parts[4])
-    except (ValueError, IndexError) as e:
-        print(f"[handle_command parse] ERROR: {e} | text={text}")
-        send("❌ Invalid command format")
-        return
+            return res.json()
 
-    # -------- BUY --------
-    if action == "bought":
+        except Exception as exc:
 
-        cost = shares * price
+            last_exc = exc
 
-        if portfolio["cash"] < cost:
-            send("❌ Not enough cash")
-            return
+            if attempt < retries:
 
-        portfolio["cash"] -= cost
+                time.sleep(0.5 * (attempt + 1))
 
-        if ticker in portfolio["positions"]:
-            pos = portfolio["positions"][ticker]
+    if context:
 
-            total_shares = pos["shares"] + shares
-            avg_price = (
-                (pos["shares"] * pos["price"]) + (shares * price)
-            ) / total_shares
+        raise RuntimeError(f"{context}: {last_exc}") from last_exc
 
-            pos["shares"] = total_shares
-            pos["price"] = avg_price
+    raise RuntimeError(str(last_exc)) from last_exc
 
-        else:
-            stop = None
+ 
 
-            try:
-                atr_val = None
+ 
 
-                df = get_historical(ticker, limit=120)
+def get_prices_batch(tickers: List[str]) -> Dict[str, float]:
 
-                if df is not None and not df.empty:
-                    atr_val = atr(df).iloc[-1]
+    prices: Dict[str, float] = {}
 
-                    if not pd.isna(atr_val):
-                        stop = price - (1.5 * atr_val)
-                        risk = price - stop
-                        target = price + 2 * risk
-                    else:
-                        target = price * 1.10  # fallback
-                else:
-                    target = price * 1.10  # fallback
+    clean_tickers = []
 
-            except Exception as e:
-                print(f"[buy{ticker}] ERROR: {e}")
-                target = price * 1.10  # fallback
-
-            signal = last_signals.get(ticker, {})
-
-            if isinstance(signal, dict):
-                signal_data = safe_convert(signal.get("entry_data", {}))
-            else:
-                signal_data = {}
-
-            portfolio["positions"][ticker] = {
-                "shares": shares,
-                "price": price,
-                "stop": stop if stop is not None else price * 0.95,
-                "highest": price,
-                "partial_taken": False,
-                "entry_time": time.time(),
-                "target": target,
-                "atr": atr_val if atr_val is not None and not pd.isna(atr_val) else None,
-                "entry_data": signal_data
-            }
-
-        save_portfolio(portfolio)
-
-        send(
-            f"✅ BOUGHT {ticker}\n"
-            f"Shares: {shares} @ {price}\n"
-            f"Cash left: ${round(portfolio['cash'],2)}"
-        )
-
-    # -------- SELL --------
-    elif action == "sold":
-
-        if ticker not in portfolio["positions"]:
-            send("❌ No position to sell")
-            return
-
-        pos = portfolio["positions"][ticker]
-
-        if shares > pos["shares"]:
-            send(f"❌ You only have {pos['shares']} shares")
-            return
-
-        entry = pos["price"]
-        profit = (price - entry) * shares
-
-        trade = {
-            "ticker": ticker,
-            "entry_price": entry,
-            "exit_price": price,
-            "shares": shares,
-            "profit": round(profit, 2),
-            "entry_time": pos.get("entry_time", time.time()),
-            "exit_time": time.time(),
-            "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
-            "exit_reason": "manual",
-            "entry_data": pos.get("entry_data", {}),
-            "id": str(time.time())
-        }
-
-        save_trade(trade)
-
-        portfolio["cash"] += shares * price
-        pos["shares"] -= shares
-
-        if pos["shares"] <= 0:
-            del portfolio["positions"][ticker]
-
-        save_portfolio(portfolio)
-
-        send(
-            f"💰 SOLD {ticker}\n"
-            f"Shares: {shares} @ {price}\n"
-            f"P/L: ${round(profit,2)}\n"
-            f"Cash: ${round(portfolio['cash'],2)}"
-        )
-
-# ---------------- INDICATORS ----------------
-def rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.clip(lower=0).rolling(period).mean()
-    loss = -delta.clip(upper=0).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-def atr(df, period=14):
-    tr = pd.concat([
-        df['High'] - df['Low'],
-        abs(df['High'] - df['Close'].shift()),
-        abs(df['Low'] - df['Close'].shift())
-    ], axis=1).max(axis=1)
-    return tr.rolling(period).mean()
-
-# ---------------- DATA ----------------
-def get_prices_batch(tickers):
-    prices = {}
+    seen = set()
 
     for ticker in tickers:
-        try:
-            url = f"{FMP_BASE}/quote?symbol={ticker}&apikey={FMP_API_KEY}"
 
-            r = SESSION.get(url, timeout=5)
-            r.raise_for_status()
+        nticker = normalize_ticker(str(ticker))
 
-            data = r.json()
+        if nticker and nticker not in seen:
 
-            print(f"[RAW] {ticker} -> {data}")
+            clean_tickers.append(nticker)
 
-            # stable endpoint returns list
-            if isinstance(data, list) and len(data) > 0:
-                item = data[0]
+            seen.add(nticker)
 
-                if "price" in item:
-                    prices[ticker] = item["price"]
+ 
 
-                    print(f"[PRICE] {ticker} = {item['price']}")
+    if not clean_tickers:
 
-        except Exception as e:
-            print(f"[PRICE ERROR] {ticker}: {e}")
+        return prices
+
+ 
+
+    try:
+
+        symbols = ",".join(clean_tickers)
+
+        url = f"{FMP_BASE}/batch-quote?symbols={symbols}&apikey={FMP_API_KEY}"
+
+        data = request_json(url, timeout=5, context="batch quote", retries=1)
+
+ 
+
+        if not isinstance(data, list):
+
+            print(f"[BATCH PRICE BAD SCHEMA] {data}")
+
+            return prices
+
+        if len(data) == 0:
+            print("[BATCH PRICE EMPTY RESPONSE]")
+            return prices
+
+        for item in data:
+
+            ticker = normalize_ticker(str(item.get("symbol", "")))
+
+            raw_price = item.get("price")
+
+            try:
+
+                price = float(raw_price)
+
+            except (TypeError, ValueError):
+
+                continue
+
+            if ticker and is_finite_positive(price):
+
+                prices[ticker] = price
+
+                print(f"[PRICE] {ticker} = {price}")
+
+ 
+
+    except Exception as exc:
+
+        logger.warning(f"[BATCH PRICE ERROR] {exc}")
+
+ 
 
     return prices
 
-def get_historical(ticker, limit=120):
+ 
+
+ 
+
+def get_historical(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
+
+    nticker = normalize_ticker(ticker)
+
+    if nticker is None:
+
+        return None
+
+ 
+
     try:
-        url = f"https://financialmodelingprep.com/stable/historical-price-eod/full?symbol={ticker}&apikey={FMP_API_KEY}"
 
-        r = SESSION.get(url, timeout=10)
-        r.raise_for_status()
+        url = f"{FMP_BASE}/historical-price-eod/full?symbol={nticker}&apikey={FMP_API_KEY}"
 
-        data = r.json()
+        data = request_json(url, timeout=(3, 10), context=f"historical {nticker}", retries=1)
+
+ 
 
         if not isinstance(data, list) or len(data) == 0:
+
+            print(f"[HIST EMPTY] {nticker}")
+
             return None
+
+ 
 
         df = pd.DataFrame(data)
 
-        df = df.rename(columns={
-            "open": "Open",
-            "high": "High",
-            "low": "Low",
-            "close": "Close",
-            "volume": "Volume"
-        })
+        df = df.rename(
 
-        df = df.iloc[::-1].tail(limit)
+            columns={
+
+                "open": "Open",
+
+                "high": "High",
+
+                "low": "Low",
+
+                "close": "Close",
+
+                "volume": "Volume",
+
+            }
+
+        )
+
+ 
+
+        required = ["date", "Open", "High", "Low", "Close", "Volume"]
+
+        missing = [c for c in required if c not in df.columns]
+
+        if missing:
+
+            print(f"[HIST BAD SCHEMA] {nticker} missing={missing}")
+
+            return None
+
+ 
+
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+ 
+
+        df = df.dropna(subset=required)
+
+        df = df.sort_values("date").tail(limit).reset_index(drop=True)
+
+ 
+
+        if df.empty:
+            print(f"[HIST NO VALID ROWS] {nticker}")
+            return None
+
+        if len(df) < 30:
+            print(f"[HIST TOO SHORT] {nticker}")
+            return None
+
+ 
 
         print(
-            f"[DATA OK] {ticker} | "
-            f"date={df.iloc[-1].get('date', 'N/A')} | "
-            f"rows={len(df)} | "
-            f"last={df['Close'].iloc[-1]:.2f}"
+
+            f"[DATA OK] {nticker} | "
+
+            f"date={df.iloc[-1]['date'].date().isoformat()} | "
+
+            f"rows={len(df)} | last={df['Close'].iloc[-1]:.2f}"
+
         )
 
         return df
 
-    except Exception as e:
-        print(f"HIST ERROR {ticker}: {e}")
+ 
+
+    except Exception as exc:
+
+        logger.warning(f"[HIST ERROR] {nticker}: {exc}")
+
         return None
 
-# ---------------- MARKET ----------------
-def market_condition():
+ 
+
+ 
+
+def is_daily_data_current(df: pd.DataFrame) -> bool:
+
+    if df is None or df.empty or "date" not in df.columns:
+        return False
+
     try:
+        last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
+
+        today = ny_now().date()
+
+        schedule = NYSE.schedule(
+            start_date=today - timedelta(days=7),
+            end_date=today
+        )
+
+        if schedule.empty:
+            return False
+
+        expected_session = schedule.index[-1].date()
+
+        return last_date == expected_session
+
+    except Exception as exc:
+        print(f"[STALE CHECK ERROR] {exc}")
+        return False
+ 
+
+def earnings_status(ticker: str, days: int = 7) -> str:
+
+    """Return SOON, CLEAR, or UNKNOWN. UNKNOWN should generally fail closed."""
+
+    nticker = normalize_ticker(ticker)
+
+    if nticker is None:
+
+        return "UNKNOWN"
+
+ 
+
+    today = ny_now().date()
+
+    end_date = today + timedelta(days=days)
+
+ 
+
+    endpoints = [
+
+        # Documented broad-calendar style endpoint.
+
+        f"{FMP_BASE}/earnings-calendar?from={today.isoformat()}&to={end_date.isoformat()}&apikey={FMP_API_KEY}",
+
+        # Compatibility with prior script endpoint, if available on the user's plan.
+
+        f"{FMP_BASE}/earning-calendar-confirmed?symbol={nticker}&apikey={FMP_API_KEY}",
+
+    ]
+
+ 
+
+    any_valid_response = False
+
+ 
+
+    for url in endpoints:
+
+        try:
+
+            data = request_json(url, timeout=5, context=f"earnings {nticker}", retries=1)
+
+            if not isinstance(data, list):
+
+                continue
+
+            any_valid_response = True
+
+ 
+
+            for item in data[:200]:
+
+                if not isinstance(item, dict):
+
+                    continue
+
+                symbol = normalize_ticker(str(item.get("symbol", nticker)))
+
+                if symbol != nticker:
+
+                    continue
+
+                date_str = item.get("date") or item.get("fiscalDateEnding")
+
+                if not date_str:
+
+                    continue
+
+                try:
+
+                    earnings_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
+
+                except ValueError:
+
+                    continue
+
+                diff = (earnings_date - today).days
+
+                if 0 <= diff <= days:
+
+                    print(f"[EARNINGS SOON] {nticker} -> {earnings_date.isoformat()}")
+
+                    return "SOON"
+
+ 
+
+            # If broad calendar endpoint returned valid data and ticker wasn't found, this is clear.
+
+            if "earnings-calendar?" in url:
+
+                return "CLEAR"
+
+ 
+
+        except Exception as exc:
+
+            print(f"[EARNINGS ERROR] {nticker}: {exc}")
+
+ 
+
+    return "CLEAR" if any_valid_response else "UNKNOWN"
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# INDICATORS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def rsi(series: pd.Series, period: int = 14) -> pd.Series:
+
+    delta = series.diff()
+
+    gain = delta.clip(lower=0).rolling(period).mean()
+
+    loss = -delta.clip(upper=0).rolling(period).mean()
+
+    loss = loss.replace(0, 1e-9)
+
+    rs = gain / loss
+
+    return 100 - (100 / (1 + rs))
+
+ 
+
+ 
+
+def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+
+    tr = pd.concat(
+
+        [
+
+            df["High"] - df["Low"],
+
+            (df["High"] - df["Close"].shift()).abs(),
+
+            (df["Low"] - df["Close"].shift()).abs(),
+
+        ],
+
+        axis=1,
+
+    ).max(axis=1)
+
+    return tr.rolling(period).mean()
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# MARKET / RISK HELPERS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def market_condition() -> str:
+
+    try:
+
         spy = get_historical("SPY", limit=60)
+
         qqq = get_historical("QQQ", limit=60)
 
+ 
+
         if spy is None or qqq is None or spy.empty or qqq.empty:
+
             return "UNCERTAIN"
 
-        if spy["Close"].iloc[-1] > spy["Close"].rolling(50).mean().iloc[-1] \
-        and qqq["Close"].iloc[-1] > qqq["Close"].rolling(50).mean().iloc[-1]:
+ 
+
+        spy_ma50 = spy["Close"].rolling(50).mean().iloc[-1]
+
+        qqq_ma50 = qqq["Close"].rolling(50).mean().iloc[-1]
+
+ 
+
+        if pd.isna(spy_ma50) or pd.isna(qqq_ma50):
+
+            return "UNCERTAIN"
+
+ 
+
+        if spy["Close"].iloc[-1] > spy_ma50 and qqq["Close"].iloc[-1] > qqq_ma50:
+
             return "BULL"
-        elif spy["Close"].iloc[-1] < spy["Close"].rolling(50).mean().iloc[-1] \
-        and qqq["Close"].iloc[-1] < qqq["Close"].rolling(50).mean().iloc[-1]:
+
+        if spy["Close"].iloc[-1] < spy_ma50 and qqq["Close"].iloc[-1] < qqq_ma50:
+
             return "BEAR"
 
+ 
+
         return "UNCERTAIN"
 
-    except Exception as e:
-        print(f"MARKET ERROR: {e}")
+ 
+
+    except Exception as exc:
+
+        print(f"[MARKET ERROR] {exc}")
+
         return "UNCERTAIN"
 
-# ---------------- WATCHLIST ----------------
+ 
 
-STRONG = [
-"AAPL","MSFT","NVDA","META","GOOGL",
-"AMZN","AVGO","TSLA","CRM","ADBE",
-"NOW","AMD","INTC","QCOM","MU",
-"LRCX","ASML","ORCL","NFLX","PANW"
-]
+ 
 
-MEDIUM = [
-"PLTR","SNOW","COIN","SHOP","UBER",
-"PYPL","SQ","ROKU","ZS","DDOG","ENPH",
-"NET","CRWD","OKTA","DOCU","MDB"
-]
+def compute_equity_snapshot_data() -> Dict[str, float]:
 
-WEAK = [
-"MCHP","INOD","PGY","AFRM","RIOT",
-"MARA","SOFI","UPST","AI","FUBO",
-"CEVA","SERV","BKKT","BKSY"
-]
+    refresh_portfolio()
 
-MIN_CASH_REQUIRED = 100
+    positions = portfolio["positions"]
 
-WATCHLIST = STRONG + MEDIUM + WEAK
+    prices = get_prices_batch(list(positions.keys()))
 
-# ---------------- ANALYSIS ----------------
-def analyze(ticker, market, df):
+ 
+
+    market_value = 0.0
+
+    for ticker, pos in positions.items():
+
+        price = prices.get(ticker, pos["price"])
+
+        market_value += price * pos["shares"]
+
+ 
+
+    equity = portfolio["cash"] + market_value
+
+    return {
+
+        "cash": round(portfolio["cash"], 2),
+
+        "positions_value": round(market_value, 2),
+
+        "equity": round(equity, 2),
+
+    }
+
+ 
+
+ 
+
+def save_equity_snapshot() -> None:
+
+    snapshot = compute_equity_snapshot_data()
+
+    snapshot_date = ny_date_str()
+
+    with db_tx() as conn:
+
+        conn.execute(
+
+            "INSERT OR REPLACE INTO equity_snapshots(snapshot_date, time, equity, cash, positions_value) "
+
+            "VALUES (?, ?, ?, ?, ?)",
+
+            (snapshot_date, now_ts(), snapshot["equity"], snapshot["cash"], snapshot["positions_value"]),
+
+        )
+
+        conn.execute(
+
+            "INSERT INTO meta(key, value) VALUES ('last_equity_snapshot_date', ?) "
+
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+
+            (snapshot_date,),
+
+        )
+
+ 
+
+ 
+
+def open_risk_details() -> Dict[str, float]:
+
+    refresh_portfolio()
+
+    positions = portfolio["positions"]
+
+    prices = get_prices_batch(list(positions.keys()))
+
+ 
+
+    equity = portfolio["cash"]
+
+    initial_risk_dollars = 0.0
+
+    current_stop_risk_dollars = 0.0
+
+ 
+
+    for ticker, pos in positions.items():
+
+        current_price = prices.get(ticker, pos["price"])
+
+        equity += current_price * pos["shares"]
+
+ 
+
+        risk_per_share = pos.get("risk_per_share")
+
+        if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+
+            initial_risk_dollars += risk_per_share * pos["shares"]
+
+ 
+
+        current_stop_risk = max(0.0, pos["price"] - pos.get("stop", pos["price"]))
+
+        current_stop_risk_dollars += current_stop_risk * pos["shares"]
+
+ 
+
+    if equity <= 0:
+
+        return {
+
+            "equity": 0.0,
+
+            "initial_risk_dollars": 0.0,
+
+            "current_stop_risk_dollars": 0.0,
+
+            "initial_risk_pct": 0.0,
+
+            "current_stop_risk_pct": 0.0,
+
+        }
+
+ 
+
+    return {
+
+        "equity": round(equity, 2),
+
+        "initial_risk_dollars": round(initial_risk_dollars, 2),
+
+        "current_stop_risk_dollars": round(current_stop_risk_dollars, 2),
+
+        "initial_risk_pct": initial_risk_dollars / equity,
+
+        "current_stop_risk_pct": current_stop_risk_dollars / equity,
+
+    }
+
+ 
+
+ 
+
+def risk_pct_for_ticker(ticker: str) -> Optional[float]:
+
+    if ticker in STRONG:
+
+        return 0.03
+
+    if ticker in MEDIUM:
+
+        return 0.02
+
+    if ticker in WEAK:
+
+        return 0.01
+
+    return None
+
+ 
+
+ 
+
+def approximate_equity_from_portfolio() -> float:
+
+    refresh_portfolio()
+
+    positions = portfolio["positions"]
+
+    prices = get_prices_batch(list(positions.keys()))
+
+    equity = float(portfolio["cash"])
+
+    for ticker, pos in positions.items():
+        mark = prices.get(ticker, pos["price"])
+        equity += float(mark) * int(pos["shares"])
+
+    return equity
+ 
+def daily_drawdown_exceeded() -> bool:
+
+    conn = db_connect()
+
     try:
-        if df is None or df.empty:
-            print(f"[ANALYZE SKIP] {ticker} - no data")
-            return None
-    except Exception as e:
-        print(f"[analyze] ERROR: {e}")
+        rows = conn.execute(
+            """
+            SELECT profit
+            FROM trades
+            WHERE exit_time >= ?
+            """,
+            (
+                datetime.combine(
+                    ny_now().date(),
+                    datetime.min.time(),
+                    tzinfo=NY_TZ
+                ).timestamp(),
+            ),
+        ).fetchall()
+
+        total = sum(float(r["profit"]) for r in rows)
+
+        equity = approximate_equity_from_portfolio()
+
+        if equity <= 0:
+            return False
+
+        return (total / equity) <= -MAX_DAILY_LOSS_PCT
+
+    finally:
+        conn.close()
+ 
+
+def is_market_weekday(dt: datetime) -> bool:
+
+    schedule = NYSE.schedule(
+        start_date=dt.date(),
+        end_date=dt.date()
+    )
+
+    return not schedule.empty
+ 
+
+ 
+
+def is_regular_market_hours(dt: datetime) -> bool:
+
+    if not is_market_weekday(dt):
+
+        return False
+
+    minutes = dt.hour * 60 + dt.minute
+
+    return (9 * 60 + 30) <= minutes <= (16 * 60)
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# ANALYTICS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def weekly_performance() -> float:
+
+    trades = load_trades()
+
+    week_ago = now_ts() - 7 * 86400
+
+    return round(sum(float(t.get("profit", 0)) for t in trades if float(t.get("exit_time", 0)) >= week_ago), 2)
+
+ 
+
+ 
+
+def win_rate() -> float:
+
+    trades = load_trades()
+
+    if not trades:
+
+        return 0.0
+
+    wins = sum(1 for t in trades if float(t.get("profit", 0)) > 0)
+
+    return round((wins / len(trades)) * 100, 2)
+
+ 
+
+ 
+
+def ticker_stats() -> Tuple[Tuple[str, float], Tuple[str, float]]:
+
+    trades = load_trades()
+
+    stats: Dict[str, float] = {}
+
+    for t in trades:
+
+        ticker = str(t.get("ticker", "UNKNOWN"))
+
+        stats.setdefault(ticker, 0.0)
+
+        stats[ticker] += float(t.get("profit", 0))
+
+    best = max(stats.items(), key=lambda x: x[1], default=("None", 0.0))
+
+    worst = min(stats.items(), key=lambda x: x[1], default=("None", 0.0))
+
+    return best, worst
+
+ 
+
+ 
+
+def avg_trade_duration() -> str:
+
+    trades = load_trades()
+
+    if not trades:
+
+        return "0 hrs"
+
+    avg = sum(int(t.get("duration_sec", 0)) for t in trades) / len(trades)
+
+    hours = avg / 3600
+
+    if hours >= 72:
+
+        days = hours / 24
+
+        return f"{round(days, 2)} days ({round(hours, 2)} hrs)"
+
+    return f"{round(hours, 2)} hrs"
+
+ 
+
+ 
+
+def expectancy_summary() -> Dict[str, Any]:
+
+    trades = load_trades()
+
+    r_values = [float(t["r_multiple"]) for t in trades if t.get("r_multiple") is not None]
+
+    profits = [float(t.get("profit", 0)) for t in trades]
+
+    gross_profit = sum(p for p in profits if p > 0)
+
+    gross_loss = abs(sum(p for p in profits if p < 0))
+
+    profit_factor = None if gross_loss == 0 else gross_profit / gross_loss
+
+ 
+
+    if not r_values:
+
+        return {
+
+            "trades": len(trades),
+
+            "r_trades": 0,
+
+            "avg_r": None,
+
+            "median_r": None,
+
+            "avg_win_r": None,
+
+            "avg_loss_r": None,
+
+            "profit_factor": profit_factor,
+
+        }
+
+ 
+
+    wins_r = [x for x in r_values if x > 0]
+
+    losses_r = [x for x in r_values if x < 0]
+
+    return {
+
+        "trades": len(trades),
+
+        "r_trades": len(r_values),
+
+        "avg_r": round(sum(r_values) / len(r_values), 3),
+
+        "median_r": round(float(pd.Series(r_values).median()), 3),
+
+        "avg_win_r": round(sum(wins_r) / len(wins_r), 3) if wins_r else None,
+
+        "avg_loss_r": round(sum(losses_r) / len(losses_r), 3) if losses_r else None,
+
+        "profit_factor": round(profit_factor, 3) if profit_factor is not None else None,
+
+    }
+
+ 
+
+ 
+
+def position_level_summary() -> Dict[str, Any]:
+
+    trades = load_trades()
+
+    grouped: Dict[str, Dict[str, Any]] = {}
+
+    for trade in trades:
+
+        position_id = trade.get("position_id") or f"legacy_{trade.get('id')}"
+
+        g = grouped.setdefault(
+
+            position_id,
+
+            {
+
+                "profit": 0.0,
+
+                "risk_dollars": 0.0,
+
+                "ticker": trade.get("ticker"),
+
+                "exit_count": 0,
+
+            },
+
+        )
+
+        g["profit"] += float(trade.get("profit", 0))
+
+        rps = trade.get("risk_per_share")
+
+        if rps is not None and float(rps) > 0:
+
+            g["risk_dollars"] += float(rps) * int(trade.get("shares", 0))
+
+        g["exit_count"] += 1
+
+ 
+
+    values = []
+
+    for g in grouped.values():
+
+        if g["risk_dollars"] > 0:
+
+            values.append(g["profit"] / g["risk_dollars"])
+
+ 
+
+    return {
+
+        "positions_closed_or_partially_closed": len(grouped),
+
+        "positions_with_r": len(values),
+
+        "avg_position_r": round(sum(values) / len(values), 3) if values else None,
+
+        "median_position_r": round(float(pd.Series(values).median()), 3) if values else None,
+
+    }
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# TRADING ACCOUNTING OPERATIONS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def make_trade_from_position(
+
+    ticker: str,
+
+    pos: Dict[str, Any],
+
+    shares: int,
+
+    exit_price: float,
+
+    exit_reason: str,
+
+) -> Dict[str, Any]:
+
+    entry = float(pos["price"])
+
+    profit = (exit_price - entry) * shares
+
+    risk_per_share = pos.get("risk_per_share")
+
+    r_multiple: Optional[float] = None
+
+    if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+
+        r_multiple = (exit_price - entry) / float(risk_per_share)
+
+ 
+
+    entry_time = float(pos.get("entry_time", now_ts()))
+
+    exit_time = now_ts()
+
+    return {
+
+        "id": uuid.uuid4().hex,
+
+        "position_id": pos.get("position_id"),
+
+        "strategy_version": pos.get("strategy_version", STRATEGY_VERSION),
+
+        "ticker": ticker,
+
+        "entry_price": entry,
+
+        "exit_price": exit_price,
+
+        "shares": shares,
+
+        "profit": round(profit, 2),
+
+        "entry_time": entry_time,
+
+        "exit_time": exit_time,
+
+        "duration_sec": int(exit_time - entry_time),
+
+        "exit_reason": exit_reason,
+
+        "entry_data": pos.get("entry_data", {}),
+
+        "risk_per_share": risk_per_share if isinstance(risk_per_share, (int, float)) and risk_per_share > 0 else None,
+
+        "r_multiple": None if r_multiple is None else round(r_multiple, 4),
+
+    }
+
+ 
+
+ 
+
+def record_buy(
+
+    ticker: str,
+
+    shares: int,
+
+    price: float,
+
+    update_id: Optional[int] = None,
+
+) -> Tuple[bool, str]:
+
+    ticker = normalize_ticker(ticker) or ""
+
+    if not ticker:
+
+        return False, "Invalid ticker"
+
+    if shares <= 0:
+
+        return False, "Shares must be positive"
+
+    if not is_finite_positive(price):
+
+        return False, "Price must be positive and finite"
+
+ 
+
+    atr_val: Optional[float] = None
+
+    stop: Optional[float] = None
+
+    try:
+
+        df = get_historical(ticker, limit=120)
+
+        if df is not None and not df.empty:
+
+            val = atr(df).iloc[-1]
+
+            if not pd.isna(val) and is_finite_positive(float(val)):
+
+                atr_val = float(val)
+
+                stop = price - (1.5 * atr_val)
+
+    except Exception as exc:
+
+        print(f"[BUY ATR ERROR] {ticker}: {exc}")
+
+ 
+
+    if stop is None or stop <= 0 or stop >= price:
+
+        stop = price * 0.95
+
+        atr_val = None
+
+ 
+
+    risk_per_share = price - stop
+
+    if risk_per_share <= 0:
+
+        return False, "Invalid stop/risk calculation"
+
+ 
+
+    signal = last_signals.get(ticker, {})
+
+    signal_data = signal.get("entry_data", {}) if isinstance(signal, dict) else {}
+
+ 
+
+    position_id = f"{ticker}_{int(now_ts())}_{uuid.uuid4().hex[:8]}"
+
+    new_pos = {
+
+        "position_id": position_id,
+
+        "strategy_version": STRATEGY_VERSION,
+
+        "shares": shares,
+
+        "price": price,
+
+        "initial_stop": stop,
+
+        "stop": stop,
+
+        "highest": price,
+
+        "partial_taken": False,
+
+        "entry_time": now_ts(),
+
+        "atr": atr_val,
+
+        "risk_per_share": risk_per_share,
+
+        "entry_data": signal_data,
+
+    }
+
+ 
+
+    with db_tx() as conn:
+
+        existing = conn.execute("SELECT 1 FROM positions WHERE ticker = ?", (ticker,)).fetchone()
+
+        if existing is not None:
+
+            mark_update_processed_tx(conn, update_id, "rejected_existing_position")
+
+            return False, "Position already exists"
+
+ 
+
+        cash = get_cash(conn)
+
+        cost = shares * price
+
+        if cost > cash:
+
+            mark_update_processed_tx(conn, update_id, "rejected_insufficient_cash")
+
+            return False, "Not enough cash"
+
+ 
+
+        set_cash_tx(conn, cash - cost)
+
+        upsert_position_tx(conn, ticker, new_pos)
+
+        mark_update_processed_tx(conn, update_id, "processed_buy")
+
+ 
+
+    refresh_portfolio()
+
+    audit(
+        "BUY",
+        f"{ticker} shares={shares} price={price} "
+        f"position_id={position_id}"
+    )
+
+    return True, f"BOUGHT {ticker}\nShares: {shares} @ {price}\nCash left: {format_money(portfolio['cash'])}"
+
+ 
+
+ 
+
+def record_sell(
+
+    ticker: str,
+
+    shares: int,
+
+    price: float,
+
+    exit_reason: str = "manual",
+
+    update_id: Optional[int] = None,
+
+) -> Tuple[bool, str]:
+
+    ticker = normalize_ticker(ticker) or ""
+
+    if not ticker:
+
+        return False, "Invalid ticker"
+
+    if shares <= 0:
+
+        return False, "Shares must be positive"
+
+    if not is_finite_positive(price):
+
+        return False, "Price must be positive and finite"
+
+ 
+
+    with db_tx() as conn:
+
+        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
+
+        if row is None:
+
+            mark_update_processed_tx(conn, update_id, "rejected_no_position")
+
+            return False, "No position to sell"
+
+ 
+
+        pos = row_to_position(row)
+
+        current_shares = int(pos["shares"])
+
+        if shares > current_shares:
+
+            mark_update_processed_tx(conn, update_id, "rejected_too_many_shares")
+
+            return False, f"You only have {current_shares} shares"
+
+ 
+
+        trade = make_trade_from_position(ticker, pos, shares, price, exit_reason)
+
+        insert_trade_tx(conn, trade)
+
+ 
+
+        cash = get_cash(conn)
+
+        set_cash_tx(conn, cash + shares * price)
+
+ 
+
+        remaining = current_shares - shares
+
+        if remaining <= 0:
+
+            delete_position_tx(conn, ticker)
+
+        else:
+
+            pos["shares"] = remaining
+
+            # Manual partial means the planned partial should not also auto-fire later.
+
+            if exit_reason == "manual":
+
+                pos["partial_taken"] = True
+
+            upsert_position_tx(conn, ticker, pos)
+
+ 
+
+        mark_update_processed_tx(conn, update_id, f"processed_{exit_reason}_sell")
+
+ 
+
+    refresh_portfolio()
+
+    audit(
+        "SELL",
+        f"{ticker} shares={shares} price={price} "
+        f"reason={exit_reason}"
+    )
+
+    return True, (
+
+        f"SOLD {ticker}\n"
+
+        f"Shares: {shares} @ {price}\n"
+
+        f"P/L: {format_money(trade['profit'])}\n"
+
+        f"Cash: {format_money(portfolio['cash'])}"
+
+    )
+
+ 
+
+ 
+
+def record_auto_exit_or_partial(
+
+    ticker: str,
+
+    shares: int,
+
+    price: float,
+
+    exit_reason: str,
+
+    updated_fields: Optional[Dict[str, Any]] = None,
+
+) -> Optional[Dict[str, Any]]:
+
+    """Transactional auto exit. Returns trade dict if executed, else None."""
+
+    ticker = normalize_ticker(ticker) or ""
+
+    if not ticker or shares <= 0 or not is_finite_positive(price):
+
         return None
 
+
+    with db_tx() as conn:
+
+        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
+
+        if row is None:
+
+            return None
+
+        pos = row_to_position(row)
+
+        current_shares = int(pos["shares"])
+
+        if shares > current_shares:
+
+            shares = current_shares
+
+        if updated_fields:
+
+            pos.update(updated_fields)
+
+ 
+
+        trade = make_trade_from_position(ticker, pos, shares, price, exit_reason)
+
+        insert_trade_tx(conn, trade)
+
+ 
+
+        cash = get_cash(conn)
+
+        set_cash_tx(conn, cash + shares * price)
+
+ 
+
+        remaining = current_shares - shares
+
+        if remaining <= 0:
+
+            delete_position_tx(conn, ticker)
+
+            set_cooldown_tx(conn, ticker, now_ts())
+
+        else:
+
+            pos["shares"] = remaining
+
+            if exit_reason == "partial":
+
+                pos["partial_taken"] = True
+
+            upsert_position_tx(conn, ticker, pos)
+
+ 
+
+    refresh_portfolio()
+
+    if trade:
+        audit(
+            exit_reason.upper(),
+            f"{ticker} shares={shares} "
+            f"price={price} "
+            f"profit={trade['profit']}"
+        )
+
+    return trade
+
+ 
+
+def set_cooldown_tx(conn: sqlite3.Connection, ticker: str, timestamp: float) -> None:
+
+    conn.execute(
+
+        "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
+
+        "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
+
+        (ticker, timestamp),
+
+    )
+
+ 
+
+ 
+
+def update_position_fields(ticker: str, fields: Dict[str, Any]) -> None:
+
+    ticker = normalize_ticker(ticker) or ""
+
+    if not ticker:
+
+        return
+
+    with db_tx() as conn:
+
+        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
+
+        if row is None:
+
+            return
+
+        pos = row_to_position(row)
+
+        pos.update(fields)
+
+        upsert_position_tx(conn, ticker, pos)
+
+    refresh_portfolio()
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# COMMANDS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+
+    global portfolio, last_signals
+    global PANIC_MODE
+
+    text = (text or "").strip()
+
+    if not text:
+        return
+
+    text_lower = text.lower()
+
+    audit("COMMAND", text)
+
+    if text_lower == "panic":
+
+        PANIC_MODE = True
+
+        audit("PANIC_ON")
+
+        send(
+            "PANIC MODE ENABLED\n"
+            "Scanning disabled.\n"
+            "Position management still active."
+        )
+
+        return
+
+    if text_lower == "resume":
+
+        PANIC_MODE = False
+
+        audit("PANIC_OFF")
+
+        send("Bot resumed.")
+
+        return
+
+    if text_lower in {"help", "/help"}:
+
+        send(
+
+            "Commands:\n"
+
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio\n"
+
+            "setupstats | showtrades | showsignals | resetsignals | download_trades\n"
+
+            "setcash AMOUNT\n"
+
+            "editbuy TICKER PRICE\n"
+
+            "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\n"
+
+            "bought TICKER SHARES at PRICE\n"
+
+            "sold TICKER SHARES at PRICE"
+
+        )
+
+        return
+
+ 
+
+    if text_lower == "pnl":
+
+        send(f"Weekly P/L: {format_money(weekly_performance())}")
+
+        return
+
+ 
+
+    if text_lower == "equity":
+
+        snapshot = compute_equity_snapshot_data()
+
+        send(
+
+            "ACCOUNT EQUITY\n\n"
+
+            f"Cash: {format_money(snapshot['cash'])}\n"
+
+            f"Positions: {format_money(snapshot['positions_value'])}\n"
+
+            f"Total Equity: {format_money(snapshot['equity'])}"
+
+        )
+
+        return
+
+ 
+
+    if text_lower == "openrisk":
+
+        details = open_risk_details()
+
+        send(
+
+            "OPEN RISK\n\n"
+
+            f"Equity: {format_money(details['equity'])}\n"
+
+            f"Initial open risk: {format_money(details['initial_risk_dollars'])} "
+
+            f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
+
+            f"Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
+
+            f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\n"
+
+            f"Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
+
+        )
+
+        return
+
+ 
+
+    if text_lower == "winrate":
+
+        send(f"Win Rate: {win_rate()}%")
+
+        return
+
+ 
+
+    if text_lower == "expectancy":
+
+        e = expectancy_summary()
+
+        p = position_level_summary()
+
+        send(
+
+            "EXPECTANCY\n\n"
+
+            f"Trades: {e['trades']}\n"
+
+            f"R-trades: {e['r_trades']}\n"
+
+            f"Avg R/trade: {e['avg_r']}\n"
+
+            f"Median R: {e['median_r']}\n"
+
+            f"Avg win R: {e['avg_win_r']}\n"
+
+            f"Avg loss R: {e['avg_loss_r']}\n"
+
+            f"Profit factor: {e['profit_factor']}\n\n"
+
+            f"Position-level count: {p['positions_closed_or_partially_closed']}\n"
+
+            f"Avg position R: {p['avg_position_r']}\n"
+
+            f"Median position R: {p['median_position_r']}"
+
+        )
+
+        return
+
+ 
+
+    if text_lower == "stats":
+
+        best, worst = ticker_stats()
+
+        send(f"Best: {best[0]} ({format_money(best[1])})\nWorst: {worst[0]} ({format_money(worst[1])})")
+
+        return
+
+ 
+
+    if text_lower == "duration":
+
+        send(f"Avg Trade Duration: {avg_trade_duration()}")
+
+        return
+
+ 
+
+    if text_lower == "summary":
+
+        pnl = weekly_performance()
+
+        wr = win_rate()
+
+        best, worst = ticker_stats()
+
+        duration = avg_trade_duration()
+
+        e = expectancy_summary()
+
+        send(
+
+            "SUMMARY\n\n"
+
+            f"P/L (7d): {format_money(pnl)}\n"
+
+            f"Win Rate: {wr}%\n"
+
+            f"Avg Duration: {duration}\n"
+
+            f"Avg R: {e['avg_r']}\n"
+
+            f"Profit Factor: {e['profit_factor']}\n\n"
+
+            f"Best: {best[0]} ({format_money(best[1])})\n"
+
+            f"Worst: {worst[0]} ({format_money(worst[1])})"
+
+        )
+
+        return
+
+ 
+
+    if text_lower == "portfolio":
+
+        refresh_portfolio()
+
+        cash = portfolio["cash"]
+
+        positions = portfolio["positions"]
+
+        if not positions:
+
+            send(f"PORTFOLIO\n\nCash: {format_money(cash)}\nNo open positions")
+
+            return
+
+ 
+
+        prices = get_prices_batch(list(positions.keys()))
+
+        msg = f"PORTFOLIO\n\nCash: {format_money(cash)}\n\n"
+
+        for ticker, pos in positions.items():
+
+            current_price = prices.get(ticker, pos["price"])
+
+            entry = pos["price"]
+
+            shares = pos["shares"]
+
+            pnl = (current_price - entry) * shares
+
+            risk_per_share = pos.get("risk_per_share")
+
+            r_now = None
+
+            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+
+                r_now = (current_price - entry) / risk_per_share
+
+            msg += (
+
+                f"{ticker}\n"
+
+                f"Shares: {shares}\n"
+
+                f"Entry: {round(entry, 2)}\n"
+
+                f"Now: {round(current_price, 2)}\n"
+
+                f"Stop: {round(pos['stop'], 2)}\n"
+
+                f"High: {round(pos['highest'], 2)}\n"
+
+                f"R now: {None if r_now is None else round(r_now, 2)}\n"
+
+                f"P/L: {format_money(pnl)}\n\n"
+
+            )
+
+        send(msg)
+
+        return
+
+ 
+
+    if text_lower == "showportfolio_raw":
+
+        refresh_portfolio()
+
+        send(json.dumps(safe_convert(portfolio), indent=2)[:MAX_TELEGRAM_MESSAGE])
+
+        return
+
+ 
+
+    if text_lower == "showtrades":
+
+        send(json.dumps(safe_convert(load_trades()), indent=2)[:MAX_TELEGRAM_MESSAGE])
+
+        return
+
+ 
+
+    if text_lower == "showsignals":
+
+        last_signals = load_signals()
+
+        send(json.dumps(safe_convert(last_signals), indent=2)[:MAX_TELEGRAM_MESSAGE])
+
+        return
+
+ 
+
+    if text_lower == "resetsignals":
+
+        clear_signals()
+
+        if update_id is not None:
+
+            mark_update_processed(update_id, "processed_resetsignals")
+
+        send("Signals reset. Trade history and portfolio are unchanged.")
+
+        return
+
+ 
+
+    if text_lower == "setupstats":
+
+        trades = load_trades()
+
+        breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
+
+        pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
+
+ 
+
+        def stats(trades_list: List[Dict[str, Any]]) -> str:
+
+            if not trades_list:
+
+                return "0 trades"
+
+            total = sum(float(t.get("profit", 0)) for t in trades_list)
+
+            win = sum(1 for t in trades_list if float(t.get("profit", 0)) > 0)
+
+            wr = (win / len(trades_list)) * 100
+
+            r_vals = [float(t["r_multiple"]) for t in trades_list if t.get("r_multiple") is not None]
+
+            avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
+
+            return f"{len(trades_list)} trades | P/L: {format_money(total)} | WR: {round(wr, 2)}% | Avg R: {avg_r}"
+
+ 
+
+        send(f"SETUP STATS\n\nBreakout: {stats(breakout)}\nPullback: {stats(pullback)}")
+
+        return
+
+ 
+
+    if text_lower == "download_trades":
+
+        path = os.path.join(DATA_DIR, "trades_export.json")
+
+        with open(path, "w", encoding="utf-8") as f:
+
+            json.dump(safe_convert(load_trades()), f, indent=2)
+
+        send_document(path, caption="trades_export.json")
+
+        return
+
+ 
+
+    if text_lower.startswith("setcash"):
+
+        parts = text.split()
+
+        if len(parts) != 2:
+
+            send("Usage: setcash 1670.15")
+
+            return
+
+        try:
+
+            amount = float(parts[1])
+
+        except ValueError:
+
+            send("Invalid number")
+
+            return
+
+        if not math.isfinite(amount) or amount < 0:
+
+            send("Cash must be finite and non-negative")
+
+            return
+
+        with db_tx() as conn:
+
+            set_cash_tx(conn, amount)
+
+            mark_update_processed_tx(conn, update_id, "processed_setcash")
+
+        refresh_portfolio()
+
+        send(f"Cash updated to {format_money(amount)}")
+
+        return
+
+ 
+
+    if text_lower.startswith("editbuy"):
+
+        parts = text.split()
+
+        if len(parts) != 3:
+
+            send("Usage: editbuy TICKER PRICE")
+
+            return
+
+        ticker = normalize_ticker(parts[1])
+
+        if not ticker:
+
+            send("Invalid ticker")
+
+            return
+
+        try:
+
+            new_price = float(parts[2])
+
+        except ValueError:
+
+            send("Invalid price")
+
+            return
+
+        if not is_finite_positive(new_price):
+
+            send("Price must be positive and finite")
+
+            return
+
+ 
+
+        with db_tx() as conn:
+
+            row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
+
+            if row is None:
+
+                mark_update_processed_tx(conn, update_id, "rejected_editbuy_no_position")
+
+                send("Position not found")
+
+                return
+
+            pos = row_to_position(row)
+
+            old_price = pos["price"]
+
+            shares = int(pos["shares"])
+
+            cash = get_cash(conn)
+
+            cash_adjustment = (old_price - new_price) * shares
+
+            new_cash = cash + cash_adjustment
+
+            if new_cash < 0:
+
+                mark_update_processed_tx(conn, update_id, "rejected_editbuy_negative_cash")
+
+                send("Edit would make cash negative")
+
+                return
+
+            risk_per_share = new_price - pos["initial_stop"]
+
+            if risk_per_share <= 0:
+
+                mark_update_processed_tx(conn, update_id, "rejected_editbuy_invalid_risk")
+
+                send("Edit rejected: new entry price must be above initial_stop. Use a manual correction instead.")
+
+                return
+
+            pos["price"] = new_price
+
+            pos["risk_per_share"] = risk_per_share
+
+            pos["highest"] = max(pos.get("highest", new_price), new_price)
+
+            set_cash_tx(conn, new_cash)
+
+            upsert_position_tx(conn, ticker, pos)
+
+            mark_update_processed_tx(conn, update_id, "processed_editbuy")
+
+        refresh_portfolio()
+
+        send(
+
+            f"BUY UPDATED {ticker}\n"
+
+            f"Old: {round(old_price, 2)}\n"
+
+            f"New: {round(new_price, 2)}\n"
+
+            f"Cash adjusted by: {format_money(cash_adjustment)}"
+
+        )
+
+        return
+
+ 
+
+    if text_lower.startswith("editsell"):
+
+        parts = text.split()
+
+        if len(parts) != 3:
+
+            send("Usage: editsell TICKER PRICE")
+
+            return
+
+        ticker = normalize_ticker(parts[1])
+
+        if not ticker:
+
+            send("Invalid ticker")
+
+            return
+
+        try:
+
+            new_price = float(parts[2])
+
+        except ValueError:
+
+            send("Invalid price")
+
+            return
+
+        if not is_finite_positive(new_price):
+
+            send("Price must be positive and finite")
+
+            return
+
+ 
+
+        with db_tx() as conn:
+
+            row = conn.execute(
+
+                "SELECT * FROM trades WHERE ticker = ? ORDER BY exit_time DESC, created_at DESC LIMIT 1",
+
+                (ticker,),
+
+            ).fetchone()
+
+            if row is None:
+
+                mark_update_processed_tx(conn, update_id, "rejected_editsell_no_trade")
+
+                send("Trade not found")
+
+                return
+
+            trade = row_to_trade(row)
+
+            old_price = trade["exit_price"]
+
+            shares = int(trade["shares"])
+
+            cash_adjustment = (new_price - old_price) * shares
+
+            cash = get_cash(conn)
+
+            new_cash = cash + cash_adjustment
+
+            if new_cash < 0:
+
+                mark_update_processed_tx(conn, update_id, "rejected_editsell_negative_cash")
+
+                send("Edit would make cash negative")
+
+                return
+
+            entry_price = float(trade["entry_price"])
+
+            profit = (new_price - entry_price) * shares
+
+            risk_per_share = trade.get("risk_per_share")
+
+            r_multiple = None
+
+            if risk_per_share is not None and float(risk_per_share) > 0:
+
+                r_multiple = (new_price - entry_price) / float(risk_per_share)
+
+            conn.execute(
+
+                "UPDATE trades SET exit_price = ?, profit = ?, r_multiple = ? WHERE id = ?",
+
+                (new_price, round(profit, 2), None if r_multiple is None else round(r_multiple, 4), trade["id"]),
+
+            )
+
+            set_cash_tx(conn, new_cash)
+
+            mark_update_processed_tx(conn, update_id, "processed_editsell")
+
+        refresh_portfolio()
+
+        send(
+
+            f"SELL UPDATED {ticker}\n"
+
+            f"Trade ID: {trade['id']}\n"
+
+            f"Old: {round(old_price, 2)}\n"
+
+            f"New: {round(new_price, 2)}\n"
+
+            f"Cash adjusted by: {format_money(cash_adjustment)}"
+
+        )
+
+        return
+
+ 
+
+    trade_cmd = re.fullmatch(
+
+        r"(?i)\s*(bought|sold)\s+([A-Z0-9.\-]{1,15})\s+(\d+)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+
+        text,
+
+    )
+
+    if not trade_cmd:
+
+        # Preserve original behavior: unknown short/invalid commands are ignored, but alert on likely trade commands.
+
+        if text_lower.startswith(("bought", "sold")):
+
+            send("Invalid command format. Use: bought TICKER SHARES at PRICE or sold TICKER SHARES at PRICE")
+
+        return
+
+ 
+
+    action = trade_cmd.group(1).lower()
+
+    ticker = normalize_ticker(trade_cmd.group(2))
+
+    shares = int(trade_cmd.group(3))
+
+    price = float(trade_cmd.group(4))
+
+ 
+
+    if not ticker:
+
+        send("Invalid ticker")
+
+        return
+
+    if shares <= 0 or not is_finite_positive(price):
+
+        send("Shares and price must be positive")
+
+        return
+
+ 
+
+    if action == "bought":
+
+        ok, msg = record_buy(ticker, shares, price, update_id=update_id)
+
+        send(("OK: " if ok else "ERROR: ") + msg)
+
+        return
+
+ 
+
+    if action == "sold":
+
+        ok, msg = record_sell(ticker, shares, price, exit_reason="manual", update_id=update_id)
+
+        send(("OK: " if ok else "ERROR: ") + msg)
+
+        return
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# STRATEGY / SIGNAL ANALYSIS
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def analyze(ticker: str, market: str, df: pd.DataFrame) -> Optional[Tuple[str, float, int, float, int]]:
+
+    try:
+
+        if df is None or df.empty:
+
+            print(f"[ANALYZE SKIP] {ticker} - no data")
+
+            return None
+
+    except Exception as exc:
+
+        print(f"[ANALYZE ERROR] {ticker}: {exc}")
+
+        return None
+
+ 
+
     close = df["Close"]
+
     volume = df["Volume"]
 
-    price = close.iloc[-1]
+ 
+
+    if len(close) < 51:
+
+        return None
+
+ 
+
+    price = float(close.iloc[-1])
+
     rsi_val = rsi(close).iloc[-1]
 
     ma20 = close.rolling(20).mean().iloc[-1]
+
     ma50 = close.rolling(50).mean().iloc[-1]
 
     avg_vol = volume.rolling(20).mean().iloc[-1]
 
-    # ✅ NEW — breakout detection
+ 
+
+    if pd.isna(rsi_val) or pd.isna(ma20) or pd.isna(ma50) or pd.isna(avg_vol):
+
+        return None
+
+    if ma20 == 0 or avg_vol <= 0:
+
+        return None
+
+ 
+
     recent_high = close.iloc[-21:-1].max()
+
     breakout = price > recent_high
 
-    # ✅ MODIFIED — market + RSI logic
+ 
+
+    # Original market logic, with risk-control improvement for weak names in uncertain market.
+
     if market == "BEAR":
+
         return None
+
+ 
+
+    if market == "UNCERTAIN" and ticker in WEAK:
+
+        return None
+
+ 
 
     if not breakout and rsi_val > 70:
+
         return None
 
-    if pd.isna(ma20) or ma20 == 0:
-        return None
+ 
 
     if not breakout and (price - ma20) / ma20 > 0.05:
+
         return None
 
-    if len(close) < 2:
-        return None
+ 
 
-    prev_close = close.iloc[-2]
+    prev_close = float(close.iloc[-2])
 
-    # require price to stop falling (only for pullbacks)
     if not breakout and price <= prev_close:
+
         return None
+
+ 
 
     score = 0
-    if price > ma50: score += 20
-    if price < ma20 and rsi_val < 45: score += 30
-    if volume.iloc[-1] > avg_vol * 1.5:
+
+    if price > ma50:
+
         score += 20
 
-    # ✅ NEW — breakout bonus
-    if breakout:
+    if price < ma20 and rsi_val < 45:
+
         score += 30
 
-    if score < 40:
+    if volume.iloc[-1] > avg_vol * 1.5:
+
+        score += 20
+
+ 
+
+    if breakout:
+
+        score += 20
+
+        if price > ma20:
+
+            score += 10
+
+        if ma20 > ma50:
+
+            score += 10
+
+ 
+
+    if breakout and volume.iloc[-1] < avg_vol * 1.2:
+
         return None
 
-    # ✅ MODIFIED — allow breakout even if MA trend not perfect
-    if not breakout and ma20 < ma50:
+ 
+
+    if breakout and rsi_val > 85:
+
         return None
+
+ 
+
+    if score < 40:
+
+        return None
+
+ 
+
+    if not breakout and ma20 < ma50:
+
+        return None
+
+ 
 
     atr_val = atr(df).iloc[-1]
 
-    if pd.isna(atr_val):
+    if pd.isna(atr_val) or not is_finite_positive(float(atr_val)):
+
         return None
 
-    stop = price - (1.5 * atr_val)
+ 
+
+    stop = price - (1.5 * float(atr_val))
+
     risk = price - stop
-    if risk <= 0:
+
+    if risk <= 0 or stop <= 0:
+
         return None
 
-    cash = portfolio["cash"]
-    if ticker in STRONG:
-        risk_pct = 0.03
-    elif ticker in MEDIUM:
-        risk_pct = 0.02
-    elif ticker in WEAK:
-        risk_pct = 0.01
-    else:
+ 
+
+    risk_pct = risk_pct_for_ticker(ticker)
+
+    if risk_pct is None:
+
         return None
-    
-    shares = int((cash * risk_pct) / risk)
-    shares = min(shares, int((cash * 0.2) / price))
+
+ 
+
+    refresh_portfolio()
+
+    account_equity = approximate_equity_from_portfolio()
+
+    available_cash = float(portfolio["cash"])
+
+ 
+
+    shares_by_risk = int((account_equity * risk_pct) / risk)
+
+    shares_by_position_cap = int((account_equity * MAX_POSITION_EQUITY_PCT) / price)
+
+    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
+
+    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
+
+ 
 
     if shares <= 0:
+
         return None
 
-    target = price + 2 * risk
+ 
 
-    return ticker, price, shares, stop, target, score
+    return ticker, price, shares, stop, score
 
-# ---------------- POSITION MANAGEMENT ----------------
-def manage_positions():
-    global portfolio
+ 
+
+# -----------------------------------------------------------------------------
+
+# POSITION MANAGEMENT
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def repair_position_if_needed(ticker: str, pos: Dict[str, Any]) -> Dict[str, Any]:
+
+    changed = False
+
+    entry = float(pos.get("price", 0) or 0)
+
+    if entry <= 0:
+
+        raise ValueError(f"Invalid entry price for {ticker}")
+
+ 
+
+    if not is_finite_positive(float(pos.get("stop", 0) or 0)):
+
+        pos["stop"] = entry * 0.95
+
+        changed = True
+
+    if not is_finite_positive(float(pos.get("highest", 0) or 0)):
+
+        pos["highest"] = entry
+
+        changed = True
+
+    if not is_finite_positive(float(pos.get("initial_stop", 0) or 0)):
+
+        pos["initial_stop"] = pos["stop"]
+
+        changed = True
+
+    if "partial_taken" not in pos:
+
+        pos["partial_taken"] = False
+
+        changed = True
+
+    risk_per_share = pos.get("risk_per_share")
+
+    if not isinstance(risk_per_share, (int, float)) or risk_per_share <= 0:
+
+        fallback_risk = entry - float(pos["initial_stop"])
+
+        if fallback_risk <= 0:
+
+            fallback_risk = entry * 0.05
+
+            pos["initial_stop"] = entry - fallback_risk
+
+            if pos["stop"] >= entry:
+
+                pos["stop"] = pos["initial_stop"]
+
+        pos["risk_per_share"] = fallback_risk
+
+        changed = True
+
+        print(f"[POSITION REPAIRED RISK] {ticker} risk_per_share={fallback_risk}")
+
+ 
+
+    if float(pos["highest"]) < entry:
+
+        pos["highest"] = entry
+
+        changed = True
+
+ 
+
+    if changed:
+
+        update_position_fields(ticker, pos)
+
+    return pos
+
+ 
+
+ 
+
+def manage_positions() -> None:
+
+    refresh_portfolio()
 
     tickers = list(portfolio["positions"].keys())
+
     if not tickers:
+
         return
+
+ 
+
     prices = get_prices_batch(tickers)
 
+ 
+
     for ticker in tickers:
-        pos = portfolio["positions"][ticker]
+
+        refresh_portfolio()
+
+        pos = portfolio["positions"].get(ticker)
+
+        if pos is None:
+
+            continue
+
+ 
+
         price = prices.get(ticker)
 
-        print(
-            f"[MANAGE] {ticker} | "
-            f"price={price} | "
-            f"stop={round(pos['stop'],2)} | "
-            f"high={round(pos['highest'],2)}"
-        )
-
         if price is None:
+
+            missing_price_counts[ticker] = missing_price_counts.get(ticker, 0) + 1
+
+            if missing_price_counts[ticker] == PRICE_MISSING_ALERT_THRESHOLD:
+
+                send(f"WARNING: Missing price for {ticker} {missing_price_counts[ticker]} times. Position not managed.")
+
             continue
 
-        entry = pos["price"]
+        missing_price_counts[ticker] = 0
 
-        # -------- INIT FIELDS (SAFE) --------
-        if "stop" not in pos:
-            pos["stop"] = entry * 0.95
-        if "highest" not in pos:
-            pos["highest"] = entry
-        if "partial_taken" not in pos:
-            pos["partial_taken"] = False
+ 
 
+        try:
 
-        # -------- TRACK HIGH --------
-        if price > pos["highest"]:
-            pos["highest"] = price
-            print(f"[NEW HIGH] {ticker} -> {price}")
+            pos = repair_position_if_needed(ticker, pos)
 
-        # -------- PARTIAL TAKE PROFIT --------
+        except Exception as exc:
+
+            print(f"[POSITION REPAIR ERROR] {ticker}: {exc}")
+
+            send(f"CRITICAL: Position repair failed for {ticker}: {exc}")
+
+            continue
+
+ 
+
+        entry = float(pos["price"])
+
+        old_highest = float(pos["highest"])
+
+        new_highest = max(old_highest, price)
+
+        if new_highest > old_highest:
+
+            print(f"[NEW HIGH] {ticker} -> {new_highest}")
+
+            pos["highest"] = new_highest
+
+ 
+
+        risk_per_share = pos.get("risk_per_share")
+
+        trade_r: Optional[float] = None
+
+        if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+
+            trade_r = (price - entry) / float(risk_per_share)
+
+ 
+
         print(
-            f"[PARTIAL CHECK] {ticker} | "
-            f"price={price} | "
-            f"trigger={round(entry * 1.08,2)} | "
-            f"taken={pos['partial_taken']}"
+
+            f"[MANAGE] {ticker} | "
+
+            f"price={price} | stop={round(float(pos['stop']), 2)} | "
+
+            f"high={round(float(pos['highest']), 2)} | R={None if trade_r is None else round(trade_r, 2)}"
+
         )
 
-        if price >= entry * 1.08 and not pos["partial_taken"] and pos["shares"] > 1:
-            sell = pos["shares"] // 2
+ 
 
-            trade = {
-                "ticker": ticker,
-                "entry_price": entry,
-                "exit_price": price,
-                "shares": sell,
-                "profit": round((price - entry) * sell, 2),
-                "entry_time": pos.get("entry_time", time.time()),
-                "exit_time": time.time(),
-                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
-                "exit_reason": "partial",
-                "entry_data": pos.get("entry_data", {}),
-                "id": str(time.time())
-            }
+        # Compute effective stop first. This fixes the gap-through-trailing-stop bug.
 
-            save_trade(trade)
+        effective_stop = float(pos["stop"])
 
-            portfolio["cash"] += sell * price
-            pos["shares"] -= sell
-
-            if pos["shares"] <= 0:
-                del portfolio["positions"][ticker]
-                save_portfolio(portfolio)
-                send(f"💰 FULL EXIT {ticker}")
-                continue
-
-            pos["partial_taken"] = True
-            save_portfolio(portfolio)
-
-            send(f"💰 PARTIAL {ticker}")
-
-        # -------- BREAKEVEN --------
-        if price >= entry * 1.03 and pos["stop"] < entry:
-            pos["stop"] = entry
-
-        # -------- TRAILING STOP --------
         atr_val = pos.get("atr")
 
-        if atr_val is not None:
-            # stronger trailing after profit
-            if price >= entry * 1.05:
-                multiplier = 2.0   # tighter once in profit
-            else:
-                multiplier = 2.5   # looser early
+        if isinstance(atr_val, (int, float)) and atr_val > 0:
 
-            trail = pos["highest"] - (multiplier * atr_val)
+            # Preserve original intent: tighter trail once price is up 5%.
 
-            if trail > pos["stop"] and trail < price:
-                pos["stop"] = trail
+            multiplier = 2.0 if price >= entry * 1.05 else 2.5
 
-        # -------- STOP LOSS --------
-        if price <= pos["stop"]:
-            trade = {
-                "ticker": ticker,
-                "entry_price": entry,
-                "exit_price": price,
-                "shares": pos["shares"],
-                "profit": round((price - entry) * pos["shares"], 2),
-                "entry_time": pos.get("entry_time", time.time()),
-                "exit_time": time.time(),
-                "duration_sec": int(time.time() - pos.get("entry_time", time.time())),
-                "exit_reason": "stop",
-                "entry_data": pos.get("entry_data", {}),
-                "id": str(time.time())
+            theoretical_trail = float(pos["highest"]) - (multiplier * float(atr_val))
+
+            if theoretical_trail > effective_stop:
+
+                effective_stop = theoretical_trail
+
+ 
+
+        # Breakeven rule, upgraded to R-based trigger from the prior version.
+
+        if trade_r is not None and trade_r >= 0.7 and effective_stop < entry:
+
+            effective_stop = entry
+
+ 
+
+        # STOP / TRAILING STOP CHECK FIRST.
+
+        if price <= effective_stop:
+
+            fill_price = min(price, effective_stop)
+
+            trade = record_auto_exit_or_partial(
+                ticker=ticker,
+                shares=int(pos["shares"]),
+                price=fill_price,
+                exit_reason="stop",
+                updated_fields={
+                    "highest": pos["highest"],
+                    "stop": effective_stop
+                },
+            )
+
+            if trade:
+                send(
+                    f"EXIT {ticker}\n"
+                    f"P/L: {format_money(trade['profit'])}\n"
+                    f"R: {trade.get('r_multiple')}"
+                )
+
+            continue
+
+ 
+
+        # Save stop/high updates before checking partials.
+
+        updates: Dict[str, Any] = {}
+
+        if effective_stop > float(pos["stop"]):
+
+            updates["stop"] = effective_stop
+
+        if float(pos["highest"]) != old_highest:
+
+            updates["highest"] = pos["highest"]
+
+        if updates:
+
+            update_position_fields(ticker, updates)
+
+            pos.update(updates)
+
+ 
+
+        # Partial take-profit logic. Core behavior preserved: +8% OR +1R.
+
+        partial_trigger = (price >= entry * 1.08) or (trade_r is not None and trade_r >= 1.0)
+
+        if partial_trigger and not pos.get("partial_taken", False) and int(pos["shares"]) > 1:
+
+            sell_shares = int(pos["shares"]) // 2
+
+            trade = record_auto_exit_or_partial(
+
+                ticker=ticker,
+
+                shares=sell_shares,
+
+                price=price,
+
+                exit_reason="partial",
+
+                updated_fields={"highest": pos["highest"], "stop": pos["stop"]},
+
+            )
+
+            if trade:
+
+                send(f"PARTIAL {ticker}\nShares: {sell_shares}\nP/L: {format_money(trade['profit'])}\nR: {trade.get('r_multiple')}")
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# SCANNING
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def should_skip_for_existing_signal(ticker: str) -> bool:
+
+    signal = last_signals.get(ticker)
+
+    if not signal:
+
+        return False
+
+    try:
+
+        signal_time = float(signal.get("time", 0)) if isinstance(signal, dict) else float(signal)
+
+        return now_ts() - signal_time < SIGNAL_COOLDOWN_SEC
+
+    except Exception:
+
+        return False
+
+ 
+
+ 
+
+def scan_market() -> None:
+
+    global last_signals
+
+    refresh_portfolio()
+
+    last_signals = load_signals()
+
+    today = ny_date_str()
+
+    stale = []
+
+    for ticker, signal in last_signals.items():
+
+        signal_day = signal.get("entry_data", {}).get("signal_date_ny")
+
+        if signal_day != today:
+            stale.append(ticker)
+
+    if stale:
+        with db_tx() as conn:
+            for ticker in stale:
+                conn.execute(
+                    "DELETE FROM signals WHERE ticker = ?",
+                    (ticker,)
+                )
+
+        last_signals = load_signals()
+
+    heartbeat()
+
+    market = market_condition()
+
+    print(f"[MARKET] {market}")
+
+ 
+
+    cooldowns = get_cooldowns()
+
+    base_risk_details = open_risk_details()
+
+    reserved_signal_risk = 0.0
+
+    reserved_signal_capital = 0.0
+
+    if PANIC_MODE:
+       print("[SCAN BLOCKED] PANIC_MODE")
+       return
+
+    if daily_drawdown_exceeded():
+       print("[SCAN BLOCKED] DAILY LOSS LIMIT")
+       return
+
+    for ticker in WATCHLIST:
+
+        try:
+
+            refresh_portfolio()
+
+ 
+
+            if ticker in cooldowns and now_ts() - cooldowns[ticker] < STOP_COOLDOWN_SEC:
+
+                continue
+
+            if ticker in portfolio["positions"]:
+
+                continue
+
+            if len(portfolio["positions"]) >= MAX_OPEN_POSITIONS:
+
+                continue
+
+            if portfolio["cash"] < MIN_CASH_REQUIRED:
+
+                continue
+
+            if should_skip_for_existing_signal(ticker):
+
+                continue
+
+ 
+
+            earnings = earnings_status(ticker, days=7)
+
+            if earnings == "SOON":
+
+                print(f"[SKIP EARNINGS] {ticker}")
+
+                continue
+
+            if earnings == "UNKNOWN" and FAIL_CLOSED_ON_EARNINGS_UNKNOWN:
+
+                print(f"[SKIP EARNINGS UNKNOWN] {ticker}")
+
+                continue
+
+ 
+
+            df = get_historical(ticker, limit=120)
+
+            if df is None or df.empty or len(df) < 51:
+
+                continue
+
+ 
+
+            if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
+
+                last_date = pd.to_datetime(df.iloc[-1]["date"]).date().isoformat()
+
+                print(f"[STALE DAILY DATA] {ticker} last={last_date} today={ny_now().date().isoformat()}")
+
+                continue
+
+ 
+
+            close = df["Close"].dropna()
+
+            if len(close) < 2:
+
+                continue
+
+            price = float(close.iloc[-1])
+
+            prev_close = float(close.iloc[-2])
+
+            if prev_close <= 0:
+
+                continue
+
+ 
+
+            move = ((price - prev_close) / prev_close) * 100
+
+            levels = [10, 15, 20]
+
+            existing_levels = get_breakout_levels(ticker)
+
+            changed_levels = False
+
+            for lvl in levels:
+
+                if move >= lvl and lvl not in existing_levels:
+
+                    send(f"BREAKOUT ALERT {ticker}\nMove: {round(move, 2)}%")
+
+                    existing_levels.add(lvl)
+
+                    changed_levels = True
+
+            if changed_levels:
+
+                set_breakout_levels(ticker, existing_levels)
+
+            if move < 8:
+
+                clear_breakout_levels(ticker)
+
+ 
+
+            rsi_val = rsi(close).iloc[-1]
+
+            if pd.isna(rsi_val):
+
+                continue
+
+ 
+
+            risk_details = base_risk_details
+
+            if risk_details["equity"] <= 0:
+
+                continue
+
+            if (risk_details["initial_risk_dollars"] + reserved_signal_risk) / risk_details["equity"] >= MAX_TOTAL_RISK:
+
+                continue
+
+ 
+
+            result = analyze(ticker, market, df)
+
+            if not result:
+
+                continue
+
+ 
+
+            ticker, price, shares, stop, score = result
+
+            risk_amount = (price - stop) * shares
+
+ 
+
+            capital = shares * price
+
+            projected_risk_pct = (risk_details["initial_risk_dollars"] + reserved_signal_risk + risk_amount) / risk_details["equity"]
+
+            projected_capital = reserved_signal_capital + capital
+
+            if projected_risk_pct > MAX_TOTAL_RISK:
+
+                print(
+
+                    f"[SKIP MAX RISK] {ticker} projected={round(projected_risk_pct * 100, 2)}% "
+
+                    f"max={round(MAX_TOTAL_RISK * 100, 2)}%"
+
+                )
+
+                continue
+
+            if projected_capital > portfolio["cash"] * CASH_USAGE_BUFFER:
+
+                print(
+
+                    f"[SKIP SIGNAL CASH RESERVE] {ticker} projected_capital={round(projected_capital, 2)} "
+
+                    f"cash={round(portfolio['cash'], 2)}"
+
+                )
+
+                continue
+
+ 
+
+            avg_vol = df["Volume"].rolling(20).mean().iloc[-1]
+
+            volume_ratio = None
+
+            if avg_vol and avg_vol > 0:
+
+                volume_ratio = df["Volume"].iloc[-1] / avg_vol
+
+ 
+
+            recent_high = df["Close"].iloc[-21:-1].max()
+
+            is_breakout = bool(price > recent_high)
+
+            entry_data = {
+
+                "rsi": round(float(rsi_val), 2),
+
+                "score": int(score),
+
+                "market": market,
+
+                "atr": round((price - stop) / 1.5, 4),
+
+                "breakout": is_breakout,
+
+                "setup_type": "breakout" if is_breakout else "pullback",
+
+                "volume_ratio": None if volume_ratio is None else round(float(volume_ratio), 2),
+
+                "strategy_version": STRATEGY_VERSION,
+
+                "signal_time": now_ts(),
+
+                "signal_date_ny": ny_date_str(),
+
+                "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
+
+                "risk_amount": round(risk_amount, 2),
+
+                "projected_total_risk_pct": round(projected_risk_pct * 100, 2),
+
             }
 
-            save_trade(trade)
+ 
 
-            portfolio["cash"] += pos["shares"] * price
-            cooldowns[ticker] = time.time()
+            send(
 
-            del portfolio["positions"][ticker]
+                "ENTRY SIGNAL\n\n"
 
-            send(f"🔴 EXIT {ticker}\nP/L: ${trade['profit']}")
-            save_portfolio(portfolio)
-            continue
-    save_portfolio(portfolio)
+                f"{ticker}\n"
 
-# ---------------- MAIN LOOP ----------------
-send("🚀 BOT STARTED")
-send(f"SERVER TIME: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+                f"Market: {market}\n"
 
-last_scan = 0
+                f"Setup: {entry_data['setup_type']}\n\n"
 
-while True:
+                f"Price: {round(price, 2)}\n"
+
+                f"RSI: {round(float(rsi_val), 1)}\n"
+
+                f"Score: {score}\n\n"
+
+                f"Buy: {shares} shares\n"
+
+                f"Capital: {format_money(capital)}\n\n"
+
+                f"Stop: {round(stop, 2)}\n"
+
+                f"Risk: {format_money(risk_amount)}\n"
+
+                f"Projected total risk: {round(projected_risk_pct * 100, 2)}%"
+
+            )
+
+ 
+
+            save_signal(ticker, now_ts(), entry_data)
+
+            reserved_signal_risk += risk_amount
+
+            reserved_signal_capital += capital
+
+ 
+
+        except Exception as exc:
+
+            logger.exception(f"[SCAN ERROR] {ticker}: {exc}")
+
+            traceback.print_exc()
+
+            send(f"WARNING: scan error for {ticker}: {exc}")
+
+ 
+
+# -----------------------------------------------------------------------------
+
+# STARTUP / MAIN LOOP
+
+# -----------------------------------------------------------------------------
+
+ 
+
+def startup_checks() -> None:
+
+    init_db()
+
+    migrate_legacy_json_once()
+
+    refresh_portfolio()
+
+    global last_signals
+
+    last_signals = load_signals()
+
+ 
+
+    # Hard sanity checks. Do not silently continue with impossible state.
+
+    if portfolio["cash"] < 0:
+
+        raise RuntimeError("Invalid account state: negative cash")
+
+    for ticker, pos in portfolio["positions"].items():
+
+        if int(pos.get("shares", 0)) <= 0:
+
+            raise RuntimeError(f"Invalid position state for {ticker}: non-positive shares")
+
+        if not is_finite_positive(float(pos.get("price", 0))):
+
+            raise RuntimeError(f"Invalid position state for {ticker}: invalid entry price")
+
+ 
+
+ 
+
+def maybe_save_daily_equity_snapshot() -> None:
+
+    today = ny_date_str()
+
+    last = get_meta("last_equity_snapshot_date")
+
+    if last == today:
+
+        return
+
     try:
-        # -------- DAILY RESET --------
-        day = int(time.time() // 86400)
-        if last_reset_day != day:
-            last_reset_day = day
 
-        # -------- TELEGRAM + POSITIONS --------
-        get_updates()
-        manage_positions()
+        save_equity_snapshot()
 
-        # -------- SCAN EVERY 5 MIN --------
-        now = time.localtime()
+        print("[EQUITY SNAPSHOT SAVED]")
 
-        # ❌ Skip weekends
-        if now.tm_wday >= 5:
-            time.sleep(60)
-            continue
+    except Exception as exc:
 
-        current_hour = now.tm_hour
-        current_min = now.tm_min
+        print(f"[EQUITY SNAPSHOT ERROR] {exc}")
 
-        # run once near market close (example: 19:55)
-        if current_hour == 19 and current_min >= 55 and time.time() - last_scan > 300:
-            market = market_condition()
+        send(f"WARNING: equity snapshot failed: {exc}")
 
-            for t in WATCHLIST:
+ 
 
-                # -------- GET DATA --------
-                try:
-                    df = get_historical(t, limit=120)
-                    if df is None or df.empty or len(df) < 2:
-                        continue
-                except Exception as e:
-                    print(f"[context] ERROR: {e}")
-                    continue
+ 
 
-                close = df["Close"].dropna()
+def main() -> None:
 
-                if len(close) < 2:
-                    continue
+    global LAST_HEARTBEAT
 
-                price = close.iloc[-1]
-                prev_close = close.iloc[-2]
+    startup_checks()
 
-                # -------- BREAKOUT LOGIC --------
-                move = ((price - prev_close) / prev_close) * 100
-                if prev_close == 0:
-                    continue
+    send(
+        f"BOT STARTED\n"
+        f"Strategy: {STRATEGY_VERSION}\n"
+        f"Panic Mode: {PANIC_MODE}"
+    )
+    heartbeat()
+    audit("BOT_STARTED")
+    audit("MAIN_LOOP_STARTED")
 
-                levels = [10, 15, 20]
-                breakout_triggered = False
+    send(f"SERVER TIME: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
 
-                for lvl in levels:
-                    if move >= lvl:
-                        if t not in breakout_memory:
-                            breakout_memory[t] = set()
+    send(f"NY TIME: {ny_now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
-                        if lvl not in breakout_memory[t]:
-                            send(f"🔥 BREAKOUT {t}\nMove: {round(move,2)}%")
-                            breakout_memory[t].add(lvl)
-                            breakout_triggered = True
+ 
 
-                # -------- RESET --------
-                if move < 8 and t in breakout_memory:
-                    breakout_memory.pop(t)
+    while True:
 
-                # -------- RSI FILTER --------
-                rsi_val = rsi(close).iloc[-1]
-                if pd.isna(rsi_val):
-                    continue
+        try:
 
-                # -------- EXISTING LOGIC --------
-                if t in cooldowns and time.time() - cooldowns[t] < 1800:
-                    continue
+            LAST_HEARTBEAT = now_ts()
+            heartbeat()
 
-                if t in portfolio["positions"]:
-                    continue
+            current_ny = ny_now()
 
-                if portfolio["cash"] < MIN_CASH_REQUIRED:
-                    continue
+            maybe_save_daily_equity_snapshot()
 
-                signal = last_signals.get(t)
+            get_updates()
 
-                if signal:
-                    if isinstance(signal, dict):
-                        if time.time() - signal.get("time", 0) < 86400:
-                            continue
-                    else:
-                        # old format (float)
-                        if time.time() - signal < 86400:
-                            continue
+ 
 
-                result = analyze(t, market, df)
+            if (not MANAGE_ONLY_REGULAR_HOURS) or is_regular_market_hours(current_ny):
 
-                if result:
-                    ticker, price, shares, stop, target, score = result
+                manage_positions()
 
-                    entry_data = {
-                        "rsi": round(rsi_val, 2),
-                        "score": score,
-                        "market": market,
-                        "atr": round((price - stop) / 1.5, 4),  # reconstruct ATR
-                        "breakout": bool(price > df["Close"].iloc[-21:-1].max()),
-                        "setup_type": "breakout" if price > df["Close"].iloc[-21:-1].max() else "pullback",
-                        "volume_ratio": round(
-                            df["Volume"].iloc[-1] /
-                            df["Volume"].rolling(20).mean().iloc[-1], 2
-                        )
-                    }
+ 
 
-                    capital = shares * price
-                    risk_amount = (price - stop) * shares
+            if not is_market_weekday(current_ny):
 
-                    send(f"""
-🟢 ENTRY
+                time.sleep(60)
 
-{ticker}
-Market: {market}
+                continue
 
-Price: {round(price,2)}
-RSI: {round(rsi_val,1)}
-Score: {score}
+ 
 
-Buy: {shares} shares
-Capital: ${round(capital,2)}
+            current_hour = current_ny.hour
 
-Stop: {round(stop,2)}
-Target: {round(target,2)}
+            current_min = current_ny.minute
 
-Risk: ${round(risk_amount,2)}
-""")
+ 
 
-                    last_signals[t] = {
-                        "time": time.time(),
-                        "entry_data": safe_convert(entry_data)
-                    }
-                    save_signals()
+            # Run once near US market close: 15:55 New York time.
 
-            # -------- UPDATE SCAN TIMER --------
-            last_scan = time.time()
+            last_scan_day = get_meta("last_scan_day")
 
-        time.sleep(25)
+            today = ny_now().date().isoformat()
 
-    except Exception as e:
-        send(f"⚠️ ERROR {e}")
-        time.sleep(25)
+            if current_hour == 15 and current_min >= 55 and last_scan_day != today:
+                scan_market()
+                set_meta("last_scan_day", today)
 
+
+            time.sleep(25)
+
+ 
+
+        except KeyboardInterrupt:
+
+            send("BOT STOPPED BY KEYBOARD INTERRUPT")
+
+            raise
+
+        except Exception as exc:
+
+            logger.exception(f"[MAIN LOOP ERROR] {exc}")
+
+            traceback.print_exc()
+
+            send(f"ERROR: {exc}")
+
+            time.sleep(25)
+
+ 
+
+ 
+
+if __name__ == "__main__":
+
+    main()
