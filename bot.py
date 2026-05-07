@@ -4796,14 +4796,14 @@ def main() -> None:
 
  
 
-            # Run once near US market close: 18:00 New York time.
+            # Run once near US market close: 03:00 New York time.
 
             last_scan_day = get_meta("last_scan_day")
 
             today = ny_now().date().isoformat()
 
             if (
-                current_hour == 18
+                current_hour == 03
                 and current_min >= 00
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
