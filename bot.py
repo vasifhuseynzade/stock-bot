@@ -107,7 +107,7 @@ INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 MIN_CASH_REQUIRED = float(os.getenv("MIN_CASH_REQUIRED", "100"))
 
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "6"))
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "12"))
 
 MAX_TOTAL_RISK = float(os.getenv("MAX_TOTAL_RISK", "0.06"))
 
@@ -2436,7 +2436,13 @@ def is_regular_market_hours(dt: datetime) -> bool:
 
     return (9 * 60 + 30) <= minutes <= (16 * 60)
 
- 
+
+def is_morning_scan_window(dt: datetime) -> bool:
+    minutes = dt.hour * 60 + dt.minute
+
+    # Morning scan window: 06:45 to 09:25 New York time.
+    # This uses the latest completed daily candle, usually yesterday's candle before market open.
+    return (6 * 60 + 55) <= minutes <= (9 * 60 + 25)
 
 # -----------------------------------------------------------------------------
 
@@ -3179,9 +3185,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             "Commands:\n"
 
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio\n"
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
 
-            "setupstats | showtrades | showsignals | resetsignals | download_trades\n"
+            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
 
             "setcash AMOUNT\n"
 
@@ -3349,7 +3355,44 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
- 
+    if text_lower == "scanstatus":
+        refresh_portfolio()
+        last_scan_day = get_meta("last_scan_day")
+        details = open_risk_details()
+
+        send(
+            "SCAN STATUS\n\n"
+            f"NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
+            f"Last scan day: {last_scan_day}\n"
+            f"Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\n"
+            f"Cash: {format_money(portfolio['cash'])}\n"
+            f"Equity: {format_money(details['equity'])}\n"
+            f"Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
+            f"Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
+            f"Fresh candle required: {REQUIRE_FRESH_DAILY_CANDLE}\n"
+            f"Panic mode: {PANIC_MODE}"
+        )
+        return
+
+    if text_lower == "resetscan":
+        with db_tx() as conn:
+            conn.execute("DELETE FROM meta WHERE key = 'last_scan_day'")
+        send("Last scan day reset. Bot may scan again during the scan window.")
+        return
+
+    if text_lower == "forcescan":
+        send("Manual scan started. Check Telegram/logs for signals and scan summary.")
+
+        scanned_ok = scan_market()
+
+        if scanned_ok:
+            today = ny_now().date().isoformat()
+            set_meta("last_scan_day", today)
+            send("Manual scan completed and marked done for today.")
+        else:
+            send("Manual scan completed but was not marked done because historical data was not usable.")
+
+        return
 
     if text_lower == "portfolio":
 
@@ -3365,7 +3408,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             return
 
- 
 
         prices = get_prices_batch(list(positions.keys()))
 
@@ -4368,6 +4410,23 @@ def scan_market() -> bool:
     last_signals = load_signals()
 
     usable_data_found = False
+    attempted_historical = 0
+
+    skip_counts = {
+        "cooldown": 0,
+        "existing_position": 0,
+        "max_positions": 0,
+        "low_cash": 0,
+        "existing_signal": 0,
+        "earnings_soon": 0,
+        "earnings_unknown": 0,
+        "no_historical": 0,
+        "stale_data": 0,
+        "strategy_filter": 0,
+        "risk_cap": 0,
+        "cash_reserve": 0,
+        "signals_sent": 0,
+    }
 
     today = ny_date_str()
 
@@ -4430,55 +4489,52 @@ def scan_market() -> bool:
  
 
             if ticker in cooldowns and now_ts() - cooldowns[ticker] < STOP_COOLDOWN_SEC:
-
+                skip_counts["cooldown"] += 1
                 continue
 
             if ticker in portfolio["positions"]:
-
+                skip_counts["existing_position"] += 1
                 continue
 
             if len(portfolio["positions"]) >= MAX_OPEN_POSITIONS:
-
+                skip_counts["max_positions"] += 1
                 continue
 
             if portfolio["cash"] < MIN_CASH_REQUIRED:
-
+                skip_counts["low_cash"] += 1
                 continue
 
             if should_skip_for_existing_signal(ticker):
-
+                skip_counts["existing_signal"] += 1
                 continue
-
  
 
             earnings = earnings_status(ticker, days=7)
 
             if earnings == "SOON":
-
+                skip_counts["earnings_soon"] += 1
                 print(f"[SKIP EARNINGS] {ticker}")
-
                 continue
 
             if earnings == "UNKNOWN" and FAIL_CLOSED_ON_EARNINGS_UNKNOWN:
-
+                skip_counts["earnings_unknown"] += 1
                 print(f"[SKIP EARNINGS UNKNOWN] {ticker}")
-
                 continue
-
  
+
+            attempted_historical += 1
 
             df = get_historical(ticker, limit=120)
 
             if df is None or df.empty or len(df) < 51:
-
+                skip_counts["no_historical"] += 1
                 continue
-
  
 
             if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
+                skip_counts["stale_data"] += 1
 
                 last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
-
                 current_ny = ny_now()
 
                 print(
@@ -4489,8 +4545,7 @@ def scan_market() -> bool:
                     f"ny={current_ny.strftime('%H:%M')}"
                 )
 
-            usable_data_found = True
- 
+            usable_data_found = True 
 
             close = df["Close"].dropna()
 
@@ -4551,17 +4606,15 @@ def scan_market() -> bool:
                 continue
 
             if (risk_details["initial_risk_dollars"] + reserved_signal_risk) / risk_details["equity"] >= MAX_TOTAL_RISK:
-
+                skip_counts["risk_cap"] += 1
                 continue
-
  
 
             result = analyze(ticker, market, df)
 
             if not result:
-
+                skip_counts["strategy_filter"] += 1
                 continue
-
  
 
             ticker, price, shares, stop, score = result
@@ -4577,29 +4630,24 @@ def scan_market() -> bool:
             projected_capital = reserved_signal_capital + capital
 
             if projected_risk_pct > MAX_TOTAL_RISK:
+                skip_counts["risk_cap"] += 1
 
                 print(
-
                     f"[SKIP MAX RISK] {ticker} projected={round(projected_risk_pct * 100, 2)}% "
-
                     f"max={round(MAX_TOTAL_RISK * 100, 2)}%"
-
                 )
 
                 continue
 
             if projected_capital > portfolio["cash"] * CASH_USAGE_BUFFER:
+                skip_counts["cash_reserve"] += 1
 
                 print(
-
                     f"[SKIP SIGNAL CASH RESERVE] {ticker} projected_capital={round(projected_capital, 2)} "
-
                     f"cash={round(portfolio['cash'], 2)}"
-
                 )
 
                 continue
-
  
 
             avg_vol = df["Volume"].rolling(20).mean().iloc[-1]
@@ -4680,6 +4728,8 @@ def scan_market() -> bool:
 
             save_signal(ticker, now_ts(), entry_data)
 
+            skip_counts["signals_sent"] += 1
+
             reserved_signal_risk += risk_amount
 
             reserved_signal_capital += capital
@@ -4694,7 +4744,29 @@ def scan_market() -> bool:
 
             send(f"WARNING: scan error for {ticker}: {exc}")
 
-    return usable_data_found
+    refresh_portfolio()
+
+    print(
+        "[SCAN SUMMARY] "
+        f"usable_data_found={usable_data_found} | "
+        f"attempted_historical={attempted_historical} | "
+        f"positions={len(portfolio['positions'])}/{MAX_OPEN_POSITIONS} | "
+        f"cash={round(portfolio['cash'], 2)} | "
+        f"skips={skip_counts}"
+    )
+
+    # If at least one ticker reached usable historical data, the scan worked.
+    if usable_data_found:
+        return True
+
+    # If no ticker even reached historical data, this was not a data freshness problem.
+    # It was blocked before data fetch, usually by full portfolio, cash, cooldown, or existing signals.
+    if attempted_historical == 0:
+        print("[SCAN COMPLETE] No eligible tickers reached historical-data check.")
+        return True
+
+    # Historical data was attempted but unusable. Retry later.
+    return False
 
 # -----------------------------------------------------------------------------
 
@@ -4811,15 +4883,11 @@ def main() -> None:
                 # Saturday-only scan
                 if current_ny.weekday() == 5:
 
-                    current_hour = current_ny.hour
-                    current_min = current_ny.minute
-
                     last_scan_day = get_meta("last_scan_day")
                     today = current_ny.date().isoformat()
 
                     if (
-                        current_hour == 4
-                        and current_min >= 20
+                        is_morning_scan_window(current_ny)
                         and last_scan_day != today
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
@@ -4835,21 +4903,14 @@ def main() -> None:
                 continue
  
 
-            current_hour = current_ny.hour
 
-            current_min = current_ny.minute
-
- 
-
-            # Run once when FMP daily candles are fully refreshed
+            # Run once during the New York morning scan window.
 
             last_scan_day = get_meta("last_scan_day")
-
-            today = ny_now().date().isoformat()
+            today = current_ny.date().isoformat()
 
             if (
-                current_hour == 4
-                and current_min >= 20
+                is_morning_scan_window(current_ny)
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
@@ -4861,7 +4922,7 @@ def main() -> None:
                 if scanned_ok:
                     set_meta("last_scan_day", today)
                 else:
-                    print("[SCAN NOT MARKED DONE] No fresh daily data")
+                    print("[SCAN NOT MARKED DONE] Historical data was not usable; will retry.")
 
             time.sleep(25)
 
