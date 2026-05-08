@@ -4819,7 +4819,7 @@ def main() -> None:
 
                     if (
                         current_hour == 4
-                        and current_min >= 00
+                        and current_min >= 20
                         and last_scan_day != today
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
@@ -4849,7 +4849,7 @@ def main() -> None:
 
             if (
                 current_hour == 4
-                and current_min >= 00
+                and current_min >= 20
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
