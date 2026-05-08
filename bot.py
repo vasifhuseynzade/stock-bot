@@ -1950,11 +1950,12 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
         return False
 
     try:
+
         last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
 
-        today = ny_now().date()
+        current_ny = ny_now()
+        today = current_ny.date()
 
-        # Get recent NYSE sessions
         schedule = NYSE.schedule(
             start_date=today - timedelta(days=10),
             end_date=today
@@ -1965,26 +1966,28 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         sessions = [d.date() for d in schedule.index]
 
-        # Expected candle = most recent COMPLETED trading session
         expected_session = sessions[-1]
 
-        # If today is a trading day but market has not fully completed,
-        # use previous session instead
-        current_ny = ny_now()
-
+        # Before market close -> previous session
         if (
             expected_session == today
-            and current_ny.hour < 20
+            and current_ny.hour < 16
         ):
             if len(sessions) >= 2:
                 expected_session = sessions[-2]
+
+        print(
+            f"[FRESH CHECK] "
+            f"last={last_date} "
+            f"expected={expected_session} "
+            f"ny={current_ny.strftime('%Y-%m-%d %H:%M')}"
+        )
 
         return last_date >= expected_session
 
     except Exception as exc:
         print(f"[STALE CHECK ERROR] {exc}")
-        return False
- 
+        return False 
 
 def earnings_status(ticker: str, days: int = 7) -> str:
 
@@ -4818,7 +4821,7 @@ def main() -> None:
 
                     if (
                         current_hour == 3
-                        and current_min >= 40
+                        and current_min >= 50
                         and last_scan_day != today
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
@@ -4848,7 +4851,7 @@ def main() -> None:
 
             if (
                 current_hour == 3
-                and current_min >= 40
+                and current_min >= 50
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
