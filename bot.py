@@ -1954,17 +1954,32 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         today = ny_now().date()
 
+        # Get recent NYSE sessions
         schedule = NYSE.schedule(
-            start_date=today - timedelta(days=7),
+            start_date=today - timedelta(days=10),
             end_date=today
         )
 
         if schedule.empty:
             return False
 
-        expected_session = schedule.index[-1].date()
+        sessions = [d.date() for d in schedule.index]
 
-        return last_date == expected_session
+        # Expected candle = most recent COMPLETED trading session
+        expected_session = sessions[-1]
+
+        # If today is a trading day but market has not fully completed,
+        # use previous session instead
+        current_ny = ny_now()
+
+        if (
+            expected_session == today
+            and current_ny.hour < 20
+        ):
+            if len(sessions) >= 2:
+                expected_session = sessions[-2]
+
+        return last_date >= expected_session
 
     except Exception as exc:
         print(f"[STALE CHECK ERROR] {exc}")
@@ -4781,13 +4796,34 @@ def main() -> None:
                 manage_positions()
 
  
-
+            # Weekend handling
             if not is_market_weekday(current_ny):
 
+                # Saturday-only scan
+                if current_ny.weekday() == 5:
+
+                    current_hour = current_ny.hour
+                    current_min = current_ny.minute
+
+                    last_scan_day = get_meta("last_scan_day")
+                    today = current_ny.date().isoformat()
+
+                    if (
+                        current_hour == 3
+                        and current_min >= 30
+                        and last_scan_day != today
+                        and now_ts() - LAST_SCAN_ATTEMPT > 300
+                    ):
+
+                        LAST_SCAN_ATTEMPT = now_ts()
+
+                        scanned_ok = scan_market()
+
+                        if scanned_ok:
+                            set_meta("last_scan_day", today)
+
                 time.sleep(60)
-
                 continue
-
  
 
             current_hour = current_ny.hour
@@ -4804,7 +4840,7 @@ def main() -> None:
 
             if (
                 current_hour == 3
-                and current_min >= 00
+                and current_min >= 30
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
