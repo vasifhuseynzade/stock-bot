@@ -4474,9 +4474,17 @@ def scan_market() -> bool:
 
             if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
 
-                last_date = pd.to_datetime(df.iloc[-1]["date"]).date().isoformat()
+                last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
 
-                print(f"[STALE DAILY DATA] {ticker} last={last_date} today={ny_now().date().isoformat()}")
+                current_ny = ny_now()
+
+                print(
+                    f"[FRESHNESS FAIL] "
+                    f"{ticker} | "
+                    f"last={last_date} | "
+                    f"today={current_ny.date()} | "
+                    f"ny_hour={current_ny.hour}:{current_ny.minute}"
+                )
 
                 continue
 
@@ -4810,7 +4818,7 @@ def main() -> None:
 
                     if (
                         current_hour == 3
-                        and current_min >= 30
+                        and current_min >= 40
                         and last_scan_day != today
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
@@ -4840,7 +4848,7 @@ def main() -> None:
 
             if (
                 current_hour == 3
-                and current_min >= 30
+                and current_min >= 40
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
