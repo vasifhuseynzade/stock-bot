@@ -4367,7 +4367,7 @@ def scan_market() -> bool:
 
     last_signals = load_signals()
 
-    fresh_count = 0
+    usable_data_found = False
 
     today = ny_date_str()
 
@@ -4482,16 +4482,14 @@ def scan_market() -> bool:
                 current_ny = ny_now()
 
                 print(
-                    f"[FRESHNESS FAIL] "
+                    f"[STALE BUT ACCEPTED] "
                     f"{ticker} | "
                     f"last={last_date} | "
                     f"today={current_ny.date()} | "
-                    f"ny_hour={current_ny.hour}:{current_ny.minute}"
+                    f"ny={current_ny.strftime('%H:%M')}"
                 )
 
-                continue
-
-            fresh_count += 1
+            usable_data_found = True
  
 
             close = df["Close"].dropna()
@@ -4696,7 +4694,7 @@ def scan_market() -> bool:
 
             send(f"WARNING: scan error for {ticker}: {exc}")
 
-    return fresh_count > 0
+    return usable_data_found
 
 # -----------------------------------------------------------------------------
 
@@ -4820,8 +4818,8 @@ def main() -> None:
                     today = current_ny.date().isoformat()
 
                     if (
-                        current_hour == 3
-                        and current_min >= 50
+                        current_hour == 4
+                        and current_min >= 00
                         and last_scan_day != today
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
@@ -4850,8 +4848,8 @@ def main() -> None:
             today = ny_now().date().isoformat()
 
             if (
-                current_hour == 3
-                and current_min >= 50
+                current_hour == 4
+                and current_min >= 00
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
