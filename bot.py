@@ -97,7 +97,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
  
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v1.3")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v1.4")
 
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
@@ -120,6 +120,8 @@ SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", str(24 * 3600)))
 STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
 
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
+
+MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.03"))
  
 
 # Data / calendar controls.
@@ -166,7 +168,7 @@ MEDIUM = [
 
     "PLTR", "SNOW", "COIN", "SHOP", "UBER",
 
-    "PYPL", "SQ", "ROKU", "ZS", "DDOG", "ENPH",
+    "PYPL", "XYZ", "ROKU", "ZS", "DDOG", "ENPH",
 
     "NET", "CRWD", "OKTA", "DOCU", "MDB",
 
@@ -363,6 +365,30 @@ def audit(event: str, details: str = "") -> None:
 
 def format_money(value: float) -> str:
     return f"${round(value, 2)}"
+
+def market_label(market: str) -> str:
+    labels = {
+        "BULL": "🐂 BULL",
+        "BEAR": "🐻 BEAR",
+        "UNCERTAIN": "🟡 UNCERTAIN",
+    }
+    return labels.get(str(market).upper(), f"⚪ {market}")
+
+
+def setup_label(setup_type: str) -> str:
+    setup = str(setup_type).lower()
+
+    if setup == "breakout":
+        return "🚀 Breakout"
+
+    if setup == "pullback":
+        return "🔁 Pullback"
+
+    return f"⚙️ {setup_type}"
+
+
+def yes_no(value: bool) -> str:
+    return "✅ Yes" if value else "❌ No"
 
 def heartbeat() -> None:
     try:
@@ -1940,8 +1966,149 @@ def get_historical(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
         return None
 
- 
+def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
+    nticker = normalize_ticker(ticker)
 
+    if nticker is None:
+        return None
+
+    try:
+        url = f"{FMP_BASE}/historical-chart/5min?symbol={nticker}&apikey={FMP_API_KEY}"
+
+        data = request_json(
+            url,
+            timeout=(3, 10),
+            context=f"intraday 5min {nticker}",
+            retries=1
+        )
+
+        if not isinstance(data, list) or len(data) == 0:
+            print(f"[INTRADAY EMPTY] {nticker}")
+            return None
+
+        df = pd.DataFrame(data)
+
+        df = df.rename(
+            columns={
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "volume": "Volume",
+            }
+        )
+
+        required = ["date", "Open", "High", "Low", "Close", "Volume"]
+
+        missing = [c for c in required if c not in df.columns]
+
+        if missing:
+            print(f"[INTRADAY BAD SCHEMA] {nticker} missing={missing}")
+            return None
+
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        for col in ["Open", "High", "Low", "Close", "Volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        df = df.dropna(subset=required)
+        df = df.sort_values("date").reset_index(drop=True)
+
+        if df.empty:
+            print(f"[INTRADAY NO VALID ROWS] {nticker}")
+            return None
+
+        return df
+
+    except Exception as exc:
+        logger.warning(f"[INTRADAY ERROR] {nticker}: {exc}")
+        return None
+
+
+def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
+    """
+    Build a daily dataframe where today's candle is synthesized from 5-minute intraday bars.
+
+    Used for near-close scans so the bot does not rely on yesterday's EOD candle.
+    """
+    nticker = normalize_ticker(ticker)
+
+    if nticker is None:
+        return None
+
+    hist = get_historical(nticker, limit=limit + 5)
+
+    if hist is None or hist.empty:
+        return None
+
+    intraday = get_intraday_5min(nticker)
+
+    if intraday is None or intraday.empty:
+        print(f"[LIVE DAILY SKIP] {nticker} no intraday data")
+        return None
+
+    today = ny_now().date()
+
+    today_rows = intraday[intraday["date"].dt.date == today].copy()
+
+    if today_rows.empty:
+        print(f"[LIVE DAILY SKIP] {nticker} no intraday rows for {today}")
+        return None
+
+    # Keep only regular-session bars: 09:30–16:00 New York time.
+    bar_minutes = today_rows["date"].dt.hour * 60 + today_rows["date"].dt.minute
+
+    today_rows = today_rows[
+        (bar_minutes >= (9 * 60 + 30)) &
+        (bar_minutes <= (16 * 60))
+    ].copy()
+
+    if today_rows.empty:
+        print(f"[LIVE DAILY SKIP] {nticker} no regular-session intraday rows for {today}")
+        return None
+
+    live_bar = {
+        "date": pd.Timestamp(today.isoformat()),
+        "Open": float(today_rows["Open"].iloc[0]),
+        "High": float(today_rows["High"].max()),
+        "Low": float(today_rows["Low"].min()),
+        "Close": float(today_rows["Close"].iloc[-1]),
+        "Volume": float(today_rows["Volume"].sum()),
+    }
+
+    # Remove any existing row for today from EOD data, then append synthetic current-day row.
+    hist = hist[pd.to_datetime(hist["date"]).dt.date < today].copy()
+    hist = hist.tail(limit - 1)
+
+    live_df = pd.concat(
+        [hist, pd.DataFrame([live_bar])],
+        ignore_index=True
+    )
+
+    live_df = live_df.sort_values("date").tail(limit).reset_index(drop=True)
+
+    print(
+        f"[LIVE DAILY OK] {nticker} | "
+        f"date={today.isoformat()} | "
+        f"close={live_bar['Close']:.2f} | "
+        f"high={live_bar['High']:.2f} | "
+        f"low={live_bar['Low']:.2f} | "
+        f"volume={int(live_bar['Volume'])}"
+    )
+
+    return live_df
+
+
+def get_signal_dataframe(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
+    current_ny = ny_now()
+    minutes = current_ny.hour * 60 + current_ny.minute
+
+    # From 15:45 onward on market days, use intraday data to synthesize today's daily candle.
+    # This avoids depending on the EOD endpoint being refreshed immediately.
+    if is_market_weekday(current_ny) and minutes >= (15 * 60 + 45):
+        return build_live_daily_df(ticker, limit=limit)
+
+    return get_historical(ticker, limit=limit)
  
 
 def is_daily_data_current(df: pd.DataFrame) -> bool:
@@ -1968,13 +2135,14 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         expected_session = sessions[-1]
 
-        # Before market close -> previous session
-        if (
-            expected_session == today
-            and current_ny.hour < 16
-        ):
-            if len(sessions) >= 2:
-                expected_session = sessions[-2]
+        # Before the near-close scan window, expect previous completed session.
+        # During/after near-close, today's synthetic intraday-built daily candle is acceptable.
+        if expected_session == today:
+            minutes = current_ny.hour * 60 + current_ny.minute
+
+            if minutes < (15 * 60 + 45):
+                if len(sessions) >= 2:
+                    expected_session = sessions[-2]
 
         print(
             f"[FRESH CHECK] "
@@ -2153,9 +2321,9 @@ def market_condition() -> str:
 
     try:
 
-        spy = get_historical("SPY", limit=60)
+        spy = get_signal_dataframe("SPY", limit=60)
 
-        qqq = get_historical("QQQ", limit=60)
+        qqq = get_signal_dataframe("QQQ", limit=60)
 
  
 
@@ -2442,7 +2610,95 @@ def is_morning_scan_window(dt: datetime) -> bool:
 
     # Morning scan window: 06:45 to 09:25 New York time.
     # This uses the latest completed daily candle, usually yesterday's candle before market open.
-    return (6 * 60 + 55) <= minutes <= (9 * 60 + 25)
+    return (6 * 60 + 45) <= minutes <= (9 * 60 + 25)
+
+def is_near_close_scan_window(dt: datetime) -> bool:
+    minutes = dt.hour * 60 + dt.minute
+
+    # Official weekday scan window: 15:50 to 15:58 New York time.
+    # This gives the bot time to scan before the 16:00 close.
+    return (15 * 60 + 50) <= minutes <= (15 * 60 + 58)
+
+def expected_daily_bar_date() -> Optional[str]:
+    current_ny = ny_now()
+    today = current_ny.date()
+
+    try:
+        schedule = NYSE.schedule(
+            start_date=today - timedelta(days=10),
+            end_date=today
+        )
+
+        if schedule.empty:
+            return None
+
+        sessions = [d.date() for d in schedule.index]
+        expected_session = sessions[-1]
+
+        # Before the near-close scan window, the latest completed candle is the previous session.
+        # During/after near-close, we expect to build today's synthetic candle from intraday data.
+        if expected_session == today:
+            minutes = current_ny.hour * 60 + current_ny.minute
+
+            if minutes < (15 * 60 + 45):
+                if len(sessions) >= 2:
+                    expected_session = sessions[-2]
+
+        return expected_session.isoformat()
+
+    except Exception as exc:
+        print(f"[EXPECTED BAR DATE ERROR] {exc}")
+        return None
+
+def outstanding_signal_reservations(
+    expected_bar_date: Optional[str]
+) -> Tuple[float, float, List[str]]:
+    """
+    Reserve risk/capital for already-sent signals from the same daily candle.
+
+    This prevents repeated forcescan calls from producing more and more
+    candidates from the same candle after earlier signals were already sent.
+    """
+    refresh_portfolio()
+
+    signals = load_signals()
+    open_positions = set(portfolio["positions"].keys())
+
+    reserved_risk = 0.0
+    reserved_capital = 0.0
+    reserved_tickers: List[str] = []
+
+    for ticker, signal in signals.items():
+        if ticker in open_positions:
+            # If already bought, actual open-position risk handles it.
+            continue
+
+        if not isinstance(signal, dict):
+            continue
+
+        entry_data = signal.get("entry_data", {}) or {}
+
+        if expected_bar_date and entry_data.get("daily_bar_date") != expected_bar_date:
+            continue
+
+        try:
+            risk_amount = float(entry_data.get("risk_amount", 0) or 0)
+        except (TypeError, ValueError):
+            risk_amount = 0.0
+
+        try:
+            capital = float(entry_data.get("capital", 0) or 0)
+        except (TypeError, ValueError):
+            capital = 0.0
+
+        if risk_amount > 0:
+            reserved_risk += risk_amount
+            reserved_tickers.append(ticker)
+
+        if capital > 0:
+            reserved_capital += capital
+
+    return reserved_risk, reserved_capital, reserved_tickers
 
 # -----------------------------------------------------------------------------
 
@@ -2760,31 +3016,47 @@ def record_buy(
 
         return False, "Price must be positive and finite"
 
- 
+    signal = last_signals.get(ticker, {})
+
+    signal_data = signal.get("entry_data", {}) if isinstance(signal, dict) else {}
+
+    signal_price = signal_data.get("signal_price")
+
+    if isinstance(signal_price, (int, float)) and signal_price > 0:
+        max_allowed_price = float(signal_price) * (1 + MAX_ENTRY_EXTENSION_PCT)
+
+        if price > max_allowed_price:
+            return (
+                False,
+                f"Entry rejected: price too extended above signal.\n"
+                f"Signal: {round(float(signal_price), 2)}\n"
+                f"Your price: {round(price, 2)}\n"
+                f"Max allowed: {round(max_allowed_price, 2)} "
+                f"({round(MAX_ENTRY_EXTENSION_PCT * 100, 2)}%)"
+            )
 
     atr_val: Optional[float] = None
-
     stop: Optional[float] = None
 
-    try:
+    signal_atr = signal_data.get("atr")
 
-        df = get_historical(ticker, limit=120)
+    if isinstance(signal_atr, (int, float)) and signal_atr > 0:
+        atr_val = float(signal_atr)
+        stop = price - (1.5 * atr_val)
 
-        if df is not None and not df.empty:
+    if stop is None:
+        try:
+            df = get_signal_dataframe(ticker, limit=120)
 
-            val = atr(df).iloc[-1]
+            if df is not None and not df.empty:
+                val = atr(df).iloc[-1]
 
-            if not pd.isna(val) and is_finite_positive(float(val)):
+                if not pd.isna(val) and is_finite_positive(float(val)):
+                    atr_val = float(val)
+                    stop = price - (1.5 * atr_val)
 
-                atr_val = float(val)
-
-                stop = price - (1.5 * atr_val)
-
-    except Exception as exc:
-
-        print(f"[BUY ATR ERROR] {ticker}: {exc}")
-
- 
+        except Exception as exc:
+            print(f"[BUY ATR ERROR] {ticker}: {exc}") 
 
     if stop is None or stop <= 0 or stop >= price:
 
@@ -2801,10 +3073,6 @@ def record_buy(
         return False, "Invalid stop/risk calculation"
 
  
-
-    signal = last_signals.get(ticker, {})
-
-    signal_data = signal.get("entry_data", {}) if isinstance(signal, dict) else {}
 
  
 
@@ -2880,7 +3148,12 @@ def record_buy(
         f"position_id={position_id}"
     )
 
-    return True, f"BOUGHT {ticker}\nShares: {shares} @ {price}\nCash left: {format_money(portfolio['cash'])}"
+    return True, (
+        f"✅ BOUGHT {ticker}\n\n"
+        f"📦 Shares: {shares}\n"
+        f"💵 Price: {price}\n"
+        f"💰 Cash left: {format_money(portfolio['cash'])}"
+    )
 
  
 
@@ -2985,15 +3258,11 @@ def record_sell(
     )
 
     return True, (
-
-        f"SOLD {ticker}\n"
-
-        f"Shares: {shares} @ {price}\n"
-
-        f"P/L: {format_money(trade['profit'])}\n"
-
-        f"Cash: {format_money(portfolio['cash'])}"
-
+        f"💰 SOLD {ticker}\n\n"
+        f"📦 Shares: {shares}\n"
+        f"💵 Price: {price}\n"
+        f"📊 P/L: {format_money(trade['profit'])}\n"
+        f"💼 Cash: {format_money(portfolio['cash'])}"
     )
 
  
@@ -3162,9 +3431,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         audit("PANIC_ON")
 
         send(
-            "PANIC MODE ENABLED\n"
-            "Scanning disabled.\n"
-            "Position management still active."
+            "🚨 PANIC MODE ENABLED\n\n"
+            "🔒 Scanning disabled.\n"
+            "🛡️ Position management still active."
         )
 
         return
@@ -3175,7 +3444,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         audit("PANIC_OFF")
 
-        send("Bot resumed.")
+        send("✅ Bot resumed.\n\n🔎 Scanning enabled again.")
 
         return
 
@@ -3207,7 +3476,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "pnl":
 
-        send(f"Weekly P/L: {format_money(weekly_performance())}")
+        send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
 
         return
 
@@ -3218,15 +3487,10 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         snapshot = compute_equity_snapshot_data()
 
         send(
-
-            "ACCOUNT EQUITY\n\n"
-
-            f"Cash: {format_money(snapshot['cash'])}\n"
-
-            f"Positions: {format_money(snapshot['positions_value'])}\n"
-
-            f"Total Equity: {format_money(snapshot['equity'])}"
-
+            "💼 ACCOUNT EQUITY\n\n"
+            f"💵 Cash: {format_money(snapshot['cash'])}\n"
+            f"📦 Positions: {format_money(snapshot['positions_value'])}\n"
+            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
         )
 
         return
@@ -3238,21 +3502,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         details = open_risk_details()
 
         send(
-
-            "OPEN RISK\n\n"
-
-            f"Equity: {format_money(details['equity'])}\n"
-
-            f"Initial open risk: {format_money(details['initial_risk_dollars'])} "
-
+            "🛡️ OPEN RISK\n\n"
+            f"💼 Equity: {format_money(details['equity'])}\n"
+            f"⚠️ Initial open risk: {format_money(details['initial_risk_dollars'])} "
             f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
-
-            f"Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
-
+            f"📉 Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
             f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\n"
-
-            f"Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
-
+            f"🚦 Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
         )
 
         return
@@ -3261,7 +3517,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "winrate":
 
-        send(f"Win Rate: {win_rate()}%")
+        send(f"🏆 Win Rate: {win_rate()}%")
 
         return
 
@@ -3274,29 +3530,17 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         p = position_level_summary()
 
         send(
-
-            "EXPECTANCY\n\n"
-
-            f"Trades: {e['trades']}\n"
-
-            f"R-trades: {e['r_trades']}\n"
-
-            f"Avg R/trade: {e['avg_r']}\n"
-
-            f"Median R: {e['median_r']}\n"
-
-            f"Avg win R: {e['avg_win_r']}\n"
-
-            f"Avg loss R: {e['avg_loss_r']}\n"
-
-            f"Profit factor: {e['profit_factor']}\n\n"
-
-            f"Position-level count: {p['positions_closed_or_partially_closed']}\n"
-
-            f"Avg position R: {p['avg_position_r']}\n"
-
-            f"Median position R: {p['median_position_r']}"
-
+            "📈 EXPECTANCY\n\n"
+            f"🧾 Trades: {e['trades']}\n"
+            f"🎯 R-trades: {e['r_trades']}\n"
+            f"📊 Avg R/trade: {e['avg_r']}\n"
+            f"📍 Median R: {e['median_r']}\n"
+            f"✅ Avg win R: {e['avg_win_r']}\n"
+            f"❌ Avg loss R: {e['avg_loss_r']}\n"
+            f"⚖️ Profit factor: {e['profit_factor']}\n\n"
+            f"📦 Position-level count: {p['positions_closed_or_partially_closed']}\n"
+            f"📊 Avg position R: {p['avg_position_r']}\n"
+            f"📍 Median position R: {p['median_position_r']}"
         )
 
         return
@@ -3307,7 +3551,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         best, worst = ticker_stats()
 
-        send(f"Best: {best[0]} ({format_money(best[1])})\nWorst: {worst[0]} ({format_money(worst[1])})")
+        send(
+            f"📊 TICKER STATS\n\n"
+            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
+            f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
+        )
 
         return
 
@@ -3315,7 +3563,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "duration":
 
-        send(f"Avg Trade Duration: {avg_trade_duration()}")
+        send(f"⏱️ Avg Trade Duration: {avg_trade_duration()}")
 
         return
 
@@ -3334,23 +3582,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         e = expectancy_summary()
 
         send(
-
-            "SUMMARY\n\n"
-
-            f"P/L (7d): {format_money(pnl)}\n"
-
-            f"Win Rate: {wr}%\n"
-
-            f"Avg Duration: {duration}\n"
-
-            f"Avg R: {e['avg_r']}\n"
-
-            f"Profit Factor: {e['profit_factor']}\n\n"
-
-            f"Best: {best[0]} ({format_money(best[1])})\n"
-
-            f"Worst: {worst[0]} ({format_money(worst[1])})"
-
+            "📋 SUMMARY\n\n"
+            f"📊 P/L (7d): {format_money(pnl)}\n"
+            f"🏆 Win Rate: {wr}%\n"
+            f"⏱️ Avg Duration: {duration}\n"
+            f"🎯 Avg R: {e['avg_r']}\n"
+            f"⚖️ Profit Factor: {e['profit_factor']}\n\n"
+            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
+            f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
         )
 
         return
@@ -3361,36 +3600,58 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         details = open_risk_details()
 
         send(
-            "SCAN STATUS\n\n"
-            f"NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
-            f"Last scan day: {last_scan_day}\n"
-            f"Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\n"
-            f"Cash: {format_money(portfolio['cash'])}\n"
-            f"Equity: {format_money(details['equity'])}\n"
-            f"Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
-            f"Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
-            f"Fresh candle required: {REQUIRE_FRESH_DAILY_CANDLE}\n"
-            f"Panic mode: {PANIC_MODE}"
+            "🧭 SCAN STATUS\n\n"
+            f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
+            f"📅 Last scan day: {last_scan_day}\n"
+            f"📦 Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\n"
+            f"💵 Cash: {format_money(portfolio['cash'])}\n"
+            f"💼 Equity: {format_money(details['equity'])}\n"
+            f"⚠️ Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
+            f"🛡️ Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
+            f"🕯️ Fresh candle required: {yes_no(REQUIRE_FRESH_DAILY_CANDLE)}\n"
+            f"🚨 Panic mode: {yes_no(PANIC_MODE)}"
         )
+
         return
 
     if text_lower == "resetscan":
         with db_tx() as conn:
             conn.execute("DELETE FROM meta WHERE key = 'last_scan_day'")
-        send("Last scan day reset. Bot may scan again during the scan window.")
+
+        send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
         return
 
     if text_lower == "forcescan":
-        send("Manual scan started. Check Telegram/logs for signals and scan summary.")
+        send("🔎 Manual scan started.\n\nCheck Telegram/logs for signals and scan summary.")
+
+        current_ny = ny_now()
+
+        official_scan_window = (
+            (
+                is_market_weekday(current_ny)
+                and is_near_close_scan_window(current_ny)
+            )
+            or
+            (
+                not is_market_weekday(current_ny)
+                and current_ny.weekday() == 5
+                and is_morning_scan_window(current_ny)
+            )
+        )
 
         scanned_ok = scan_market()
 
-        if scanned_ok:
-            today = ny_now().date().isoformat()
+        if scanned_ok and official_scan_window:
+            today = current_ny.date().isoformat()
             set_meta("last_scan_day", today)
-            send("Manual scan completed and marked done for today.")
+            send("✅ Manual scan completed.\n\n📅 Marked done for today.")
+        elif scanned_ok:
+            send(
+                "✅ Manual scan completed.\n\n"
+                "ℹ️ Not marked done because this was outside the official scan window."
+            )
         else:
-            send("Manual scan completed but was not marked done because historical data was not usable.")
+            send("⚠️ Manual scan completed, but historical data was not usable.")
 
         return
 
@@ -3493,7 +3754,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             mark_update_processed(update_id, "processed_resetsignals")
 
-        send("Signals reset. Trade history and portfolio are unchanged.")
+        send("🔄 Signals reset.\n\nTrade history and portfolio are unchanged.")
 
         return
 
@@ -3529,7 +3790,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
  
 
-        send(f"SETUP STATS\n\nBreakout: {stats(breakout)}\nPullback: {stats(pullback)}")
+        send(
+            f"⚙️ SETUP STATS\n\n"
+            f"🚀 Breakout: {stats(breakout)}\n"
+            f"🔁 Pullback: {stats(pullback)}"
+        )
 
         return
 
@@ -3583,7 +3848,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         refresh_portfolio()
 
-        send(f"Cash updated to {format_money(amount)}")
+        send(f"💵 Cash updated to {format_money(amount)}")
 
         return
 
@@ -3863,7 +4128,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         ok, msg = record_buy(ticker, shares, price, update_id=update_id)
 
-        send(("OK: " if ok else "❌ ERROR: ") + msg)
+        send(msg if ok else "❌ ERROR: " + msg)
 
         return
 
@@ -3873,7 +4138,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         ok, msg = record_sell(ticker, shares, price, exit_reason="manual", update_id=update_id)
 
-        send(("OK: " if ok else "ERROR: ") + msg)
+        send(msg if ok else "❌ ERROR: " + msg)
 
         return
 
@@ -3972,6 +4237,11 @@ def analyze(ticker: str, market: str, df: pd.DataFrame) -> Optional[Tuple[str, f
  
 
     prev_close = float(close.iloc[-2])
+
+    daily_move_pct = ((price - prev_close) / prev_close) * 100
+
+    if breakout and daily_move_pct > 8:
+        return None
 
     if not breakout and price <= prev_close:
 
@@ -4379,26 +4649,33 @@ def manage_positions() -> None:
 
  
 
-def should_skip_for_existing_signal(ticker: str) -> bool:
+def should_skip_for_existing_signal(
+    ticker: str,
+    expected_bar_date: Optional[str] = None
+) -> bool:
 
     signal = last_signals.get(ticker)
 
     if not signal:
-
         return False
 
     try:
+        if isinstance(signal, dict):
+            signal_time = float(signal.get("time", 0))
+            entry_data = signal.get("entry_data", {}) or {}
+        else:
+            signal_time = float(signal)
+            entry_data = {}
 
-        signal_time = float(signal.get("time", 0)) if isinstance(signal, dict) else float(signal)
+        # Important for weekend/Monday behavior:
+        # if the signal was already produced for the same daily candle, do not resend it.
+        if expected_bar_date and entry_data.get("daily_bar_date") == expected_bar_date:
+            return True
 
         return now_ts() - signal_time < SIGNAL_COOLDOWN_SEC
 
     except Exception:
-
         return False
-
- 
-
  
 
 def scan_market() -> bool:
@@ -4429,15 +4706,28 @@ def scan_market() -> bool:
     }
 
     today = ny_date_str()
+    expected_bar = expected_daily_bar_date()
 
     stale = []
 
     for ticker, signal in last_signals.items():
 
-        signal_day = signal.get("entry_data", {}).get("signal_date_ny")
+        if isinstance(signal, dict):
+            entry_data = signal.get("entry_data", {}) or {}
+        else:
+            entry_data = {}
 
-        if signal_day != today:
-            stale.append(ticker)
+        signal_day = entry_data.get("signal_date_ny")
+        signal_bar_day = entry_data.get("daily_bar_date")
+
+        # Prefer bar-date cleanup. This keeps Saturday signals valid for Monday
+        # if both are based on the same Friday daily candle.
+        if expected_bar:
+            if signal_bar_day != expected_bar:
+                stale.append(ticker)
+        else:
+            if signal_day != today:
+                stale.append(ticker)
 
     if stale:
         with db_tx() as conn:
@@ -4468,9 +4758,17 @@ def scan_market() -> bool:
 
     base_risk_details = open_risk_details()
 
-    reserved_signal_risk = 0.0
+    reserved_signal_risk, reserved_signal_capital, reserved_signal_tickers = (
+        outstanding_signal_reservations(expected_bar)
+    )
 
-    reserved_signal_capital = 0.0
+    if reserved_signal_tickers:
+        print(
+            "[SIGNAL RESERVATION] "
+            f"tickers={reserved_signal_tickers} | "
+            f"risk={round(reserved_signal_risk, 2)} | "
+            f"capital={round(reserved_signal_capital, 2)}"
+        )
 
     if PANIC_MODE:
        print("[SCAN BLOCKED] PANIC_MODE")
@@ -4504,7 +4802,7 @@ def scan_market() -> bool:
                 skip_counts["low_cash"] += 1
                 continue
 
-            if should_skip_for_existing_signal(ticker):
+            if should_skip_for_existing_signal(ticker, expected_bar):
                 skip_counts["existing_signal"] += 1
                 continue
  
@@ -4524,7 +4822,7 @@ def scan_market() -> bool:
 
             attempted_historical += 1
 
-            df = get_historical(ticker, limit=120)
+            df = get_signal_dataframe(ticker, limit=120)
 
             if df is None or df.empty or len(df) < 51:
                 skip_counts["no_historical"] += 1
@@ -4538,14 +4836,16 @@ def scan_market() -> bool:
                 current_ny = ny_now()
 
                 print(
-                    f"[STALE BUT ACCEPTED] "
+                    f"[🧊 STALE DATA SKIP] "
                     f"{ticker} | "
                     f"last={last_date} | "
                     f"today={current_ny.date()} | "
                     f"ny={current_ny.strftime('%H:%M')}"
                 )
 
-            usable_data_found = True 
+                continue
+
+            usable_data_found = True
 
             close = df["Close"].dropna()
 
@@ -4568,27 +4868,24 @@ def scan_market() -> bool:
             levels = [10, 15, 20]
 
             existing_levels = get_breakout_levels(ticker)
+            triggered_levels = [lvl for lvl in levels if move >= lvl]
 
-            changed_levels = False
+            if triggered_levels:
+                highest_level = max(triggered_levels)
 
-            for lvl in levels:
+                if highest_level not in existing_levels:
+                    send(
+                        f"🚀 BREAKOUT ALERT\n\n"
+                        f"🏷️ Ticker: {ticker}\n"
+                        f"📊 Move: +{round(move, 2)}%\n"
+                        f"🎚️ Level: {highest_level}%+"
+                    )
 
-                if move >= lvl and lvl not in existing_levels:
+                    existing_levels.update(triggered_levels)
+                    set_breakout_levels(ticker, existing_levels)
 
-                    send(f"BREAKOUT ALERT {ticker}\nMove: {round(move, 2)}%")
-
-                    existing_levels.add(lvl)
-
-                    changed_levels = True
-
-            if changed_levels:
-
-                set_breakout_levels(ticker, existing_levels)
-
-            if move < 8:
-
+            elif move < 8:
                 clear_breakout_levels(ticker)
-
  
 
             rsi_val = rsi(close).iloc[-1]
@@ -4667,63 +4964,40 @@ def scan_market() -> bool:
             entry_data = {
 
                 "rsi": round(float(rsi_val), 2),
-
                 "score": int(score),
-
                 "market": market,
-
                 "atr": round((price - stop) / 1.5, 4),
-
                 "breakout": is_breakout,
-
                 "setup_type": "breakout" if is_breakout else "pullback",
-
                 "volume_ratio": None if volume_ratio is None else round(float(volume_ratio), 2),
-
                 "strategy_version": STRATEGY_VERSION,
-
                 "signal_time": now_ts(),
-
                 "signal_date_ny": ny_date_str(),
-
                 "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
-
+                "signal_price": round(price, 2),
+                "shares": int(shares),
+                "capital": round(capital, 2),
                 "risk_amount": round(risk_amount, 2),
-
-                "projected_total_risk_pct": round(projected_risk_pct * 100, 2),
+                "projected_total_risk_pct": round(projected_risk_pct * 100, 2)
 
             }
 
  
 
             send(
-
                 "📈 ENTRY SIGNAL\n\n"
-
-                f"{ticker}\n"
-
-                f"Market: {market}\n"
-
-                f"Setup: {entry_data['setup_type']}\n\n"
-
-                f"Price: {round(price, 2)}\n"
-
-                f"RSI: {round(float(rsi_val), 1)}\n"
-
-                f"Score: {score}\n\n"
-
-                f"Buy: {shares} shares\n"
-
-                f"Capital: {format_money(capital)}\n\n"
-
-                f"Stop: {round(stop, 2)}\n"
-
-                f"Risk: {format_money(risk_amount)}\n"
-
-                f"Projected total risk: {round(projected_risk_pct * 100, 2)}%"
-
+                f"🏷️ Ticker: {ticker}\n"
+                f"🌎 Market: {market_label(market)}\n"
+                f"⚙️ Setup: {setup_label(entry_data['setup_type'])}\n\n"
+                f"💵 Price: {round(price, 2)}\n"
+                f"📊 RSI: {round(float(rsi_val), 1)}\n"
+                f"⭐ Score: {score}\n\n"
+                f"🛒 Buy: {shares} shares\n"
+                f"💰 Capital: {format_money(capital)}\n\n"
+                f"🛡️ Stop: {round(stop, 2)}\n"
+                f"⚠️ Risk: {format_money(risk_amount)}\n"
+                f"📉 Projected total risk: {round(projected_risk_pct * 100, 2)}%"
             )
-
  
 
             save_signal(ticker, now_ts(), entry_data)
@@ -4904,13 +5178,13 @@ def main() -> None:
  
 
 
-            # Run once during the New York morning scan window.
+            # Run once during the New York near-close scan window.
 
             last_scan_day = get_meta("last_scan_day")
             today = current_ny.date().isoformat()
 
             if (
-                is_morning_scan_window(current_ny)
+                is_near_close_scan_window(current_ny)
                 and last_scan_day != today
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
