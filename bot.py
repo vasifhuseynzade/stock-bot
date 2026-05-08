@@ -149,43 +149,53 @@ MAX_TELEGRAM_MESSAGE = 3900
 # -----------------------------------------------------------------------------
 
  
-
 STRONG = [
+    # Broad / sector ETFs
+    "SPY", "QQQ", "IWM",
+    "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLP",
 
-    "AAPL", "MSFT", "NVDA", "META", "GOOGL",
+    # Mega-cap / institutional leaders
+    "MSFT", "NVDA", "META", "AMZN", "GOOGL",
+    "AVGO", "AAPL",
 
-    "AMZN", "AVGO", "TSLA", "CRM", "ADBE",
+    # Financial leaders
+    "JPM", "GS", "MS",
 
-    "NOW", "AMD", "INTC", "QCOM", "MU",
+    # Industrials / cyclicals
+    "CAT", "DE", "GE", "ETN",
 
-    "LRCX", "ASML", "ORCL", "NFLX", "PANW",
+    # Health care / defensive growth
+    "LLY", "UNH", "ABBV",
 
+    # Consumer quality
+    "COST", "WMT", "MCD",
 ]
-
  
 
 MEDIUM = [
+    # Software / cybersecurity / cloud
+    "PANW", "CRWD", "ZS", "NET", "NOW", "PLTR",
 
-    "PLTR", "SNOW", "COIN", "SHOP", "UBER",
+    # Semis / hardware beyond mega leaders
+    "AMD", "MU", "LRCX", "ASML", "QCOM",
 
-    "PYPL", "XYZ", "ROKU", "ZS", "DDOG", "ENPH",
+    # Consumer / platforms / cyclicals
+    "UBER", "SHOP", "BKNG", "NKE",
 
-    "NET", "CRWD", "OKTA", "DOCU", "MDB",
+    # Financial / fintech / market-sensitive
+    "SCHW", "AXP", "COF",
 
+    # Energy / materials
+    "XOM", "CVX", "SLB", "FCX",
 ]
-
  
 
 WEAK = [
-
-    "MCHP", "INOD", "PGY", "AFRM", "RIOT",
-
-    "MARA", "SOFI", "UPST", "AI", "FUBO",
-
-    "CEVA", "SERV", "BKKT", "BKSY",
-
+    "COIN", "HOOD", "AFRM", "SOFI",
+    "MARA", "RIOT",
+    "UPST", "AI",
+    "ROKU", "SNOW",
 ]
-
  
 
 WATCHLIST = STRONG + MEDIUM + WEAK
