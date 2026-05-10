@@ -12,6 +12,7 @@ import uuid
 import traceback
 import pandas_market_calendars as mcal
 import logging
+import zipfile
 from logging.handlers import RotatingFileHandler
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -122,6 +123,30 @@ STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.03"))
+
+# Withdrawal / profit distribution controls.
+WITHDRAWAL_REVIEW_DAYS = int(os.getenv("WITHDRAWAL_REVIEW_DAYS", "90"))
+
+# Below this equity, withdraw less to protect compounding.
+WITHDRAWAL_BUILD_PHASE_EQUITY = float(os.getenv("WITHDRAWAL_BUILD_PHASE_EQUITY", "10000"))
+
+# Small-account phase withdrawal rate.
+WITHDRAWAL_BUILD_PHASE_RATE = float(os.getenv("WITHDRAWAL_BUILD_PHASE_RATE", "0.10"))
+
+# Normal withdrawal rate from new profits above high-water mark.
+WITHDRAWAL_PROFIT_RATE = float(os.getenv("WITHDRAWAL_PROFIT_RATE", "0.25"))
+
+# Minimum profit above high-water mark required before withdrawal alert.
+WITHDRAWAL_MIN_PROFIT = float(os.getenv("WITHDRAWAL_MIN_PROFIT", "500"))
+
+# Minimum withdrawal amount worth alerting.
+WITHDRAWAL_MIN_AMOUNT = float(os.getenv("WITHDRAWAL_MIN_AMOUNT", "100"))
+
+# Keep this cash inside the bot after withdrawal.
+WITHDRAWAL_MIN_CASH_AFTER = float(os.getenv("WITHDRAWAL_MIN_CASH_AFTER", "500"))
+
+# If you ignore a withdrawal signal, remind again after this many days.
+WITHDRAWAL_ALERT_REPEAT_DAYS = int(os.getenv("WITHDRAWAL_ALERT_REPEAT_DAYS", "7"))
  
 
 # Data / calendar controls.
@@ -630,6 +655,28 @@ def init_db() -> None:
                 ticker TEXT PRIMARY KEY,
 
                 levels_json TEXT NOT NULL DEFAULT '[]'
+
+            );
+
+            CREATE TABLE IF NOT EXISTS withdrawals (
+
+                id TEXT PRIMARY KEY,
+
+                time REAL NOT NULL,
+
+                amount REAL NOT NULL CHECK (amount > 0),
+
+                equity_before REAL NOT NULL,
+
+                cash_before REAL NOT NULL,
+
+                cash_after REAL NOT NULL,
+
+                high_water_mark_before REAL NOT NULL,
+
+                high_water_mark_after REAL NOT NULL,
+
+                note TEXT NOT NULL DEFAULT ''
 
             );
 
@@ -2165,7 +2212,7 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
     except Exception as exc:
         print(f"[STALE CHECK ERROR] {exc}")
-        return False 
+        return False
 
 def earnings_status(ticker: str, days: int = 7) -> str:
 
@@ -2520,7 +2567,378 @@ def open_risk_details() -> Dict[str, float]:
     }
 
  
+def get_withdrawal_hwm() -> Optional[float]:
+    value = get_meta("withdrawal_high_water_mark")
 
+    if value is None:
+        return None
+
+    try:
+        hwm = float(value)
+        return hwm if math.isfinite(hwm) and hwm > 0 else None
+    except ValueError:
+        return None
+
+
+def get_withdrawal_hwm_initialized_at() -> Optional[float]:
+    value = get_meta("withdrawal_hwm_initialized_at")
+
+    if value is None:
+        return None
+
+    try:
+        ts = float(value)
+        return ts if math.isfinite(ts) and ts > 0 else None
+    except ValueError:
+        return None
+
+
+def set_withdrawal_hwm(value: float) -> None:
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("Withdrawal high-water mark must be positive")
+
+    set_meta("withdrawal_high_water_mark", str(round(value, 2)))
+    set_meta("withdrawal_hwm_initialized_at", str(now_ts()))
+
+
+def auto_initialize_withdrawal_hwm_if_needed() -> None:
+    """
+    One-time automatic baseline.
+
+    This prevents the bot from immediately suggesting withdrawals from old/legacy profits.
+    Future withdrawal signals will only use profits above this baseline.
+    """
+    existing = get_withdrawal_hwm()
+
+    if existing is not None:
+        return
+
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot["equity"])
+
+    if equity <= 0:
+        return
+
+    set_withdrawal_hwm(equity)
+
+    audit(
+        "WITHDRAWAL_HWM_INITIALIZED",
+        f"equity={equity}"
+    )
+
+    print(f"[WITHDRAWAL HWM INIT] equity={round(equity, 2)}")
+
+
+def get_last_withdrawal_time() -> Optional[float]:
+    conn = db_connect()
+
+    try:
+        row = conn.execute(
+            "SELECT MAX(time) AS t FROM withdrawals"
+        ).fetchone()
+
+        if row is None or row["t"] is None:
+            return None
+
+        return float(row["t"])
+
+    finally:
+        conn.close()
+
+
+def load_withdrawals() -> List[Dict[str, Any]]:
+    conn = db_connect()
+
+    try:
+        rows = conn.execute(
+            "SELECT * FROM withdrawals ORDER BY time ASC"
+        ).fetchall()
+
+        return [
+            {
+                "id": row["id"],
+                "time": float(row["time"]),
+                "amount": float(row["amount"]),
+                "equity_before": float(row["equity_before"]),
+                "cash_before": float(row["cash_before"]),
+                "cash_after": float(row["cash_after"]),
+                "high_water_mark_before": float(row["high_water_mark_before"]),
+                "high_water_mark_after": float(row["high_water_mark_after"]),
+                "note": row["note"],
+            }
+            for row in rows
+        ]
+
+    finally:
+        conn.close()
+
+
+def withdrawal_funny_note() -> str:
+    jokes = [
+        "The profits have requested a small vacation before the market asks for them back.",
+        "Your bot says: take some cookies off the table before the market eats the plate.",
+        "Time to pay the human. The robot has been working overtime.",
+        "Profit detected. Please convert a tiny piece of stress into actual life.",
+        "The account grew. Your coffee budget has officially filed a withdrawal request.",
+    ]
+
+    idx = int(now_ts()) % len(jokes)
+    return jokes[idx]
+
+
+def compute_withdrawal_plan() -> Dict[str, Any]:
+    snapshot = compute_equity_snapshot_data()
+
+    equity = float(snapshot["equity"])
+    cash = float(snapshot["cash"])
+
+    hwm = get_withdrawal_hwm()
+
+    if hwm is None:
+        return {
+            "initialized": False,
+            "equity": equity,
+            "cash": cash,
+            "high_water_mark": None,
+            "profit_above_hwm": 0.0,
+            "rate": 0.0,
+            "gross_suggested": 0.0,
+            "cash_cap": max(0.0, cash - WITHDRAWAL_MIN_CASH_AFTER),
+            "suggested": 0.0,
+            "eligible": False,
+            "reason": "Withdrawal high-water mark is not initialized.",
+            "days_since_clock": None,
+        }
+
+    profit_above_hwm = equity - hwm
+
+    if equity < WITHDRAWAL_BUILD_PHASE_EQUITY:
+        rate = WITHDRAWAL_BUILD_PHASE_RATE
+        phase = "BUILD"
+    else:
+        rate = WITHDRAWAL_PROFIT_RATE
+        phase = "NORMAL"
+
+    gross_suggested = max(0.0, profit_above_hwm * rate)
+    cash_cap = max(0.0, cash - WITHDRAWAL_MIN_CASH_AFTER)
+    suggested = min(gross_suggested, cash_cap)
+
+    last_withdrawal_time = get_last_withdrawal_time()
+    clock_start = last_withdrawal_time or get_withdrawal_hwm_initialized_at()
+
+    days_since_clock = None
+
+    if clock_start is not None:
+        days_since_clock = (now_ts() - clock_start) / 86400
+
+    eligible = True
+    reason = "Eligible"
+
+    if profit_above_hwm <= 0:
+        eligible = False
+        reason = "No profit above high-water mark."
+
+    elif profit_above_hwm < WITHDRAWAL_MIN_PROFIT:
+        eligible = False
+        reason = (
+            f"Profit above high-water mark is below minimum "
+            f"{format_money(WITHDRAWAL_MIN_PROFIT)}."
+        )
+
+    elif suggested < WITHDRAWAL_MIN_AMOUNT:
+        eligible = False
+        reason = (
+            f"Suggested withdrawal is below minimum "
+            f"{format_money(WITHDRAWAL_MIN_AMOUNT)} or cash cap is too low."
+        )
+
+    elif days_since_clock is not None and days_since_clock < WITHDRAWAL_REVIEW_DAYS:
+        eligible = False
+        reason = (
+            f"Review period not reached. "
+            f"{round(days_since_clock, 1)} days passed; "
+            f"target is {WITHDRAWAL_REVIEW_DAYS} days."
+        )
+
+    return {
+        "initialized": True,
+        "phase": phase,
+        "equity": round(equity, 2),
+        "cash": round(cash, 2),
+        "high_water_mark": round(hwm, 2),
+        "profit_above_hwm": round(profit_above_hwm, 2),
+        "rate": rate,
+        "gross_suggested": round(gross_suggested, 2),
+        "cash_cap": round(cash_cap, 2),
+        "suggested": round(suggested, 2),
+        "eligible": eligible,
+        "reason": reason,
+        "days_since_clock": None if days_since_clock is None else round(days_since_clock, 1),
+    }
+
+
+def record_withdrawal(
+    amount: float,
+    note: str = "",
+    update_id: Optional[int] = None
+) -> Tuple[bool, str]:
+
+    if not math.isfinite(amount) or amount <= 0:
+        return False, "Withdrawal amount must be positive and finite."
+
+    refresh_portfolio()
+
+    snapshot = compute_equity_snapshot_data()
+
+    equity_before = float(snapshot["equity"])
+    cash_before = float(snapshot["cash"])
+
+    if amount > cash_before:
+        return False, "Withdrawal amount is larger than available cash."
+
+    if cash_before - amount < WITHDRAWAL_MIN_CASH_AFTER:
+        return (
+            False,
+            f"Withdrawal rejected: cash after withdrawal would fall below "
+            f"{format_money(WITHDRAWAL_MIN_CASH_AFTER)}."
+        )
+
+    hwm_before = get_withdrawal_hwm()
+
+    if hwm_before is None:
+        return False, "Withdrawal high-water mark is not initialized."
+
+    # After withdrawal, keep HWM at the pre-withdrawal equity peak.
+    hwm_after = max(hwm_before, equity_before)
+
+    cash_after = cash_before - amount
+
+    with db_tx() as conn:
+        set_cash_tx(conn, cash_after)
+
+        conn.execute(
+            """
+            INSERT INTO withdrawals(
+                id, time, amount, equity_before, cash_before, cash_after,
+                high_water_mark_before, high_water_mark_after, note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex,
+                now_ts(),
+                round(amount, 2),
+                round(equity_before, 2),
+                round(cash_before, 2),
+                round(cash_after, 2),
+                round(hwm_before, 2),
+                round(hwm_after, 2),
+                str(note or ""),
+            ),
+        )
+
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('withdrawal_high_water_mark', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(round(hwm_after, 2)),),
+        )
+
+        mark_update_processed_tx(conn, update_id, "processed_withdrawal")
+
+    refresh_portfolio()
+
+    audit(
+        "WITHDRAWAL",
+        f"amount={amount} equity_before={equity_before} "
+        f"cash_before={cash_before} cash_after={cash_after} "
+        f"hwm_before={hwm_before} hwm_after={hwm_after}"
+    )
+
+    return True, (
+        f"🏦 WITHDRAWAL RECORDED\n\n"
+        f"💸 Amount: {format_money(amount)}\n"
+        f"💼 Equity before: {format_money(equity_before)}\n"
+        f"💵 Cash before: {format_money(cash_before)}\n"
+        f"💵 Cash after: {format_money(cash_after)}\n"
+        f"🏔️ New high-water mark: {format_money(hwm_after)}"
+    )
+
+
+def maybe_send_withdrawal_signal() -> None:
+    """
+    Automatic withdrawal alert.
+
+    Checks once per market day after 16:05 NY time.
+    If eligible, sends a Telegram signal.
+    Does not spam: repeated alerts are limited by WITHDRAWAL_ALERT_REPEAT_DAYS.
+    """
+    current_ny = ny_now()
+
+    if not is_market_weekday(current_ny):
+        return
+
+    minutes = current_ny.hour * 60 + current_ny.minute
+
+    # Check after market close, so equity/quotes are more stable.
+    if minutes < (16 * 60 + 5):
+        return
+
+    today = current_ny.date().isoformat()
+
+    if get_meta("last_withdrawal_check_date") == today:
+        return
+
+    set_meta("last_withdrawal_check_date", today)
+
+    try:
+        plan = compute_withdrawal_plan()
+
+        if not plan.get("initialized"):
+            print("[WITHDRAWAL CHECK] HWM not initialized")
+            return
+
+        if not plan.get("eligible"):
+            print(f"[WITHDRAWAL CHECK] Not eligible: {plan.get('reason')}")
+            return
+
+        last_alert_raw = get_meta("last_withdrawal_alert_ts")
+        last_alert_ts = None
+
+        if last_alert_raw:
+            try:
+                last_alert_ts = float(last_alert_raw)
+            except ValueError:
+                last_alert_ts = None
+
+        if last_alert_ts is not None:
+            days_since_alert = (now_ts() - last_alert_ts) / 86400
+
+            if days_since_alert < WITHDRAWAL_ALERT_REPEAT_DAYS:
+                print(
+                    "[WITHDRAWAL CHECK] Eligible but alert recently sent "
+                    f"{round(days_since_alert, 1)} days ago"
+                )
+                return
+
+        set_meta("last_withdrawal_alert_ts", str(now_ts()))
+
+        send(
+            "🏦 WITHDRAWAL SIGNAL\n\n"
+            "🎉 Time to pay yourself.\n\n"
+            f"📊 Phase: {plan['phase']}\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
+            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\n"
+            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
+            f"📤 Rate: {round(plan['rate'] * 100, 2)}%\n"
+            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
+            f"😂 Bot note:\n{withdrawal_funny_note()}\n\n"
+            f"After you manually withdraw it, send:\n"
+            f"withdrawdone {round(plan['suggested'], 2)}"
+        )
+
+    except Exception as exc:
+        logger.exception(f"[WITHDRAWAL SIGNAL ERROR] {exc}")
+        print(f"[WITHDRAWAL SIGNAL ERROR] {exc}")
  
 
 def risk_pct_for_ticker(ticker: str) -> Optional[float]:
@@ -3066,7 +3484,7 @@ def record_buy(
                     stop = price - (1.5 * atr_val)
 
         except Exception as exc:
-            print(f"[BUY ATR ERROR] {ticker}: {exc}") 
+            print(f"[BUY ATR ERROR] {ticker}: {exc}")
 
     if stop is None or stop <= 0 or stop >= price:
 
@@ -3410,6 +3828,219 @@ def update_position_fields(ticker: str, fields: Dict[str, Any]) -> None:
 
     refresh_portfolio()
 
+
+def write_json_file(path: str, data: Any) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(safe_convert(data), f, indent=2)
+
+
+def table_rows(table: str) -> List[Dict[str, Any]]:
+    allowed = {
+        "positions",
+        "trades",
+        "signals",
+        "equity_snapshots",
+        "withdrawals",
+        "cooldowns",
+        "breakout_memory",
+    }
+
+    if table not in allowed:
+        raise ValueError("Table export not allowed")
+
+    conn = db_connect()
+
+    try:
+        rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+        return [dict(row) for row in rows]
+
+    finally:
+        conn.close()
+
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    """
+    Exports portfolio, trades, signals, withdrawals, risk snapshot,
+    and key database tables into a zip file.
+
+    This is safe to forward for analysis because it does not include API keys,
+    Telegram token, or environment variables.
+    """
+    refresh_portfolio()
+
+    ts = ny_now().strftime("%Y%m%d_%H%M%S")
+    export_root = os.path.join(DATA_DIR, "exports")
+    export_dir = os.path.join(export_root, f"{prefix}_{ts}")
+
+    os.makedirs(export_dir, exist_ok=True)
+
+    risk = open_risk_details()
+    withdrawal_plan = compute_withdrawal_plan()
+
+    write_json_file(
+        os.path.join(export_dir, "portfolio.json"),
+        portfolio
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "trades.json"),
+        load_trades()
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "signals.json"),
+        load_signals()
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "withdrawals.json"),
+        load_withdrawals()
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "open_risk.json"),
+        risk
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "withdrawal_plan.json"),
+        withdrawal_plan
+    )
+
+    write_json_file(
+        os.path.join(export_dir, "meta_snapshot.json"),
+        {
+            "strategy_version": STRATEGY_VERSION,
+            "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "last_scan_day": get_meta("last_scan_day"),
+            "last_scan_bar_date": get_meta("last_scan_bar_date"),
+            "last_equity_snapshot_date": get_meta("last_equity_snapshot_date"),
+            "withdrawal_high_water_mark": get_meta("withdrawal_high_water_mark"),
+            "withdrawal_hwm_initialized_at": get_meta("withdrawal_hwm_initialized_at"),
+            "positions_count": len(portfolio["positions"]),
+            "cash": portfolio["cash"],
+            "panic_mode": PANIC_MODE,
+        }
+    )
+
+    for table in [
+        "positions",
+        "trades",
+        "signals",
+        "equity_snapshots",
+        "withdrawals",
+        "cooldowns",
+        "breakout_memory",
+    ]:
+        write_json_file(
+            os.path.join(export_dir, f"{table}.table.json"),
+            table_rows(table)
+        )
+
+    # CSV versions are useful for analysis.
+    try:
+        trades = load_trades()
+        if trades:
+            pd.DataFrame(safe_convert(trades)).to_csv(
+                os.path.join(export_dir, "trades.csv"),
+                index=False
+            )
+
+        positions_rows = []
+        for ticker, pos in portfolio["positions"].items():
+            row = {"ticker": ticker}
+            row.update(safe_convert(pos))
+            positions_rows.append(row)
+
+        if positions_rows:
+            pd.DataFrame(positions_rows).to_csv(
+                os.path.join(export_dir, "positions.csv"),
+                index=False
+            )
+
+    except Exception as exc:
+        print(f"[CSV EXPORT WARNING] {exc}")
+
+    zip_path = f"{export_dir}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(export_dir):
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                arcname = os.path.relpath(full_path, export_dir)
+                z.write(full_path, arcname)
+
+    return zip_path
+
+
+def send_json_export(data: Any, filename: str, caption: str = "") -> None:
+    path = os.path.join(DATA_DIR, filename)
+
+    write_json_file(path, data)
+
+    send_document(path, caption=caption or filename)
+
+def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+    global last_signals, missing_price_counts
+    """
+    Dangerous command used only when moving from paper testing to live.
+
+    It exports a backup first, then clears trading state.
+    It intentionally keeps Telegram processed update history and legacy migration flag
+    so old Telegram commands and old JSON files are not accidentally reprocessed.
+    """
+    backup_path = export_state_bundle(prefix="pre_reset_backup")
+
+    with db_tx() as conn:
+        conn.execute("DELETE FROM positions")
+        conn.execute("DELETE FROM trades")
+        conn.execute("DELETE FROM signals")
+        conn.execute("DELETE FROM cooldowns")
+        conn.execute("DELETE FROM breakout_memory")
+        conn.execute("DELETE FROM equity_snapshots")
+        conn.execute("DELETE FROM withdrawals")
+
+        # Set cash to zero as a fail-safe.
+        # You will explicitly set real live cash afterward.
+        set_cash_tx(conn, 0.0)
+
+        conn.execute(
+            """
+            DELETE FROM meta
+            WHERE key IN (
+                'last_scan_day',
+                'last_scan_bar_date',
+                'last_equity_snapshot_date',
+                'withdrawal_high_water_mark',
+                'withdrawal_hwm_initialized_at',
+                'last_withdrawal_check_date',
+                'last_withdrawal_alert_ts'
+            )
+            """
+        )
+
+        mark_update_processed_tx(conn, update_id, "processed_resetall")
+
+    refresh_portfolio()
+
+    last_signals = {}
+    missing_price_counts = {}
+
+    audit("RESET_ALL", "Paper/live state reset; backup exported first")
+
+    return True, (
+        "🧨 RESET ALL COMPLETE\n\n"
+        "A backup was exported first.\n\n"
+        "Current bot state:\n"
+        f"💵 Cash: {format_money(portfolio['cash'])}\n"
+        f"📦 Positions: {len(portfolio['positions'])}\n\n"
+        "Next live-start commands:\n"
+        "1) setcash YOUR_REAL_CASH\n"
+        "2) withdrawinit\n"
+        "3) scanstatus\n"
+        "4) portfolio\n"
+        "5) openrisk"
+    ), backup_path
  
 
 # -----------------------------------------------------------------------------
@@ -3465,19 +4096,15 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             "Commands:\n"
 
             "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
-
             "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
-
+            "download_state | download_portfolio | download_signals | download_withdrawals\n"
+            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
+            "resetall  (then resetall CONFIRM-LIVE)\n"
             "setcash AMOUNT\n"
-
             "editbuy TICKER PRICE\n"
-
             "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\n"
-
             "bought TICKER SHARES at PRICE\n"
-
             "sold TICKER SHARES at PRICE"
-
         )
 
         return
@@ -3626,7 +4253,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "resetscan":
         with db_tx() as conn:
-            conn.execute("DELETE FROM meta WHERE key = 'last_scan_day'")
+            conn.execute(
+                "DELETE FROM meta WHERE key IN ('last_scan_day', 'last_scan_bar_date')"
+            )
 
         send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
         return
@@ -3653,7 +4282,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         if scanned_ok and official_scan_window:
             today = current_ny.date().isoformat()
+            expected_bar = expected_daily_bar_date()
+
             set_meta("last_scan_day", today)
+
+            if expected_bar:
+                set_meta("last_scan_bar_date", expected_bar)
+
             send("✅ Manual scan completed.\n\n📅 Marked done for today.")
         elif scanned_ok:
             send(
@@ -3662,6 +4297,108 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             )
         else:
             send("⚠️ Manual scan completed, but historical data was not usable.")
+
+        return
+
+    if text_lower == "withdrawinit":
+        snapshot = compute_equity_snapshot_data()
+        equity = float(snapshot["equity"])
+
+        set_withdrawal_hwm(equity)
+
+        send(
+            "🏔️ WITHDRAWAL HIGH-WATER MARK RESET\n\n"
+            f"💼 Current equity: {format_money(equity)}\n\n"
+            "Future withdrawal signals will only use profits above this level."
+        )
+
+        return
+
+    if text_lower == "withdrawplan":
+        plan = compute_withdrawal_plan()
+
+        if not plan["initialized"]:
+            send(
+                "🏦 WITHDRAWAL PLAN\n\n"
+                f"💼 Equity: {format_money(plan['equity'])}\n"
+                f"💵 Cash: {format_money(plan['cash'])}\n\n"
+                f"⚠️ {plan['reason']}"
+            )
+
+            return
+
+        send(
+            "🏦 WITHDRAWAL PLAN\n\n"
+            f"📊 Phase: {plan['phase']}\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
+            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\n"
+            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
+            f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
+            f"🧮 Gross suggested: {format_money(plan['gross_suggested'])}\n"
+            f"💵 Cash cap: {format_money(plan['cash_cap'])}\n"
+            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
+            f"🗓️ Days since withdrawal/review start: {plan['days_since_clock']}\n"
+            f"🚦 Eligible: {yes_no(plan['eligible'])}\n"
+            f"ℹ️ Reason: {plan['reason']}"
+        )
+
+        return
+
+    if text_lower.startswith("withdrawdone"):
+        parts = text.split(maxsplit=2)
+
+        if len(parts) < 2:
+            send("Usage: withdrawdone 250")
+            return
+
+        try:
+            amount = float(parts[1])
+        except ValueError:
+            send("Invalid amount")
+            return
+
+        note = parts[2] if len(parts) >= 3 else ""
+
+        ok, msg = record_withdrawal(
+            amount,
+            note=note,
+            update_id=update_id
+        )
+
+        send(msg if ok else "❌ ERROR: " + msg)
+
+        return
+
+    if text_lower == "showwithdrawals":
+        withdrawals = load_withdrawals()
+
+        if not withdrawals:
+            send("🏦 WITHDRAWALS\n\nNo withdrawals recorded yet.")
+            return
+
+        total = sum(float(w["amount"]) for w in withdrawals)
+
+        msg = (
+            "🏦 WITHDRAWALS\n\n"
+            f"💸 Total withdrawn: {format_money(total)}\n"
+            f"🧾 Count: {len(withdrawals)}\n\n"
+        )
+
+        for item in withdrawals[-10:]:
+            dt = datetime.fromtimestamp(
+                item["time"],
+                NY_TZ
+            ).strftime("%Y-%m-%d")
+
+            msg += (
+                f"📅 {dt}\n"
+                f"Amount: {format_money(item['amount'])}\n"
+                f"Equity before: {format_money(item['equity_before'])}\n"
+                f"HWM after: {format_money(item['high_water_mark_after'])}\n\n"
+            )
+
+        send(msg[:MAX_TELEGRAM_MESSAGE])
 
         return
 
@@ -3729,28 +4466,37 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
  
 
     if text_lower == "showportfolio_raw":
-
         refresh_portfolio()
 
-        send(json.dumps(safe_convert(portfolio), indent=2)[:MAX_TELEGRAM_MESSAGE])
+        send_json_export(
+            portfolio,
+            "portfolio_raw.json",
+            "portfolio_raw.json"
+        )
 
         return
 
  
 
     if text_lower == "showtrades":
-
-        send(json.dumps(safe_convert(load_trades()), indent=2)[:MAX_TELEGRAM_MESSAGE])
+        send_json_export(
+            load_trades(),
+            "trades_export.json",
+            "trades_export.json"
+        )
 
         return
 
  
 
     if text_lower == "showsignals":
-
         last_signals = load_signals()
 
-        send(json.dumps(safe_convert(last_signals), indent=2)[:MAX_TELEGRAM_MESSAGE])
+        send_json_export(
+            last_signals,
+            "signals_export.json",
+            "signals_export.json"
+        )
 
         return
 
@@ -3822,6 +4568,69 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
+    if text_lower == "download_state":
+        path = export_state_bundle(prefix="bot_state_export")
+
+        send_document(
+            path,
+            caption="bot_state_export.zip"
+        )
+
+        return
+
+    if text_lower == "download_portfolio":
+        refresh_portfolio()
+
+        send_json_export(
+            portfolio,
+            "portfolio_export.json",
+            "portfolio_export.json"
+        )
+
+        return
+
+    if text_lower == "download_signals":
+        send_json_export(
+            load_signals(),
+            "signals_export.json",
+            "signals_export.json"
+        )
+
+        return
+
+    if text_lower == "download_withdrawals":
+        send_json_export(
+            load_withdrawals(),
+            "withdrawals_export.json",
+            "withdrawals_export.json"
+        )
+
+        return
+
+    if text_lower == "resetall":
+        send(
+            "⚠️ DANGEROUS RESET COMMAND\n\n"
+            "This will export a backup, then clear:\n"
+            "positions, trades, signals, cooldowns, breakout memory, equity snapshots, withdrawals, and cash.\n\n"
+            "It will NOT delete Telegram update history, so old commands will not be reprocessed.\n\n"
+            "To confirm, send exactly:\n"
+            "resetall CONFIRM-LIVE"
+        )
+
+        return
+
+    if text_lower == "resetall confirm-live":
+        ok, msg, backup_path = reset_all_paper_state(update_id=update_id)
+
+        if backup_path:
+            send_document(
+                backup_path,
+                caption="pre_reset_backup.zip"
+            )
+
+        send(msg if ok else "❌ ERROR: " + msg)
+
+        return
  
 
     if text_lower.startswith("setcash"):
@@ -4928,12 +5737,25 @@ def scan_market() -> bool:
 
             risk_amount = (price - stop) * shares
 
- 
-
             capital = shares * price
 
-            projected_risk_pct = (risk_details["initial_risk_dollars"] + reserved_signal_risk + risk_amount) / risk_details["equity"]
+            equity_at_signal = float(risk_details["equity"])
 
+            position_size_pct = (
+                (capital / equity_at_signal) * 100
+                if equity_at_signal > 0
+                else 0.0
+            )
+
+            single_trade_risk_pct = (
+                (risk_amount / equity_at_signal) * 100
+                if equity_at_signal > 0
+                else 0.0
+            )
+
+            max_valid_entry = price * (1 + MAX_ENTRY_EXTENSION_PCT)
+
+            projected_risk_pct = (risk_details["initial_risk_dollars"] + reserved_signal_risk + risk_amount) / risk_details["equity"]
             projected_capital = reserved_signal_capital + capital
 
             if projected_risk_pct > MAX_TOTAL_RISK:
@@ -4985,8 +5807,12 @@ def scan_market() -> bool:
                 "signal_date_ny": ny_date_str(),
                 "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
                 "signal_price": round(price, 2),
+                "max_valid_entry": round(max_valid_entry, 2),
                 "shares": int(shares),
                 "capital": round(capital, 2),
+                "equity_at_signal": round(equity_at_signal, 2),
+                "position_size_pct": round(position_size_pct, 2),
+                "single_trade_risk_pct": round(single_trade_risk_pct, 2),
                 "risk_amount": round(risk_amount, 2),
                 "projected_total_risk_pct": round(projected_risk_pct * 100, 2)
 
@@ -4999,14 +5825,19 @@ def scan_market() -> bool:
                 f"🏷️ Ticker: {ticker}\n"
                 f"🌎 Market: {market_label(market)}\n"
                 f"⚙️ Setup: {setup_label(entry_data['setup_type'])}\n\n"
-                f"💵 Price: {round(price, 2)}\n"
+                f"💵 Signal price: {round(price, 2)}\n"
+                f"🚦 Max valid entry: {round(max_valid_entry, 2)}\n"
                 f"📊 RSI: {round(float(rsi_val), 1)}\n"
                 f"⭐ Score: {score}\n\n"
-                f"🛒 Buy: {shares} shares\n"
-                f"💰 Capital: {format_money(capital)}\n\n"
+                f"🛒 Bot buy size: {shares} shares\n"
+                f"💰 Capital: {format_money(capital)}\n"
+                f"📐 Position size: {round(position_size_pct, 2)}% of equity\n"
+                f"🧭 Sizing guide: use about {round(position_size_pct, 2)}% of your own account\n\n"
                 f"🛡️ Stop: {round(stop, 2)}\n"
-                f"⚠️ Risk: {format_money(risk_amount)}\n"
+                f"⚠️ Trade risk: {format_money(risk_amount)} "
+                f"({round(single_trade_risk_pct, 2)}% of equity)\n"
                 f"📉 Projected total risk: {round(projected_risk_pct * 100, 2)}%"
+                f"\n\n⚠️ Educational signal only. Use your own risk and account size."
             )
  
 
@@ -5090,7 +5921,7 @@ def startup_checks() -> None:
 
             raise RuntimeError(f"Invalid position state for {ticker}: invalid entry price")
 
- 
+    auto_initialize_withdrawal_hwm_if_needed()
 
  
 
@@ -5152,8 +5983,9 @@ def main() -> None:
 
             maybe_save_daily_equity_snapshot()
 
-            get_updates()
+            maybe_send_withdrawal_signal()
 
+            get_updates()
  
 
             if (not MANAGE_ONLY_REGULAR_HOURS) or is_regular_market_hours(current_ny):
@@ -5168,11 +6000,14 @@ def main() -> None:
                 if current_ny.weekday() == 5:
 
                     last_scan_day = get_meta("last_scan_day")
+                    last_scan_bar = get_meta("last_scan_bar_date")
                     today = current_ny.date().isoformat()
+                    expected_bar = expected_daily_bar_date()
 
                     if (
                         is_morning_scan_window(current_ny)
                         and last_scan_day != today
+                        and (expected_bar is None or last_scan_bar != expected_bar)
                         and now_ts() - LAST_SCAN_ATTEMPT > 300
                     ):
 
@@ -5183,6 +6018,9 @@ def main() -> None:
                         if scanned_ok:
                             set_meta("last_scan_day", today)
 
+                            if expected_bar:
+                                set_meta("last_scan_bar_date", expected_bar)
+
                 time.sleep(60)
                 continue
  
@@ -5191,11 +6029,14 @@ def main() -> None:
             # Run once during the New York near-close scan window.
 
             last_scan_day = get_meta("last_scan_day")
+            last_scan_bar = get_meta("last_scan_bar_date")
             today = current_ny.date().isoformat()
+            expected_bar = expected_daily_bar_date()
 
             if (
                 is_near_close_scan_window(current_ny)
                 and last_scan_day != today
+                and (expected_bar is None or last_scan_bar != expected_bar)
                 and now_ts() - LAST_SCAN_ATTEMPT > 300
             ):
 
@@ -5205,6 +6046,9 @@ def main() -> None:
 
                 if scanned_ok:
                     set_meta("last_scan_day", today)
+
+                    if expected_bar:
+                        set_meta("last_scan_bar_date", expected_bar)
                 else:
                     print("[SCAN NOT MARKED DONE] Historical data was not usable; will retry.")
 
