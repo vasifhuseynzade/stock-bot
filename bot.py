@@ -78,6 +78,15 @@ except ValueError as exc:
 
     raise RuntimeError("CHAT_ID must be an integer") from exc
 
+
+try:
+    SIGNAL_CHANNEL_ID = int(os.getenv("SIGNAL_CHANNEL_ID", "0"))
+except ValueError:
+    SIGNAL_CHANNEL_ID = 0
+
+PUBLIC_SIGNAL_ENABLED = os.getenv("PUBLIC_SIGNAL_ENABLED", "0").strip() == "1"
+PUBLIC_SIGNAL_SILENT = os.getenv("PUBLIC_SIGNAL_SILENT", "0").strip() == "1"
+
  
 
 if not TOKEN or CHAT_ID == 0:
@@ -1685,7 +1694,130 @@ def send_document(path: str, caption: str = "") -> None:
         send(f"ERROR sending document: {exc}")
 
  
+def fmt_public_number(value: Any, decimals: int = 2) -> str:
+    try:
+        if value is None:
+            return "n/a"
 
+        return str(round(float(value), decimals))
+
+    except Exception:
+        return "n/a"
+
+
+def send_public_signal(msg: Any) -> Tuple[bool, str]:
+    """
+    Send clean public trade signals to Telegram channel.
+
+    This is intentionally separate from private admin Telegram messages.
+    """
+    if not PUBLIC_SIGNAL_ENABLED:
+        return False, "PUBLIC_SIGNAL_ENABLED is off"
+
+    if SIGNAL_CHANNEL_ID == 0:
+        return False, "SIGNAL_CHANNEL_ID is missing or invalid"
+
+    text = str(msg)
+
+    if not text:
+        text = " "
+
+    chunks = [
+        text[i:i + MAX_TELEGRAM_MESSAGE]
+        for i in range(0, len(text), MAX_TELEGRAM_MESSAGE)
+    ]
+
+    for chunk in chunks:
+        try:
+            res = SESSION.post(
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                json={
+                    "chat_id": SIGNAL_CHANNEL_ID,
+                    "text": chunk,
+                    "disable_notification": PUBLIC_SIGNAL_SILENT,
+                },
+                timeout=5,
+            )
+
+            if res.status_code >= 400:
+                err = f"HTTP {res.status_code}: {res.text[:500]}"
+                print(f"[PUBLIC SIGNAL HTTP ERROR] {err}")
+                return False, err
+
+            payload = res.json()
+
+            if not payload.get("ok", False):
+                err = str(payload)
+                print(f"[PUBLIC SIGNAL API ERROR] {err}")
+                return False, err
+
+        except Exception as exc:
+            err = str(exc)
+            print(f"[PUBLIC SIGNAL ERROR] {err}")
+            return False, err
+
+    return True, "sent"
+
+
+def format_public_entry_signal(
+    ticker: str,
+    entry_data: Dict[str, Any]
+) -> str:
+    setup = entry_data.get("setup_type", "unknown")
+    market = entry_data.get("market", "UNKNOWN")
+
+    return (
+        "📈 TRADE SIGNAL\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        f"🌎 Market: {market_label(market)}\n"
+        f"⚙️ Setup: {setup_label(setup)}\n\n"
+        f"💵 Signal price: {fmt_public_number(entry_data.get('signal_price'))}\n"
+        f"🚦 Max valid entry: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
+        f"🛡️ Stop: {fmt_public_number(entry_data.get('stop'))}\n\n"
+        f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
+        f"⭐ Score: {entry_data.get('score')}\n"
+        f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
+        f"📐 Position size guide: {fmt_public_number(entry_data.get('position_size_pct'))}% of account\n"
+        f"⚠️ Trade risk guide: {fmt_public_number(entry_data.get('single_trade_risk_pct'))}% of account\n\n"
+        "⚠️ Educational signal only. Use your own risk and account size."
+    )
+
+
+def format_public_partial_signal(
+    ticker: str,
+    price: float,
+    trade: Dict[str, Any]
+) -> str:
+    return (
+        "💰 PARTIAL TAKE-PROFIT\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        f"💵 Price: {fmt_public_number(price)}\n"
+        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
+        "Action idea: reduce part of the position / protect profits.\n\n"
+        "⚠️ Educational signal only."
+    )
+
+
+def format_public_exit_signal(
+    ticker: str,
+    price: float,
+    trade: Dict[str, Any],
+    reason: str
+) -> str:
+    reason_label = {
+        "stop": "Stop / risk exit",
+        "manual": "Manual exit",
+    }.get(str(reason).lower(), str(reason))
+
+    return (
+        "📉 EXIT SIGNAL\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        f"📌 Reason: {reason_label}\n"
+        f"💵 Exit price: {fmt_public_number(price)}\n"
+        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
+        "Action idea: close the position / follow your own risk plan.\n\n"
+        "⚠️ Educational signal only."
+    )
  
 
 def get_updates() -> None:
@@ -3685,6 +3817,25 @@ def record_sell(
         f"reason={exit_reason}"
     )
 
+    if exit_reason == "manual":
+        if remaining <= 0:
+            send_public_signal(
+                format_public_exit_signal(
+                    ticker=ticker,
+                    price=price,
+                    trade=trade,
+                    reason="manual"
+                )
+            )
+        else:
+            send_public_signal(
+                format_public_partial_signal(
+                    ticker=ticker,
+                    price=price,
+                    trade=trade
+                )
+            )
+
     return True, (
         f"💰 SOLD {ticker}\n\n"
         f"📦 Shares: {shares}\n"
@@ -4097,6 +4248,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
             "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
+            "testchannel\n"
             "download_state | download_portfolio | download_signals | download_withdrawals\n"
             "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
             "resetall  (then resetall CONFIRM-LIVE)\n"
@@ -4109,7 +4261,18 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
- 
+    if text_lower == "testchannel":
+        ok, info = send_public_signal(
+            "🧪 TEST SIGNAL CHANNEL\n\n"
+            "If you see this, public channel forwarding works."
+        )
+
+        if ok:
+            send("✅ Public signal channel test sent.")
+        else:
+            send(f"❌ Public signal channel test failed:\n\n{info}")
+
+        return
 
     if text_lower == "pnl":
 
@@ -5408,6 +5571,15 @@ def manage_positions() -> None:
                     f"R: {trade.get('r_multiple')}"
                 )
 
+                send_public_signal(
+                    format_public_exit_signal(
+                        ticker=ticker,
+                        price=fill_price,
+                        trade=trade,
+                        reason="stop"
+                    )
+                )
+
             continue
 
  
@@ -5456,7 +5628,20 @@ def manage_positions() -> None:
 
             if trade:
 
-                send(f"💰 PARTIAL {ticker}\nShares: {sell_shares}\nP/L: {format_money(trade['profit'])}\nR: {trade.get('r_multiple')}")
+                send(
+                    f"💰 PARTIAL {ticker}\n"
+                    f"Shares: {sell_shares}\n"
+                    f"P/L: {format_money(trade['profit'])}\n"
+                    f"R: {trade.get('r_multiple')}"
+                )
+
+                send_public_signal(
+                    format_public_partial_signal(
+                        ticker=ticker,
+                        price=price,
+                        trade=trade
+                    )
+                )
 
  
 
@@ -5799,6 +5984,7 @@ def scan_market() -> bool:
                 "score": int(score),
                 "market": market,
                 "atr": round((price - stop) / 1.5, 4),
+                "stop": round(stop, 2),
                 "breakout": is_breakout,
                 "setup_type": "breakout" if is_breakout else "pullback",
                 "volume_ratio": None if volume_ratio is None else round(float(volume_ratio), 2),
@@ -5840,6 +6026,9 @@ def scan_market() -> bool:
                 f"\n\n⚠️ Educational signal only. Use your own risk and account size."
             )
  
+            send_public_signal(
+                format_public_entry_signal(ticker, entry_data)
+            )
 
             save_signal(ticker, now_ts(), entry_data)
 
