@@ -1704,6 +1704,47 @@ def fmt_public_number(value: Any, decimals: int = 2) -> str:
     except Exception:
         return "n/a"
 
+def public_signal_footer() -> str:
+    return (
+        "⚠️ Not financial advice. Educational / forward-test bot alert only.\n"
+        "Do your own research and due diligence.\n"
+        "Use your own risk tolerance, account size, tax situation, and execution plan.\n"
+        "I may hold or trade this instrument. Signals can be wrong, delayed, or invalidated.\n"
+        "Paid access, if any, is for automated alerts only — no profit guarantee or personalized advice."
+    )
+
+
+def public_channel_terms_text() -> str:
+    return (
+        "📌 CHANNEL DISCLAIMER\n\n"
+        "This private channel shares automated trading-bot alerts for educational and forward-testing purposes only.\n\n"
+        "Nothing posted here is financial advice, investment advice, personalized advice, portfolio management, "
+        "or a guarantee of profit.\n\n"
+        "I am not your financial adviser. I do not know your financial situation, account size, risk tolerance, "
+        "tax situation, investment goals, or execution ability.\n\n"
+        "Trading stocks, ETFs, crypto-related equities, and high-volatility assets can cause losses. "
+        "Losses can happen because of gaps, slippage, delayed execution, bad data, earnings, news, market events, "
+        "or system errors.\n\n"
+        "All decisions are your own. Do your own research and due diligence before acting. "
+        "Never risk money you cannot afford to lose.\n\n"
+        "I may personally hold, buy, or sell instruments mentioned in this channel.\n\n"
+        "Signals may be delayed, wrong, changed, or invalidated by market conditions. "
+        "Past performance, paper-trading results, and forward-test results do not guarantee future results.\n\n"
+        "Any paid access, if offered later, is only for access to automated bot alerts and educational tracking. "
+        "It is not payment for guaranteed returns, personalized advice, or account management."
+    )
+
+
+def should_forward_public_position(pos: Dict[str, Any]) -> bool:
+    """
+    Only forward exits/partials to the public channel if the original entry
+    was also sent to the public channel.
+
+    This prevents old paper positions or manual/private positions from creating
+    confusing public exit signals.
+    """
+    entry_data = pos.get("entry_data", {}) or {}
+    return bool(entry_data.get("public_signal_sent"))
 
 def send_public_signal(msg: Any) -> Tuple[bool, str]:
     """
@@ -1779,7 +1820,7 @@ def format_public_entry_signal(
         f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
         f"📐 Position size guide: {fmt_public_number(entry_data.get('position_size_pct'))}% of account\n"
         f"⚠️ Trade risk guide: {fmt_public_number(entry_data.get('single_trade_risk_pct'))}% of account\n\n"
-        "⚠️ Educational signal only. Use your own risk and account size."
+        f"{public_signal_footer()}"
     )
 
 
@@ -1793,8 +1834,11 @@ def format_public_partial_signal(
         f"🏷️ Ticker: {ticker}\n"
         f"💵 Price: {fmt_public_number(price)}\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
-        "Action idea: reduce part of the position / protect profits.\n\n"
-        "⚠️ Educational signal only."
+
+        "Bot status: partial-profit condition triggered.\n"
+        "Review your own plan before taking any action.\n\n"
+
+        f"{public_signal_footer()}"
     )
 
 
@@ -1815,8 +1859,11 @@ def format_public_exit_signal(
         f"📌 Reason: {reason_label}\n"
         f"💵 Exit price: {fmt_public_number(price)}\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
-        "Action idea: close the position / follow your own risk plan.\n\n"
-        "⚠️ Educational signal only."
+
+        "Bot status: exit condition triggered.\n"
+        "Review your own plan before taking any action.\n\n"
+
+        f"{public_signal_footer()}"
     )
  
 
@@ -3817,7 +3864,7 @@ def record_sell(
         f"reason={exit_reason}"
     )
 
-    if exit_reason == "manual":
+    if exit_reason == "manual" and should_forward_public_position(pos):
         if remaining <= 0:
             send_public_signal(
                 format_public_exit_signal(
@@ -4248,7 +4295,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
             "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
-            "testchannel\n"
+            "testchannel | postchannelterms\n"
             "download_state | download_portfolio | download_signals | download_withdrawals\n"
             "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
             "resetall  (then resetall CONFIRM-LIVE)\n"
@@ -4274,11 +4321,24 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
-    if text_lower == "pnl":
+    if text_lower == "postchannelterms":
+        ok, info = send_public_signal(public_channel_terms_text())
 
-        send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
+        if ok:
+            send(
+                "✅ Channel disclaimer posted.\n\n"
+                "Now open the channel and pin that message manually."
+            )
+        else:
+            send(f"❌ Channel disclaimer failed:\n\n{info}")
 
         return
+
+        if text_lower == "pnl":
+
+            send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
+
+            return
 
  
 
@@ -5571,14 +5631,15 @@ def manage_positions() -> None:
                     f"R: {trade.get('r_multiple')}"
                 )
 
-                send_public_signal(
-                    format_public_exit_signal(
-                        ticker=ticker,
-                        price=fill_price,
-                        trade=trade,
-                        reason="stop"
+                if should_forward_public_position(pos):
+                    send_public_signal(
+                        format_public_exit_signal(
+                            ticker=ticker,
+                            price=fill_price,
+                            trade=trade,
+                            reason="stop"
+                        )
                     )
-                )
 
             continue
 
@@ -5635,15 +5696,14 @@ def manage_positions() -> None:
                     f"R: {trade.get('r_multiple')}"
                 )
 
-                send_public_signal(
-                    format_public_partial_signal(
-                        ticker=ticker,
-                        price=price,
-                        trade=trade
+                if should_forward_public_position(pos):
+                    send_public_signal(
+                        format_public_partial_signal(
+                            ticker=ticker,
+                            price=price,
+                            trade=trade
+                        )
                     )
-                )
-
- 
 
 # -----------------------------------------------------------------------------
 
@@ -6026,9 +6086,13 @@ def scan_market() -> bool:
                 f"\n\n⚠️ Educational signal only. Use your own risk and account size."
             )
  
-            send_public_signal(
+            public_ok, public_info = send_public_signal(
                 format_public_entry_signal(ticker, entry_data)
             )
+
+            entry_data["public_signal_sent"] = bool(public_ok)
+            entry_data["public_signal_time"] = now_ts() if public_ok else None
+            entry_data["public_signal_error"] = None if public_ok else str(public_info)
 
             save_signal(ticker, now_ts(), entry_data)
 
