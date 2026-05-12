@@ -131,7 +131,7 @@ STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
 
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 
-MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.03"))
+MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
 # Withdrawal / profit distribution controls.
 WITHDRAWAL_REVIEW_DAYS = int(os.getenv("WITHDRAWAL_REVIEW_DAYS", "90"))
@@ -1808,13 +1808,13 @@ def format_public_entry_signal(
     market = entry_data.get("market", "UNKNOWN")
 
     return (
-        "📈 TRADE SIGNAL\n\n"
+        "📈 ENTRY SIGNAL\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🌎 Market: {market_label(market)}\n"
         f"⚙️ Setup: {setup_label(setup)}\n\n"
-        f"💵 Signal price: {fmt_public_number(entry_data.get('signal_price'))}\n"
-        f"🚦 Max valid entry: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
-        f"🛡️ Stop: {fmt_public_number(entry_data.get('stop'))}\n\n"
+        f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\n"
+        f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
+        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\n\n"
         f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
         f"⭐ Score: {entry_data.get('score')}\n"
         f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
@@ -1832,7 +1832,7 @@ def format_public_partial_signal(
     return (
         "💰 PARTIAL TAKE-PROFIT\n\n"
         f"🏷️ Ticker: {ticker}\n"
-        f"💵 Price: {fmt_public_number(price)}\n"
+        f"💵 Partial exit price: {fmt_public_number(price)}\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
         "Bot status: partial-profit condition triggered.\n"
@@ -3636,10 +3636,10 @@ def record_buy(
             return (
                 False,
                 f"Entry rejected: price too extended above signal.\n"
-                f"Signal: {round(float(signal_price), 2)}\n"
+                f"Entry signal: {round(float(signal_price), 2)}\n"
                 f"Your price: {round(price, 2)}\n"
-                f"Max allowed: {round(max_allowed_price, 2)} "
-                f"({round(MAX_ENTRY_EXTENSION_PCT * 100, 2)}%)"
+                f"Max entry limit: {round(max_allowed_price, 2)} "
+                f"({round(MAX_ENTRY_EXTENSION_PCT * 100, 2)}% above signal)"
             )
 
     atr_val: Optional[float] = None
@@ -3886,7 +3886,7 @@ def record_sell(
     return True, (
         f"💰 SOLD {ticker}\n\n"
         f"📦 Shares: {shares}\n"
-        f"💵 Price: {price}\n"
+        f"💵 Exit Price: {price}\n"
         f"📊 P/L: {format_money(trade['profit'])}\n"
         f"💼 Cash: {format_money(portfolio['cash'])}"
     )
@@ -4334,11 +4334,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
-        if text_lower == "pnl":
+    if text_lower == "pnl":
 
-            send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
+        send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
 
-            return
+        return
 
  
 
@@ -5627,6 +5627,7 @@ def manage_positions() -> None:
             if trade:
                 send(
                     f"📉 EXIT {ticker}\n"
+                    f"💵 Exit price: {round(fill_price, 2)}\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
                 )
@@ -5692,6 +5693,7 @@ def manage_positions() -> None:
                 send(
                     f"💰 PARTIAL {ticker}\n"
                     f"Shares: {sell_shares}\n"
+                    f"💵 Partial exit price: {round(price, 2)}\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
                 )
@@ -6071,15 +6073,15 @@ def scan_market() -> bool:
                 f"🏷️ Ticker: {ticker}\n"
                 f"🌎 Market: {market_label(market)}\n"
                 f"⚙️ Setup: {setup_label(entry_data['setup_type'])}\n\n"
-                f"💵 Signal price: {round(price, 2)}\n"
-                f"🚦 Max valid entry: {round(max_valid_entry, 2)}\n"
+                f"🟢 ENTRY: {round(price, 2)}\n"
+                f"🟡 MAX ENTRY LIMIT: {round(max_valid_entry, 2)}\n"
+                f"🔴 STOP/LOSS: {round(stop, 2)}\n\n"
                 f"📊 RSI: {round(float(rsi_val), 1)}\n"
                 f"⭐ Score: {score}\n\n"
                 f"🛒 Bot buy size: {shares} shares\n"
                 f"💰 Capital: {format_money(capital)}\n"
                 f"📐 Position size: {round(position_size_pct, 2)}% of equity\n"
                 f"🧭 Sizing guide: use about {round(position_size_pct, 2)}% of your own account\n\n"
-                f"🛡️ Stop: {round(stop, 2)}\n"
                 f"⚠️ Trade risk: {format_money(risk_amount)} "
                 f"({round(single_trade_risk_pct, 2)}% of equity)\n"
                 f"📉 Projected total risk: {round(projected_risk_pct * 100, 2)}%"
