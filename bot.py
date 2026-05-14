@@ -133,6 +133,16 @@ MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
+# Manual buy protection.
+# These prevent typo buys like UBST when the real signal was UPST.
+REQUIRE_ACTIVE_SIGNAL_FOR_BUY = os.getenv("REQUIRE_ACTIVE_SIGNAL_FOR_BUY", "1") != "0"
+REQUIRE_BUY_TICKER_IN_WATCHLIST = os.getenv("REQUIRE_BUY_TICKER_IN_WATCHLIST", "1") != "0"
+REQUIRE_LIVE_QUOTE_FOR_BUY = os.getenv("REQUIRE_LIVE_QUOTE_FOR_BUY", "1") != "0"
+
+# Reject manual buy price if it is too far from current quote.
+# This protects against typo prices too.
+BUY_QUOTE_DEVIATION_LIMIT = float(os.getenv("BUY_QUOTE_DEVIATION_LIMIT", "0.05"))
+
 # Withdrawal / profit distribution controls.
 WITHDRAWAL_REVIEW_DAYS = int(os.getenv("WITHDRAWAL_REVIEW_DAYS", "90"))
 
@@ -409,6 +419,27 @@ def audit(event: str, details: str = "") -> None:
 
 def format_money(value: float) -> str:
     return f"${round(value, 2)}"
+
+def pct_from_entry(entry_price: Any, exit_price: Any) -> Optional[float]:
+    try:
+        entry = float(entry_price)
+        exit_ = float(exit_price)
+
+        if entry <= 0:
+            return None
+
+        return ((exit_ - entry) / entry) * 100
+
+    except Exception:
+        return None
+
+
+def format_pct(value: Optional[float]) -> str:
+    if value is None:
+        return "n/a"
+
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{round(value, 2)}%"
 
 def market_label(market: str) -> str:
     labels = {
@@ -1829,10 +1860,15 @@ def format_public_partial_signal(
     price: float,
     trade: Dict[str, Any]
 ) -> str:
+    gain_pct = pct_from_entry(
+        trade.get("entry_price"),
+        price
+    )
+
     return (
         "💰 PARTIAL TAKE-PROFIT\n\n"
         f"🏷️ Ticker: {ticker}\n"
-        f"💵 Partial exit price: {fmt_public_number(price)}\n"
+        f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
         "Bot status: partial-profit condition triggered.\n"
@@ -3629,6 +3665,44 @@ def record_buy(
 
     signal_price = signal_data.get("signal_price")
 
+    if REQUIRE_BUY_TICKER_IN_WATCHLIST and ticker not in WATCHLIST:
+        return (
+            False,
+            f"Buy rejected: {ticker} is not in WATCHLIST.\n"
+            "This may be a typo. Add it to WATCHLIST first if you really want to trade it."
+        )
+
+    if REQUIRE_ACTIVE_SIGNAL_FOR_BUY and not signal_data:
+        return (
+            False,
+            f"Buy rejected: no active signal found for {ticker}.\n"
+            "This protects you from typo buys like UBST instead of UPST.\n"
+            "Use forcescan/wait for a signal, or disable REQUIRE_ACTIVE_SIGNAL_FOR_BUY if you intentionally want manual buys."
+        )
+
+    if REQUIRE_LIVE_QUOTE_FOR_BUY:
+        quote = get_prices_batch([ticker]).get(ticker)
+
+        if quote is None:
+            return (
+                False,
+                f"Buy rejected: no live quote found for {ticker}.\n"
+                "Cash was not changed. Check ticker spelling."
+            )
+
+        quote_deviation = abs(price - quote) / quote
+
+        if quote_deviation > BUY_QUOTE_DEVIATION_LIMIT:
+            return (
+                False,
+                f"Buy rejected: entered price is too far from live quote.\n"
+                f"Ticker: {ticker}\n"
+                f"Your price: {round(price, 2)}\n"
+                f"Live quote: {round(quote, 2)}\n"
+                f"Difference: {round(quote_deviation * 100, 2)}%\n"
+                f"Max allowed: {round(BUY_QUOTE_DEVIATION_LIMIT * 100, 2)}%"
+            )
+
     if isinstance(signal_price, (int, float)) and signal_price > 0:
         max_allowed_price = float(signal_price) * (1 + MAX_ENTRY_EXTENSION_PCT)
 
@@ -4026,6 +4100,83 @@ def update_position_fields(ticker: str, fields: Dict[str, Any]) -> None:
 
     refresh_portfolio()
 
+def void_buy(
+    ticker: str,
+    update_id: Optional[int] = None
+) -> Tuple[bool, str]:
+    """
+    Undo a mistaken buy without creating a fake sell trade.
+
+    Use only for admin/paper correction when the buy itself was a mistake,
+    for example: bought UBST instead of UPST.
+
+    It refunds original entry cost and deletes the open position.
+    It refuses to run if the position already has trade history.
+    """
+    ticker = normalize_ticker(ticker) or ""
+
+    if not ticker:
+        return False, "Invalid ticker"
+
+    with db_tx() as conn:
+        row = conn.execute(
+            "SELECT * FROM positions WHERE ticker = ?",
+            (ticker,),
+        ).fetchone()
+
+        if row is None:
+            mark_update_processed_tx(conn, update_id, "rejected_voidbuy_no_position")
+            return False, f"No open position found for {ticker}"
+
+        pos = row_to_position(row)
+        position_id = pos.get("position_id")
+
+        existing_trade = conn.execute(
+            "SELECT 1 FROM trades WHERE position_id = ? LIMIT 1",
+            (position_id,),
+        ).fetchone()
+
+        if existing_trade is not None:
+            mark_update_processed_tx(conn, update_id, "rejected_voidbuy_has_trades")
+            return (
+                False,
+                f"Void rejected: {ticker} already has trade history. "
+                "Use normal sell/edit correction instead."
+            )
+
+        shares = int(pos["shares"])
+        entry_price = float(pos["price"])
+        refund = shares * entry_price
+
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + refund)
+
+        delete_position_tx(conn, ticker)
+
+        conn.execute(
+            "DELETE FROM cooldowns WHERE ticker = ?",
+            (ticker,),
+        )
+
+        mark_update_processed_tx(conn, update_id, "processed_voidbuy")
+
+    refresh_portfolio()
+    missing_price_counts.pop(ticker, None)
+
+    audit(
+        "VOID_BUY",
+        f"{ticker} shares={shares} entry_price={entry_price} refund={refund}"
+    )
+
+    return True, (
+        f"🧹 VOID BUY COMPLETE {ticker}\n\n"
+        f"📦 Removed shares: {shares}\n"
+        f"💵 Entry price: {round(entry_price, 2)}\n"
+        f"💰 Cash refunded: {format_money(refund)}\n"
+        f"💼 Cash now: {format_money(portfolio['cash'])}\n\n"
+        "No fake sell trade was created."
+    )
+
 
 def write_json_file(path: str, data: Any) -> None:
     with open(path, "w", encoding="utf-8") as f:
@@ -4300,6 +4451,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
             "resetall  (then resetall CONFIRM-LIVE)\n"
             "setcash AMOUNT\n"
+            "voidbuy TICKER  (undo mistaken buy without fake sell trade)\n"
             "editbuy TICKER PRICE\n"
             "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\n"
             "bought TICKER SHARES at PRICE\n"
@@ -4850,6 +5002,28 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
                 backup_path,
                 caption="pre_reset_backup.zip"
             )
+
+        send(msg if ok else "❌ ERROR: " + msg)
+
+        return
+
+    if text_lower.startswith("voidbuy"):
+        parts = text.split()
+
+        if len(parts) != 2:
+            send("Usage: voidbuy TICKER")
+            return
+
+        ticker = normalize_ticker(parts[1])
+
+        if not ticker:
+            send("Invalid ticker")
+            return
+
+        ok, msg = void_buy(
+            ticker,
+            update_id=update_id
+        )
 
         send(msg if ok else "❌ ERROR: " + msg)
 
@@ -5625,9 +5799,11 @@ def manage_positions() -> None:
             )
 
             if trade:
+                exit_gain_pct = pct_from_entry(entry, fill_price)
+
                 send(
                     f"📉 EXIT {ticker}\n"
-                    f"💵 Exit price: {round(fill_price, 2)}\n"
+                    f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
                 )
@@ -5689,11 +5865,23 @@ def manage_positions() -> None:
             )
 
             if trade:
+                partial_gain_pct = pct_from_entry(entry, price)
+
+                partial_reasons = []
+
+                if price >= entry * 1.08:
+                    partial_reasons.append("+8% target")
+
+                if trade_r is not None and trade_r >= 1.0:
+                    partial_reasons.append("+1R target")
+
+                partial_reason_text = " + ".join(partial_reasons) if partial_reasons else "partial condition"
 
                 send(
                     f"💰 PARTIAL {ticker}\n"
                     f"Shares: {sell_shares}\n"
-                    f"💵 Partial exit price: {round(price, 2)}\n"
+                    f"💵 Partial exit price: {round(price, 2)} ({format_pct(partial_gain_pct)})\n"
+                    f"📌 Trigger: {partial_reason_text}\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
                 )
