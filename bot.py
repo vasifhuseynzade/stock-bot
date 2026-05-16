@@ -441,6 +441,117 @@ def format_pct(value: Optional[float]) -> str:
     sign = "+" if value >= 0 else ""
     return f"{sign}{round(value, 2)}%"
 
+def format_plain_pct(value: Any, decimals: int = 0) -> str:
+    """
+    Format a normal percent without plus/minus sign.
+
+    Used for position-size guide like:
+    17.86 -> 18%
+    """
+    try:
+        if value is None:
+            return "n/a"
+
+        value_float = float(value)
+
+        if decimals <= 0:
+            return f"{int(round(value_float))}%"
+
+        return f"{round(value_float, decimals)}%"
+
+    except Exception:
+        return "n/a"
+
+
+def get_performance_base_capital() -> float:
+    """
+    Base capital used for realized P/L percentage.
+
+    Priority:
+    1) performance_base_capital from meta table
+    2) INITIAL_CASH fallback
+    """
+    value = get_meta("performance_base_capital")
+
+    if value is not None:
+        try:
+            base = float(value)
+
+            if math.isfinite(base) and base > 0:
+                return base
+
+        except ValueError:
+            pass
+
+    return INITIAL_CASH if math.isfinite(INITIAL_CASH) and INITIAL_CASH > 0 else 0.0
+
+
+def maybe_set_performance_base_from_cash_tx(
+    conn: sqlite3.Connection,
+    amount: float
+) -> None:
+    """
+    Sets performance base capital after clean reset + setcash.
+
+    It only auto-sets if:
+    - base is missing
+    - no positions exist
+    - no trades exist
+
+    This prevents accidental baseline changes during normal paper/live trading.
+    """
+    if not math.isfinite(amount) or amount <= 0:
+        return
+
+    existing = conn.execute(
+        "SELECT value FROM meta WHERE key = 'performance_base_capital'"
+    ).fetchone()
+
+    if existing is not None:
+        return
+
+    pos_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM positions"
+    ).fetchone()["n"]
+
+    trade_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM trades"
+    ).fetchone()["n"]
+
+    if int(pos_count) == 0 and int(trade_count) == 0:
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('performance_base_capital', ?)",
+            (str(round(amount, 2)),),
+        )
+
+
+def realized_performance_all_time() -> Dict[str, Any]:
+    """
+    All-time realized P/L from closed/partial trade records.
+
+    This does NOT include open unrealized P/L.
+    """
+    trades = load_trades()
+
+    total_profit = round(
+        sum(float(t.get("profit", 0)) for t in trades),
+        2
+    )
+
+    base_capital = get_performance_base_capital()
+
+    pct = None
+
+    if base_capital > 0:
+        pct = (total_profit / base_capital) * 100
+
+    return {
+        "profit": total_profit,
+        "pct": pct,
+        "base_capital": round(base_capital, 2),
+        "trade_records": len(trades),
+    }
+
 def market_label(market: str) -> str:
     labels = {
         "BULL": "🐂 BULL",
@@ -1838,19 +1949,32 @@ def format_public_entry_signal(
     setup = entry_data.get("setup_type", "unknown")
     market = entry_data.get("market", "UNKNOWN")
 
+    position_size = format_plain_pct(
+        entry_data.get("position_size_pct"),
+        decimals=0
+    )
+
+    trade_risk = format_plain_pct(
+        entry_data.get("single_trade_risk_pct"),
+        decimals=2
+    )
+
     return (
         "📈 ENTRY SIGNAL\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🌎 Market: {market_label(market)}\n"
         f"⚙️ Setup: {setup_label(setup)}\n\n"
+
         f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\n"
         f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
-        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\n\n"
+        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\n"
+        f"📐 POSITION SIZE GUIDE: about {position_size} of account value\n"
+        f"⚠️ Trade risk guide: about {trade_risk} of account value\n\n"
+
         f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
         f"⭐ Score: {entry_data.get('score')}\n"
         f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
-        f"📐 Position size guide: {fmt_public_number(entry_data.get('position_size_pct'))}% of account\n"
-        f"⚠️ Trade risk guide: {fmt_public_number(entry_data.get('single_trade_risk_pct'))}% of account\n\n"
+
         f"{public_signal_footer()}"
     )
 
@@ -1866,7 +1990,7 @@ def format_public_partial_signal(
     )
 
     return (
-        "💰 PARTIAL TAKE-PROFIT\n\n"
+        "💰 PARTIAL TAKE-PROFIT (EXIT ~50% OF POSITION)\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
@@ -1889,11 +2013,16 @@ def format_public_exit_signal(
         "manual": "Manual exit",
     }.get(str(reason).lower(), str(reason))
 
+    exit_pct = pct_from_entry(
+        trade.get("entry_price"),
+        price
+    )
+
     return (
         "📉 EXIT SIGNAL\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"📌 Reason: {reason_label}\n"
-        f"💵 Exit price: {fmt_public_number(price)}\n"
+        f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\n"
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
         "Bot status: exit condition triggered.\n"
@@ -4269,6 +4398,7 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
             "positions_count": len(portfolio["positions"]),
             "cash": portfolio["cash"],
             "panic_mode": PANIC_MODE,
+            "performance_base_capital": get_meta("performance_base_capital"),
         }
     )
 
@@ -4363,7 +4493,8 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
                 'withdrawal_high_water_mark',
                 'withdrawal_hwm_initialized_at',
                 'last_withdrawal_check_date',
-                'last_withdrawal_alert_ts'
+                'last_withdrawal_alert_ts',
+                'performance_base_capital'
             )
             """
         )
@@ -4488,7 +4619,16 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "pnl":
 
-        send(f"📊 Weekly P/L: {format_money(weekly_performance())}")
+        perf = realized_performance_all_time()
+
+        send(
+            "📊 REALIZED P/L — ALL TIME\n\n"
+            f"💰 Realized P/L: {format_money(perf['profit'])} "
+            f"({format_pct(perf['pct'])})\n"
+            f"📏 Base capital: {format_money(perf['base_capital'])}\n"
+            f"🧾 Trade records: {perf['trade_records']}\n\n"
+            "Note: this is realized P/L only. Open unrealized P/L is not included."
+        )
 
         return
 
@@ -4583,7 +4723,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "summary":
 
-        pnl = weekly_performance()
+        perf = realized_performance_all_time()
 
         wr = win_rate()
 
@@ -4595,7 +4735,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
             "📋 SUMMARY\n\n"
-            f"📊 P/L (7d): {format_money(pnl)}\n"
+            f"📊 Realized P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
             f"🏆 Win Rate: {wr}%\n"
             f"⏱️ Avg Duration: {duration}\n"
             f"🎯 Avg R: {e['avg_r']}\n"
@@ -5059,6 +5199,8 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         with db_tx() as conn:
 
             set_cash_tx(conn, amount)
+
+            maybe_set_performance_base_from_cash_tx(conn, amount)
 
             mark_update_processed_tx(conn, update_id, "processed_setcash")
 
