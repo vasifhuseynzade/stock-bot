@@ -42,7 +42,7 @@ WEAK = [
 ]
 
 WATCHLIST = STRONG + MEDIUM + WEAK
-MARKET_TICKERS = ["SPY", "QQQ"]
+MARKET_TICKERS = ["SPY", "QQQ", "IWM", "SMH"]
 ALL_TICKERS = sorted(set(WATCHLIST + MARKET_TICKERS))
 
 SESSION = requests.Session()
@@ -50,26 +50,56 @@ SESSION = requests.Session()
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    name: str = "baseline_v1"
+    name: str = "v2_1_candidate"
     initial_capital: float = 4000.0
     max_open_positions: int = 12
     max_total_risk: float = 0.06
     max_position_equity_pct: float = 0.20
     cash_usage_buffer: float = 0.98
     max_entry_extension_pct: float = 0.01
-    atr_stop_mult: float = 1.5
+
+    # V2.1 scoring engine.
+    min_market_score: int = 3
+    min_score: int = 68
+    breakout_min_score: int = 74
+    pullback_min_score: int = 72
+    weak_min_score: int = 80
+    max_signals_per_scan: int = 6
+
+    # Liquidity / volatility filters.
+    min_price: float = 8.0
+    min_avg_dollar_volume: float = 30_000_000.0
+    min_atr_pct: float = 0.01
+    max_atr_pct: float = 0.12
+    max_risk_per_share_pct: float = 0.10
+
+    # Setup behavior.
+    breakout_min_volume_ratio: float = 1.15
+    pullback_min_volume_ratio: float = 0.30
+    breakout_max_rsi: float = 82.0
+    breakout_max_daily_move_pct: float = 7.0
+    pullback_max_daily_move_pct: float = 6.0
+    block_pullback_in_uncertain: bool = True
+    pullback_require_positive_rs: bool = True
+    breakout_require_positive_rs: bool = True
+
+    # Stop model.
+    breakout_atr_stop_mult: float = 1.80
+    pullback_atr_stop_mult: float = 1.80
+    stop_wider_of_atr_and_structure: bool = True
+
+    # Exit behavior.
     breakeven_r: float = 0.70
     partial_r: float = 1.0
     partial_pct: float = 0.08
-    trail_mult_before_5pct: float = 2.5
-    trail_mult_after_5pct: float = 2.0
-    min_score: int = 40
-    breakout_min_volume_ratio: float = 1.20
-    breakout_max_rsi: float = 85.0
-    breakout_max_daily_move_pct: float = 8.0
-    pullback_max_rsi: float = 70.0
-    pullback_max_extension_over_ma20: float = 0.05
-    reject_weak_in_uncertain_market: bool = True
+    trail_mult_before_5pct: float = 2.8
+    trail_mult_after_5pct: float = 2.2
+
+    # Risk boost.
+    risk_boost_enabled: bool = True
+    a_plus_risk_boost: float = 1.25
+    a_risk_boost: float = 1.10
+
     allow_weak: bool = True
     slippage_bps: float = 10.0
     commission_per_trade: float = 0.0
@@ -278,30 +308,105 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["PrevClose"] = df["Close"].shift(1)
     df["RSI14"] = rsi(df["Close"])
+    df["MA10"] = df["Close"].rolling(10).mean()
     df["MA20"] = df["Close"].rolling(20).mean()
     df["MA50"] = df["Close"].rolling(50).mean()
+    df["MA100"] = df["Close"].rolling(100).mean()
     df["AvgVol20"] = df["Volume"].rolling(20).mean()
     df["ATR14"] = atr(df)
     df["RecentHigh20"] = df["Close"].shift(1).rolling(20).max()
+    df["RecentHigh55"] = df["Close"].shift(1).rolling(55).max()
     df["DailyMovePct"] = ((df["Close"] - df["PrevClose"]) / df["PrevClose"]) * 100
     return df
 
 
+def pct_change_on_day(df: pd.DataFrame, day: date, bars: int) -> Optional[float]:
+    try:
+        if day not in df.index:
+            return None
+        idx = df.index.get_loc(day)
+        if isinstance(idx, slice) or isinstance(idx, list):
+            return None
+        if idx < bars:
+            return None
+        new = float(df.iloc[idx]["Close"])
+        old = float(df.iloc[idx - bars]["Close"])
+        if old <= 0:
+            return None
+        return (new / old) - 1
+    except Exception:
+        return None
+
+
+def rolling_slope_positive_on_day(df: pd.DataFrame, day: date, column: str = "MA50", lookback: int = 10) -> bool:
+    try:
+        if day not in df.index:
+            return False
+        idx = df.index.get_loc(day)
+        if idx < lookback:
+            return False
+        now = df.iloc[idx][column]
+        then = df.iloc[idx - lookback][column]
+        if pd.isna(now) or pd.isna(then):
+            return False
+        return float(now) > float(then)
+    except Exception:
+        return False
+
+
+def close_location_row(row: pd.Series) -> float:
+    try:
+        high = float(row["High"])
+        low = float(row["Low"])
+        close = float(row["Close"])
+        if high <= low:
+            return 0.5
+        return max(0.0, min(1.0, (close - low) / (high - low)))
+    except Exception:
+        return 0.5
+
+
+def market_regime_details_on(day: date, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+    score = 0
+    notes: List[str] = []
+
+    for symbol in ["SPY", "QQQ"]:
+        df = data.get(symbol)
+        if df is None or day not in df.index:
+            notes.append(f"{symbol}:no_data")
+            continue
+        row = df.loc[day]
+        if pd.isna(row.get("MA20")) or pd.isna(row.get("MA50")):
+            notes.append(f"{symbol}:ma_nan")
+            continue
+        if float(row["Close"]) > float(row["MA50"]):
+            score += 1
+        if float(row["MA20"]) > float(row["MA50"]):
+            score += 1
+        if rolling_slope_positive_on_day(df, day, "MA50", 10):
+            score += 1
+
+    for symbol in ["IWM", "SMH"]:
+        df = data.get(symbol)
+        if df is None or day not in df.index:
+            continue
+        row = df.loc[day]
+        if not pd.isna(row.get("MA50")) and float(row["Close"]) > float(row["MA50"]):
+            score += 1
+
+    if score >= 6:
+        condition = "BULL"
+    elif score <= 2:
+        condition = "BEAR"
+    else:
+        condition = "UNCERTAIN"
+
+    return {"condition": condition, "score": score, "max_score": 8, "notes": notes}
+
+
 def market_condition_on(day: date, data: Dict[str, pd.DataFrame]) -> str:
     try:
-        spy = data["SPY"]
-        qqq = data["QQQ"]
-        if day not in spy.index or day not in qqq.index:
-            return "UNCERTAIN"
-        s = spy.loc[day]
-        q = qqq.loc[day]
-        if pd.isna(s["MA50"]) or pd.isna(q["MA50"]):
-            return "UNCERTAIN"
-        if float(s["Close"]) > float(s["MA50"]) and float(q["Close"]) > float(q["MA50"]):
-            return "BULL"
-        if float(s["Close"]) < float(s["MA50"]) and float(q["Close"]) < float(q["MA50"]):
-            return "BEAR"
-        return "UNCERTAIN"
+        return str(market_regime_details_on(day, data).get("condition", "UNCERTAIN"))
     except Exception:
         return "UNCERTAIN"
 
@@ -312,84 +417,262 @@ def analyze_signal(ticker: str, day: date, data: Dict[str, pd.DataFrame], market
     if ticker not in data or day not in data[ticker].index:
         return None
 
-    row = data[ticker].loc[day]
-    fields = ["Close", "PrevClose", "RSI14", "MA20", "MA50", "AvgVol20", "ATR14", "RecentHigh20", "Volume"]
+    df = data[ticker]
+    row = df.loc[day]
+    fields = ["Close", "PrevClose", "RSI14", "MA10", "MA20", "MA50", "AvgVol20", "ATR14", "RecentHigh20", "RecentHigh55", "Volume"]
     if any(pd.isna(row[f]) for f in fields):
         return None
 
     price = float(row["Close"])
     prev_close = float(row["PrevClose"])
     rsi_val = float(row["RSI14"])
+    ma10 = float(row["MA10"])
     ma20 = float(row["MA20"])
     ma50 = float(row["MA50"])
+    ma100 = None if pd.isna(row.get("MA100")) else float(row.get("MA100"))
     avg_vol = float(row["AvgVol20"])
     atr_val = float(row["ATR14"])
-    recent_high = float(row["RecentHigh20"])
+    recent_high_20 = float(row["RecentHigh20"])
+    recent_high_55 = float(row["RecentHigh55"])
     volume = float(row["Volume"])
+    high = float(row["High"])
+    low = float(row["Low"])
 
-    if min(price, prev_close, ma20, ma50, avg_vol, atr_val, recent_high) <= 0:
+    if min(price, prev_close, ma10, ma20, ma50, avg_vol, atr_val, recent_high_20, recent_high_55) <= 0:
         return None
 
-    breakout = price > recent_high
+    atr_pct = atr_val / price
+    avg_dollar_volume = avg_vol * price
     daily_move_pct = ((price - prev_close) / prev_close) * 100
     volume_ratio = volume / avg_vol if avg_vol > 0 else None
+    close_loc = close_location_row(row)
 
-    if market == "BEAR":
+    if price < cfg.min_price:
         return None
-    if market == "UNCERTAIN" and cfg.reject_weak_in_uncertain_market and ticker in WEAK:
+    if avg_dollar_volume < cfg.min_avg_dollar_volume:
         return None
-    if not breakout and rsi_val > cfg.pullback_max_rsi:
-        return None
-    if not breakout and (price - ma20) / ma20 > cfg.pullback_max_extension_over_ma20:
-        return None
-    if breakout and daily_move_pct > cfg.breakout_max_daily_move_pct:
-        return None
-    if not breakout and price <= prev_close:
+    if atr_pct < cfg.min_atr_pct or atr_pct > cfg.max_atr_pct:
         return None
 
-    score = 0
+    market_details = market_regime_details_on(day, data)
+    market_score = int(market_details.get("score", 0) or 0)
+    if market == "BEAR" or market_score < cfg.min_market_score:
+        return None
+
+    stock_ret_20 = pct_change_on_day(df, day, 20)
+    stock_ret_63 = pct_change_on_day(df, day, 63)
+    spy_ret_20 = pct_change_on_day(data["SPY"], day, 20) if "SPY" in data else None
+    spy_ret_63 = pct_change_on_day(data["SPY"], day, 63) if "SPY" in data else None
+    qqq_ret_20 = pct_change_on_day(data["QQQ"], day, 20) if "QQQ" in data else None
+
+    rel_20 = None if stock_ret_20 is None or spy_ret_20 is None else stock_ret_20 - spy_ret_20
+    rel_63 = None if stock_ret_63 is None or spy_ret_63 is None else stock_ret_63 - spy_ret_63
+    rel_qqq_20 = None if stock_ret_20 is None or qqq_ret_20 is None else stock_ret_20 - qqq_ret_20
+
+    trend_score = 0
     if price > ma50:
-        score += 20
-    if price < ma20 and rsi_val < 45:
-        score += 30
-    if volume > avg_vol * 1.5:
-        score += 20
-    if breakout:
-        score += 20
-        if price > ma20:
-            score += 10
+        trend_score += 12
+    if ma20 > ma50:
+        trend_score += 10
+    if price > ma20:
+        trend_score += 6
+    if price > ma10:
+        trend_score += 4
+    if ma100 is not None and price > ma100:
+        trend_score += 6
+    if rolling_slope_positive_on_day(df, day, "MA50", 10):
+        trend_score += 10
+    if close_loc >= 0.55:
+        trend_score += 5
+    if avg_dollar_volume >= 100_000_000:
+        trend_score += 5
+
+    rs_score = 0
+    if stock_ret_20 is not None and stock_ret_20 > 0:
+        rs_score += 5
+    if stock_ret_63 is not None and stock_ret_63 > 0:
+        rs_score += 5
+    if rel_20 is not None:
+        if rel_20 > 0:
+            rs_score += 8
+        if rel_20 > 0.03:
+            rs_score += 5
+        if rel_20 > 0.08:
+            rs_score += 4
+    if rel_63 is not None:
+        if rel_63 > 0:
+            rs_score += 8
+        if rel_63 > 0.06:
+            rs_score += 5
+    if rel_qqq_20 is not None and rel_qqq_20 > 0:
+        rs_score += 4
+
+    breakout_20 = price > recent_high_20
+    breakout_55 = price > recent_high_55
+    pullback_distance_ma20 = (price - ma20) / ma20
+    touched_ma20_area = low <= ma20 * 1.035
+
+    breakout_score = -999
+    if breakout_20 or breakout_55:
+        breakout_score = trend_score + rs_score
+        if breakout_20:
+            breakout_score += 8
+        if breakout_55:
+            breakout_score += 12
+        if volume_ratio is not None and volume_ratio >= cfg.breakout_min_volume_ratio:
+            breakout_score += 8
+        if volume_ratio is not None and volume_ratio >= 1.5:
+            breakout_score += 5
+        if close_loc >= 0.60:
+            breakout_score += 7
+        if 50 <= rsi_val <= cfg.breakout_max_rsi:
+            breakout_score += 6
+        if 0 < daily_move_pct <= cfg.breakout_max_daily_move_pct:
+            breakout_score += 5
         if ma20 > ma50:
-            score += 10
+            breakout_score += 5
+        if rsi_val > cfg.breakout_max_rsi:
+            breakout_score = -999
+        if daily_move_pct > cfg.breakout_max_daily_move_pct:
+            breakout_score = -999
+        if volume_ratio is None or volume_ratio < cfg.breakout_min_volume_ratio:
+            breakout_score = -999
+        if not (price > ma20 > ma50):
+            breakout_score = -999
 
-    if breakout and volume < avg_vol * cfg.breakout_min_volume_ratio:
-        return None
-    if breakout and rsi_val > cfg.breakout_max_rsi:
-        return None
-    if score < cfg.min_score:
-        return None
-    if not breakout and ma20 < ma50:
+    pullback_score = -999
+    pullback_candidate = (
+        price > ma50
+        and ma20 >= ma50 * 0.995
+        and price > prev_close
+        and -0.06 <= pullback_distance_ma20 <= 0.06
+        and touched_ma20_area
+        and daily_move_pct <= cfg.pullback_max_daily_move_pct
+        and volume_ratio is not None
+        and volume_ratio >= cfg.pullback_min_volume_ratio
+    )
+
+    if pullback_candidate:
+        pullback_score = trend_score + rs_score
+        if 32 <= rsi_val <= 58:
+            pullback_score += 10
+        if 35 <= rsi_val <= 50:
+            pullback_score += 5
+        if price > prev_close:
+            pullback_score += 8
+        if close_loc >= 0.45:
+            pullback_score += 6
+        if abs(pullback_distance_ma20) <= 0.03:
+            pullback_score += 7
+        if low <= ma20 * 1.02:
+            pullback_score += 5
+        if volume_ratio <= 1.30:
+            pullback_score += 4
+        if stock_ret_63 is not None and stock_ret_63 > 0:
+            pullback_score += 4
+
+    if breakout_score >= pullback_score:
+        setup_type = "breakout"
+        score = int(round(breakout_score))
+        min_score = cfg.breakout_min_score
+        is_breakout = True
+        breakout_level = recent_high_55 if breakout_55 else recent_high_20
+    else:
+        setup_type = "pullback"
+        score = int(round(pullback_score))
+        min_score = cfg.pullback_min_score
+        is_breakout = False
+        breakout_level = recent_high_20
+
+    min_score = max(min_score, cfg.min_score)
+
+    if ticker in WEAK:
+        if not cfg.allow_weak:
+            return None
+        min_score = max(min_score, cfg.weak_min_score)
+
+    if market == "UNCERTAIN":
+        min_score += 5
+
+    if setup_type == "pullback":
+        if cfg.block_pullback_in_uncertain and market != "BULL":
+            return None
+        if cfg.pullback_require_positive_rs:
+            if not ((rel_20 is not None and rel_20 > 0) or (rel_63 is not None and rel_63 > 0)):
+                return None
+
+    if setup_type == "breakout" and cfg.breakout_require_positive_rs:
+        if not ((rel_20 is not None and rel_20 > 0) or (rel_63 is not None and rel_63 > 0)):
+            return None
+
+    if score < min_score:
         return None
 
-    stop = price - (cfg.atr_stop_mult * atr_val)
+    if setup_type == "breakout":
+        atr_stop = price - (cfg.breakout_atr_stop_mult * atr_val)
+        structure_stop = breakout_level - (0.35 * atr_val)
+        stop = min(atr_stop, structure_stop) if cfg.stop_wider_of_atr_and_structure else max(atr_stop, structure_stop)
+        stop_model = "breakout_wider_structure_atr" if cfg.stop_wider_of_atr_and_structure else "breakout_tighter_structure_atr"
+    else:
+        try:
+            idx = df.index.get_loc(day)
+            recent_swing_low = float(df.iloc[max(0, idx - 5): idx + 1]["Low"].min())
+        except Exception:
+            recent_swing_low = low
+        atr_stop = price - (cfg.pullback_atr_stop_mult * atr_val)
+        structure_stop = recent_swing_low - (0.25 * atr_val)
+        stop = min(atr_stop, structure_stop) if cfg.stop_wider_of_atr_and_structure else max(atr_stop, structure_stop)
+        stop_model = "pullback_wider_swing_atr" if cfg.stop_wider_of_atr_and_structure else "pullback_tighter_swing_atr"
+
+    if stop <= 0 or stop >= price:
+        fallback_mult = cfg.breakout_atr_stop_mult if setup_type == "breakout" else cfg.pullback_atr_stop_mult
+        stop = price - (fallback_mult * atr_val)
+        stop_model = "fallback_v21_atr"
+
     risk_per_share = price - stop
     if stop <= 0 or risk_per_share <= 0:
         return None
+    if risk_per_share / price > cfg.max_risk_per_share_pct:
+        return None
+
+    risk_pct_used = risk_pct_for_ticker(ticker)
+    if risk_pct_used is None:
+        return None
+    if cfg.risk_boost_enabled:
+        if score >= 88:
+            risk_pct_used *= cfg.a_plus_risk_boost
+        elif score >= 80:
+            risk_pct_used *= cfg.a_risk_boost
+
+    max_valid_entry = min(
+        price * (1 + cfg.max_entry_extension_pct),
+        price + (0.35 * atr_val),
+    )
 
     return {
         "ticker": ticker,
         "signal_date": day.isoformat(),
         "signal_price": round(price, 4),
-        "max_valid_entry": round(price * (1 + cfg.max_entry_extension_pct), 4),
+        "max_valid_entry": round(max_valid_entry, 4),
         "stop": round(stop, 4),
         "atr": round(atr_val, 4),
         "risk_per_share_at_signal": round(risk_per_share, 4),
         "rsi": round(rsi_val, 2),
         "score": int(score),
+        "min_score_required": int(min_score),
         "market": market,
-        "breakout": bool(breakout),
-        "setup_type": "breakout" if breakout else "pullback",
+        "market_score": market_score,
+        "breakout": bool(is_breakout),
+        "setup_type": setup_type,
         "volume_ratio": None if volume_ratio is None else round(float(volume_ratio), 3),
         "daily_move_pct": round(daily_move_pct, 3),
+        "trend_score": int(trend_score),
+        "rs_score": int(rs_score),
+        "rel_20_spy": None if rel_20 is None else round(rel_20 * 100, 3),
+        "rel_63_spy": None if rel_63 is None else round(rel_63 * 100, 3),
+        "rel_20_qqq": None if rel_qqq_20 is None else round(rel_qqq_20 * 100, 3),
+        "stop_model": stop_model,
+        "risk_pct_used": risk_pct_used,
     }
 
 
@@ -579,9 +862,9 @@ def run_backtest_core(
                 continue
 
             atr_val = float(order["atr"])
-            stop = entry_price - cfg.atr_stop_mult * atr_val
+            stop = float(order["stop"])
             risk_per_share = entry_price - stop
-            if stop <= 0 or risk_per_share <= 0:
+            if stop <= 0 or stop >= entry_price or risk_per_share <= 0:
                 rejected.append({**order, "reject_date": day.isoformat(), "reason": "invalid_entry_risk"})
                 continue
 
@@ -652,24 +935,21 @@ def run_backtest_core(
         })
 
         # 4) Generate near-close signals. These execute at next session open.
+        # V2.1 mirrors the live bot more closely: collect candidates, sort by score,
+        # then reserve risk/capital for the best signals only.
         if i >= len(spy_dates) - 1:
             continue
 
         market = market_condition_on(day, data)
         reserved_risk = 0.0
         reserved_capital = 0.0
+        day_candidates: List[Dict[str, Any]] = []
 
         for ticker in WATCHLIST:
-            if not cfg.allow_weak and ticker in WEAK:
-                continue
             if ticker in positions:
                 continue
             if len(positions) + len(pending_orders) >= cfg.max_open_positions:
                 break
-
-            risk_pct = risk_pct_for_ticker(ticker)
-            if risk_pct is None:
-                continue
 
             signal = analyze_signal(ticker, day, data, market, cfg)
             if signal is None:
@@ -685,6 +965,10 @@ def run_backtest_core(
 
             price = float(signal["signal_price"])
             risk_per_share = float(signal["risk_per_share_at_signal"])
+            risk_pct = float(signal.get("risk_pct_used") or risk_pct_for_ticker(ticker) or 0)
+            if risk_pct <= 0:
+                continue
+
             shares_by_risk = int((equity_at_signal * risk_pct) / risk_per_share)
             shares_by_position_cap = int((equity_at_signal * cfg.max_position_equity_pct) / price)
             shares_by_cash = int((cash * cfg.cash_usage_buffer) / price)
@@ -696,17 +980,8 @@ def run_backtest_core(
 
             risk_amount = shares * risk_per_share
             capital = shares * price
-            projected_risk_pct = (open_risk + reserved_risk + risk_amount) / equity_at_signal
-            projected_capital = reserved_capital + capital
 
-            if projected_risk_pct > cfg.max_total_risk:
-                rejected.append({**signal, "reason": "projected_risk_cap", "projected_risk_pct": round(projected_risk_pct * 100, 3)})
-                continue
-            if projected_capital > cash * cfg.cash_usage_buffer:
-                rejected.append({**signal, "reason": "cash_reserve", "projected_capital": round(projected_capital, 2)})
-                continue
-
-            order = {
+            day_candidates.append({
                 **signal,
                 "entry_execute_date": spy_dates[i + 1].isoformat(),
                 "shares": shares,
@@ -715,11 +990,37 @@ def run_backtest_core(
                 "equity_at_signal": round(equity_at_signal, 2),
                 "position_size_pct": round((capital / equity_at_signal) * 100, 3),
                 "single_trade_risk_pct": round((risk_amount / equity_at_signal) * 100, 3),
-                "projected_total_risk_pct": round(projected_risk_pct * 100, 3),
-            }
+            })
+
+        day_candidates = sorted(day_candidates, key=lambda x: int(x.get("score", 0)), reverse=True)
+
+        sent_count = 0
+        for order in day_candidates:
+            if sent_count >= cfg.max_signals_per_scan:
+                break
+            if len(positions) + len(pending_orders) >= cfg.max_open_positions:
+                rejected.append({**order, "reason": "max_positions_after_sort"})
+                continue
+
+            equity_at_signal = calc_equity(cash, positions, day, data)
+            open_risk = calc_initial_open_risk(positions)
+            risk_amount = float(order["risk_amount"])
+            capital = float(order["capital"])
+            projected_risk_pct = (open_risk + reserved_risk + risk_amount) / equity_at_signal
+            projected_capital = reserved_capital + capital
+
+            if projected_risk_pct > cfg.max_total_risk:
+                rejected.append({**order, "reason": "projected_risk_cap", "projected_risk_pct": round(projected_risk_pct * 100, 3)})
+                continue
+            if projected_capital > cash * cfg.cash_usage_buffer:
+                rejected.append({**order, "reason": "cash_reserve", "projected_capital": round(projected_capital, 2)})
+                continue
+
+            order["projected_total_risk_pct"] = round(projected_risk_pct * 100, 3)
             pending_orders.append(order)
             reserved_risk += risk_amount
             reserved_capital += capital
+            sent_count += 1
 
     # 5) Liquidate remaining open positions at final close for accounting.
     final_day = spy_dates[-1]
@@ -845,7 +1146,6 @@ def save_run_outputs(
     equity_df: pd.DataFrame,
     rejected_df: pd.DataFrame,
 ) -> str:
-    os.makedirs(run_dir, exist_ok=True)
     write_json(os.path.join(run_dir, "run_config.json"), asdict(cfg))
     write_json(os.path.join(run_dir, "summary.json"), summary)
 
@@ -876,15 +1176,12 @@ def save_run_outputs(
 
 def make_variants(base: StrategyConfig) -> List[StrategyConfig]:
     return [
-        replace(base, name="baseline"),
-        replace(base, name="score50", min_score=50),
-        replace(base, name="score60", min_score=60),
-        replace(base, name="breakout_vol_150", breakout_min_volume_ratio=1.50),
-        replace(base, name="partial_125r", partial_r=1.25),
-        replace(base, name="partial_150r", partial_r=1.50),
-        replace(base, name="no_weak", allow_weak=False),
-        replace(base, name="stop_180atr", atr_stop_mult=1.80),
-        replace(base, name="stop_130atr", atr_stop_mult=1.30),
+        base,
+        replace(base, name="v2_1_breakout_only", pullback_min_score=999),
+        replace(base, name="v2_1_no_weak", allow_weak=False),
+        replace(base, name="v2_1_tighter_stop", breakout_atr_stop_mult=1.60, pullback_atr_stop_mult=1.65),
+        replace(base, name="v2_1_no_rs_hard_filter", breakout_require_positive_rs=False, pullback_require_positive_rs=False),
+        replace(base, name="v2_1_stricter", min_score=72, breakout_min_score=78, pullback_min_score=76, weak_min_score=84),
     ]
 
 
@@ -938,16 +1235,6 @@ def run_walkforward(
     while test_start < end:
         test_end = min(add_months(test_start, test_months) - timedelta(days=1), end)
         if test_end <= test_start:
-            break
-
-        # skip tiny final windows
-        trading_days = [
-            d for d in data["SPY"].index.tolist()
-            if test_start <= d <= test_end
-        ]
-
-        if len(trading_days) < 60:
-            print(f"\nSkipping incomplete final window: {test_start} to {test_end}")
             break
 
         print(f"\n=== WALK-FORWARD WINDOW {window_id}: {test_start} to {test_end} ===")
@@ -1021,12 +1308,25 @@ def build_config(args: argparse.Namespace) -> StrategyConfig:
         max_position_equity_pct=args.max_position_equity_pct,
         cash_usage_buffer=args.cash_usage_buffer,
         max_entry_extension_pct=args.max_entry_extension_pct,
-        atr_stop_mult=args.atr_stop_mult,
+        min_market_score=args.min_market_score,
+        min_score=args.min_score,
+        breakout_min_score=args.breakout_min_score,
+        pullback_min_score=args.pullback_min_score,
+        weak_min_score=args.weak_min_score,
+        max_signals_per_scan=args.max_signals_per_scan,
+        breakout_atr_stop_mult=args.breakout_atr_stop_mult,
+        pullback_atr_stop_mult=args.pullback_atr_stop_mult,
         breakeven_r=args.breakeven_r,
         partial_r=args.partial_r,
         partial_pct=args.partial_pct,
-        min_score=args.min_score,
         breakout_min_volume_ratio=args.breakout_min_volume_ratio,
+        pullback_min_volume_ratio=args.pullback_min_volume_ratio,
+        breakout_max_rsi=args.breakout_max_rsi,
+        breakout_max_daily_move_pct=args.breakout_max_daily_move_pct,
+        pullback_max_daily_move_pct=args.pullback_max_daily_move_pct,
+        block_pullback_in_uncertain=not args.allow_pullback_uncertain,
+        pullback_require_positive_rs=not args.no_pullback_rs_filter,
+        breakout_require_positive_rs=not args.no_breakout_rs_filter,
         allow_weak=not args.no_weak,
         slippage_bps=args.slippage_bps,
         commission_per_trade=args.commission,
@@ -1047,12 +1347,25 @@ def main() -> None:
     parser.add_argument("--max-position-equity-pct", type=float, default=0.20)
     parser.add_argument("--cash-usage-buffer", type=float, default=0.98)
     parser.add_argument("--max-entry-extension-pct", type=float, default=0.01)
-    parser.add_argument("--atr-stop-mult", type=float, default=1.5)
+    parser.add_argument("--breakout-atr-stop-mult", type=float, default=1.80)
+    parser.add_argument("--pullback-atr-stop-mult", type=float, default=1.80)
     parser.add_argument("--breakeven-r", type=float, default=0.70)
     parser.add_argument("--partial-r", type=float, default=1.0)
     parser.add_argument("--partial-pct", type=float, default=0.08)
-    parser.add_argument("--min-score", type=int, default=40)
-    parser.add_argument("--breakout-min-volume-ratio", type=float, default=1.20)
+    parser.add_argument("--min-market-score", type=int, default=3)
+    parser.add_argument("--min-score", type=int, default=68)
+    parser.add_argument("--breakout-min-score", type=int, default=74)
+    parser.add_argument("--pullback-min-score", type=int, default=72)
+    parser.add_argument("--weak-min-score", type=int, default=80)
+    parser.add_argument("--max-signals-per-scan", type=int, default=6)
+    parser.add_argument("--breakout-min-volume-ratio", type=float, default=1.15)
+    parser.add_argument("--pullback-min-volume-ratio", type=float, default=0.30)
+    parser.add_argument("--breakout-max-rsi", type=float, default=82.0)
+    parser.add_argument("--breakout-max-daily-move-pct", type=float, default=7.0)
+    parser.add_argument("--pullback-max-daily-move-pct", type=float, default=6.0)
+    parser.add_argument("--allow-pullback-uncertain", action="store_true")
+    parser.add_argument("--no-pullback-rs-filter", action="store_true")
+    parser.add_argument("--no-breakout-rs-filter", action="store_true")
     parser.add_argument("--no-weak", action="store_true")
     parser.add_argument("--slippage-bps", type=float, default=10.0)
     parser.add_argument("--commission", type=float, default=0.0)

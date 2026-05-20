@@ -216,7 +216,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.0")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.1")
 
 
 
@@ -270,9 +270,9 @@ MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 # This keeps your aggressive sizing/risk framework, but forces better signals.
 V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "3"))
 V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "68"))
-V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "68"))
+V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "72"))
 V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "74"))
-V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "78"))
+V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "80"))
 V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "6"))
 
 # Avoid junk/illiquid names but keep opportunity broad enough for paper testing.
@@ -288,6 +288,28 @@ V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "
 V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "82"))
 V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "7.0"))
 V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "6.0"))
+
+# V2.1 quality gates.
+# These are based on the backtest analysis: breakouts carried the edge,
+# pullbacks were weak unless market/relative strength were clearly supportive.
+V2_BLOCK_PULLBACK_IN_UNCERTAIN = os.getenv("V2_BLOCK_PULLBACK_IN_UNCERTAIN", "1") != "0"
+V2_PULLBACK_REQUIRE_POSITIVE_RS = os.getenv("V2_PULLBACK_REQUIRE_POSITIVE_RS", "1") != "0"
+V2_BREAKOUT_REQUIRE_POSITIVE_RS = os.getenv("V2_BREAKOUT_REQUIRE_POSITIVE_RS", "1") != "0"
+
+# V2.1 stop model.
+# The old baseline variants showed wider stops were better than tighter stops.
+# Using the wider of ATR-stop and structure-stop means the lower stop price for longs.
+V2_BREAKOUT_ATR_STOP_MULT = float(os.getenv("V2_BREAKOUT_ATR_STOP_MULT", "1.80"))
+V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.80"))
+V2_STOP_WIDER_OF_ATR_AND_STRUCTURE = os.getenv("V2_STOP_WIDER_OF_ATR_AND_STRUCTURE", "1") != "0"
+
+# Exit management.
+# Tested variants favored taking the planned partial at +1R or +8%, not waiting for 1.5R.
+BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.70"))
+PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.00"))
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.08"))
+TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "2.80"))
+TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.20"))
 
 # Aggressive mode: high-quality scores can slightly increase risk sizing.
 # Total risk, cash, and position caps still protect the portfolio.
@@ -11309,24 +11331,47 @@ def analyze(
     if market == "UNCERTAIN":
         min_score += 5
 
+    if setup_type == "pullback":
+        if V2_BLOCK_PULLBACK_IN_UNCERTAIN and market != "BULL":
+            return None
+
+        if V2_PULLBACK_REQUIRE_POSITIVE_RS:
+            pullback_rs_ok = (
+                (rel_20 is not None and rel_20 > 0) or
+                (rel_63 is not None and rel_63 > 0)
+            )
+
+            if not pullback_rs_ok:
+                return None
+
+    if setup_type == "breakout" and V2_BREAKOUT_REQUIRE_POSITIVE_RS:
+        breakout_rs_ok = (
+            (rel_20 is not None and rel_20 > 0) or
+            (rel_63 is not None and rel_63 > 0)
+        )
+
+        if not breakout_rs_ok:
+            return None
+
     if score < min_score:
         return None
 
     if setup_type == "breakout":
-        atr_stop = price - (1.60 * atr_val)
+        atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
         structure_stop = float(breakout_level) - (0.35 * atr_val)
-        stop = max(atr_stop, structure_stop)
-        stop_model = "breakout_structure_atr"
+        stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
+        stop_model = "breakout_wider_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "breakout_tighter_structure_atr"
     else:
         recent_swing_low = float(low.iloc[-6:].min())
-        atr_stop = price - (1.65 * atr_val)
+        atr_stop = price - (V2_PULLBACK_ATR_STOP_MULT * atr_val)
         structure_stop = recent_swing_low - (0.25 * atr_val)
-        stop = max(atr_stop, structure_stop)
-        stop_model = "pullback_swing_atr"
+        stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
+        stop_model = "pullback_wider_swing_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "pullback_tighter_swing_atr"
 
     if stop <= 0 or stop >= price:
-        stop = price - (1.35 * atr_val)
-        stop_model = "fallback_atr"
+        fallback_mult = V2_BREAKOUT_ATR_STOP_MULT if setup_type == "breakout" else V2_PULLBACK_ATR_STOP_MULT
+        stop = price - (fallback_mult * atr_val)
+        stop_model = "fallback_v21_atr"
 
     risk = price - stop
 
@@ -11769,7 +11814,7 @@ def manage_positions() -> None:
 
 
 
-            multiplier = 2.2 if (price >= entry * 1.08 or (trade_r is not None and trade_r >= 1.5)) else 2.8
+            multiplier = TRAIL_MULT_LATE if (price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT) or (trade_r is not None and trade_r >= 1.5)) else TRAIL_MULT_EARLY
 
 
 
@@ -11793,7 +11838,7 @@ def manage_positions() -> None:
 
 
 
-        if trade_r is not None and trade_r >= 0.8 and effective_stop < entry:
+        if trade_r is not None and trade_r >= BREAKEVEN_R_TRIGGER and effective_stop < entry:
 
 
 
@@ -11927,11 +11972,11 @@ def manage_positions() -> None:
 
 
 
-        # Partial take-profit logic. Core behavior preserved: +8% OR +1R.
+        # Partial take-profit logic: +8% OR +1R by default.
 
 
 
-        partial_trigger = (price >= entry * 1.08) or (trade_r is not None and trade_r >= 1.5)
+        partial_trigger = (price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT)) or (trade_r is not None and trade_r >= PARTIAL_TAKE_PROFIT_R)
 
 
 
@@ -11981,15 +12026,15 @@ def manage_positions() -> None:
 
 
 
-                if price >= entry * 1.08:
+                if price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT):
 
-                    partial_reasons.append("+8% target")
+                    partial_reasons.append(f"+{round(PARTIAL_TAKE_PROFIT_PCT * 100, 2)}% target")
 
 
 
-                if trade_r is not None and trade_r >= 1.5:
+                if trade_r is not None and trade_r >= PARTIAL_TAKE_PROFIT_R:
 
-                    partial_reasons.append("+1.5R target")
+                    partial_reasons.append(f"+{round(PARTIAL_TAKE_PROFIT_R, 2)}R target")
 
 
 
