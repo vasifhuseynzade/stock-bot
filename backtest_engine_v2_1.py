@@ -1146,6 +1146,7 @@ def save_run_outputs(
     equity_df: pd.DataFrame,
     rejected_df: pd.DataFrame,
 ) -> str:
+    os.makedirs(run_dir, exist_ok=True)
     write_json(os.path.join(run_dir, "run_config.json"), asdict(cfg))
     write_json(os.path.join(run_dir, "summary.json"), summary)
 
