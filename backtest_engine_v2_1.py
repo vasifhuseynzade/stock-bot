@@ -1239,6 +1239,18 @@ def run_walkforward(
             break
 
         print(f"\n=== WALK-FORWARD WINDOW {window_id}: {test_start} to {test_end} ===")
+        # Skip incomplete final windows with too few trading days.
+        sample_ticker = next(iter(data))
+        window_df = data[sample_ticker]
+
+        window_days = window_df[
+            (window_df["date"] >= test_start) &
+            (window_df["date"] <= test_end)
+        ]
+
+        if len(window_days) < 20:
+            print(f"\nSkipping incomplete final window: {test_start} to {test_end}")
+            break
         window_cfg = replace(cfg, name=f"wf_{window_id:02d}")
         result = run_backtest_core(
             data,
