@@ -1,7 +1,10 @@
-*.mp4 
-*.jpg 
-*.png 
-*.pdf 
-*.lnk 
-portfolio.json 
-__pycache__/ 
+*.mp4
+*.jpg
+*.png
+*.pdf
+*.lnk
+portfolio.json
+__pycache__/
+data/
+*.pyc
+.env
