@@ -940,6 +940,16 @@ def run_walkforward(
         if test_end <= test_start:
             break
 
+        # skip tiny final windows
+        trading_days = [
+            d for d in data["SPY"].index.tolist()
+            if test_start <= d <= test_end
+        ]
+
+        if len(trading_days) < 60:
+            print(f"\nSkipping incomplete final window: {test_start} to {test_end}")
+            break
+
         print(f"\n=== WALK-FORWARD WINDOW {window_id}: {test_start} to {test_end} ===")
         window_cfg = replace(cfg, name=f"wf_{window_id:02d}")
         result = run_backtest_core(
