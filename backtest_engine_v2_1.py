@@ -1248,7 +1248,7 @@ def run_walkforward(
             (window_df["date"] <= test_end)
         ]
 
-        if len(window_days) < 20:
+        if len(window_days) < 60:
             print(f"\nSkipping incomplete final window: {test_start} to {test_end}")
             break
         window_cfg = replace(cfg, name=f"wf_{window_id:02d}")
