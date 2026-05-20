@@ -1,7 +1,0 @@
-*.mp4
-*.jpg
-*.png
-*.pdf
-*.lnk
-portfolio.json
-__pycache__/
