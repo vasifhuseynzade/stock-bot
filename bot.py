@@ -858,7 +858,7 @@ def audit(event: str, details: str = "") -> None:
 
         with open(AUDIT_LOG, "a", encoding="utf-8") as f:
 
-            f.write(line + "\\n")
+            f.write(line + "\n")
 
 
 
@@ -3732,13 +3732,13 @@ def public_signal_footer() -> str:
 
     return (
 
-        "⚠️ Not financial advice. Educational / forward-test bot alert only.\\n"
+        "⚠️ Not financial advice. Educational / forward-test bot alert only.\n"
 
-        "Do your own research and due diligence.\\n"
+        "Do your own research and due diligence.\n"
 
-        "Use your own risk tolerance, account size, tax situation, and execution plan.\\n"
+        "Use your own risk tolerance, account size, tax situation, and execution plan.\n"
 
-        "I may hold or trade this instrument. Signals can be wrong, delayed, or invalidated.\\n"
+        "I may hold or trade this instrument. Signals can be wrong, delayed, or invalidated.\n"
 
         "Paid access, if any, is for automated alerts only — no profit guarantee or personalized advice."
 
@@ -3752,33 +3752,33 @@ def public_channel_terms_text() -> str:
 
     return (
 
-        "📌 CHANNEL DISCLAIMER\\n\\n"
+        "📌 CHANNEL DISCLAIMER\n\n"
 
-        "This private channel shares automated trading-bot alerts for educational and forward-testing purposes only.\\n\\n"
+        "This private channel shares automated trading-bot alerts for educational and forward-testing purposes only.\n\n"
 
         "Nothing posted here is financial advice, investment advice, personalized advice, portfolio management, "
 
-        "or a guarantee of profit.\\n\\n"
+        "or a guarantee of profit.\n\n"
 
         "I am not your financial adviser. I do not know your financial situation, account size, risk tolerance, "
 
-        "tax situation, investment goals, or execution ability.\\n\\n"
+        "tax situation, investment goals, or execution ability.\n\n"
 
         "Trading stocks, ETFs, crypto-related equities, and high-volatility assets can cause losses. "
 
         "Losses can happen because of gaps, slippage, delayed execution, bad data, earnings, news, market events, "
 
-        "or system errors.\\n\\n"
+        "or system errors.\n\n"
 
         "All decisions are your own. Do your own research and due diligence before acting. "
 
-        "Never risk money you cannot afford to lose.\\n\\n"
+        "Never risk money you cannot afford to lose.\n\n"
 
-        "I may personally hold, buy, or sell instruments mentioned in this channel.\\n\\n"
+        "I may personally hold, buy, or sell instruments mentioned in this channel.\n\n"
 
         "Signals may be delayed, wrong, changed, or invalidated by market conditions. "
 
-        "Past performance, paper-trading results, and forward-test results do not guarantee future results.\\n\\n"
+        "Past performance, paper-trading results, and forward-test results do not guarantee future results.\n\n"
 
         "Any paid access, if offered later, is only for access to automated bot alerts and educational tracking. "
 
@@ -3956,33 +3956,33 @@ def format_public_entry_signal(
 
     return (
 
-        "📈 ENTRY SIGNAL\\n\\n"
+        "📈 ENTRY SIGNAL\n\n"
 
-        f"🏷️ Ticker: {ticker}\\n"
+        f"🏷️ Ticker: {ticker}\n"
 
-        f"🌎 Market: {market_label(market)}\\n"
+        f"🌎 Market: {market_label(market)}\n"
 
-        f"⚙️ Setup: {setup_label(setup)}\\n\\n"
-
-
-
-        f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\\n"
-
-        f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\\n"
-
-        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\\n"
-
-        f"📐 POSITION SIZE GUIDE: about {position_size} of account value\\n"
-
-        f"⚠️ Trade risk guide: about {trade_risk} of account value\\n\\n"
+        f"⚙️ Setup: {setup_label(setup)}\n\n"
 
 
 
-        f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\\n"
+        f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\n"
 
-        f"⭐ Score: {entry_data.get('score')}\\n"
+        f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
 
-        f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\\n\\n"
+        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\n"
+
+        f"📐 POSITION SIZE GUIDE: about {position_size} of account value\n"
+
+        f"⚠️ Trade risk guide: about {trade_risk} of account value\n\n"
+
+
+
+        f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
+
+        f"⭐ Score: {entry_data.get('score')}\n"
+
+        f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
 
 
 
@@ -4016,19 +4016,19 @@ def format_public_partial_signal(
 
     return (
 
-        "💰 PARTIAL TAKE-PROFIT (EXIT ~50% OF POSITION)\\n\\n"
+        "💰 PARTIAL TAKE-PROFIT (EXIT ~50% OF POSITION)\n\n"
 
-        f"🏷️ Ticker: {ticker}\\n"
+        f"🏷️ Ticker: {ticker}\n"
 
-        f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\\n"
+        f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
 
-        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\\n\\n"
+        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
 
 
-        "Bot status: partial-profit condition triggered.\\n"
+        "Bot status: partial-profit condition triggered.\n"
 
-        "Review your own plan before taking any action.\\n\\n"
+        "Review your own plan before taking any action.\n\n"
 
 
 
@@ -4074,21 +4074,21 @@ def format_public_exit_signal(
 
     return (
 
-        "📉 EXIT SIGNAL\\n\\n"
+        "📉 EXIT SIGNAL\n\n"
 
-        f"🏷️ Ticker: {ticker}\\n"
+        f"🏷️ Ticker: {ticker}\n"
 
-        f"📌 Reason: {reason_label}\\n"
+        f"📌 Reason: {reason_label}\n"
 
-        f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\\n"
+        f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\n"
 
-        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\\n\\n"
+        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
 
 
-        "Bot status: exit condition triggered.\\n"
+        "Bot status: exit condition triggered.\n"
 
-        "Review your own plan before taking any action.\\n\\n"
+        "Review your own plan before taking any action.\n\n"
 
 
 
@@ -6452,15 +6452,15 @@ def record_withdrawal(
 
     return True, (
 
-        f"🏦 WITHDRAWAL RECORDED\\n\\n"
+        f"🏦 WITHDRAWAL RECORDED\n\n"
 
-        f"💸 Amount: {format_money(amount)}\\n"
+        f"💸 Amount: {format_money(amount)}\n"
 
-        f"💼 Equity before: {format_money(equity_before)}\\n"
+        f"💼 Equity before: {format_money(equity_before)}\n"
 
-        f"💵 Cash before: {format_money(cash_before)}\\n"
+        f"💵 Cash before: {format_money(cash_before)}\n"
 
-        f"💵 Cash after: {format_money(cash_after)}\\n"
+        f"💵 Cash after: {format_money(cash_after)}\n"
 
         f"🏔️ New high-water mark: {format_money(hwm_after)}"
 
@@ -6588,27 +6588,27 @@ def maybe_send_withdrawal_signal() -> None:
 
         send(
 
-            "🏦 WITHDRAWAL SIGNAL\\n\\n"
+            "🏦 WITHDRAWAL SIGNAL\n\n"
 
-            "🎉 Time to pay yourself.\\n\\n"
+            "🎉 Time to pay yourself.\n\n"
 
-            f"📊 Phase: {plan['phase']}\\n"
+            f"📊 Phase: {plan['phase']}\n"
 
-            f"💼 Equity: {format_money(plan['equity'])}\\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
 
-            f"💵 Cash: {format_money(plan['cash'])}\\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
 
-            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\\n"
+            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\n"
 
-            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\\n\\n"
+            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
 
-            f"📤 Rate: {round(plan['rate'] * 100, 2)}%\\n"
+            f"📤 Rate: {round(plan['rate'] * 100, 2)}%\n"
 
-            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\\n\\n"
+            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
 
-            f"😂 Bot note:\\n{withdrawal_funny_note()}\\n\\n"
+            f"😂 Bot note:\n{withdrawal_funny_note()}\n\n"
 
-            f"After you manually withdraw it, send:\\n"
+            f"After you manually withdraw it, send:\n"
 
             f"withdrawdone {round(plan['suggested'], 2)}"
 
@@ -7650,7 +7650,7 @@ def record_buy(
 
             False,
 
-            f"Buy rejected: {ticker} is not in WATCHLIST.\\n"
+            f"Buy rejected: {ticker} is not in WATCHLIST.\n"
 
             "This may be a typo. Add it to WATCHLIST first if you really want to trade it."
 
@@ -7664,9 +7664,9 @@ def record_buy(
 
             False,
 
-            f"Buy rejected: no active signal found for {ticker}.\\n"
+            f"Buy rejected: no active signal found for {ticker}.\n"
 
-            "This protects you from typo buys like UBST instead of UPST.\\n"
+            "This protects you from typo buys like UBST instead of UPST.\n"
 
             "Use forcescan/wait for a signal, or disable REQUIRE_ACTIVE_SIGNAL_FOR_BUY if you intentionally want manual buys."
 
@@ -7686,7 +7686,7 @@ def record_buy(
 
                 False,
 
-                f"Buy rejected: no live quote found for {ticker}.\\n"
+                f"Buy rejected: no live quote found for {ticker}.\n"
 
                 "Cash was not changed. Check ticker spelling."
 
@@ -7704,15 +7704,15 @@ def record_buy(
 
                 False,
 
-                f"Buy rejected: entered price is too far from live quote.\\n"
+                f"Buy rejected: entered price is too far from live quote.\n"
 
-                f"Ticker: {ticker}\\n"
+                f"Ticker: {ticker}\n"
 
-                f"Your price: {round(price, 2)}\\n"
+                f"Your price: {round(price, 2)}\n"
 
-                f"Live quote: {round(quote, 2)}\\n"
+                f"Live quote: {round(quote, 2)}\n"
 
-                f"Difference: {round(quote_deviation * 100, 2)}%\\n"
+                f"Difference: {round(quote_deviation * 100, 2)}%\n"
 
                 f"Max allowed: {round(BUY_QUOTE_DEVIATION_LIMIT * 100, 2)}%"
 
@@ -7952,11 +7952,11 @@ def record_buy(
 
     return True, (
 
-        f"✅ BOUGHT {ticker}\\n\\n"
+        f"✅ BOUGHT {ticker}\n\n"
 
-        f"📦 Shares: {shares}\\n"
+        f"📦 Shares: {shares}\n"
 
-        f"💵 Price: {price}\\n"
+        f"💵 Price: {price}\n"
 
         f"💰 Cash left: {format_money(portfolio['cash'])}"
 
@@ -8208,13 +8208,13 @@ def record_sell(
 
     return True, (
 
-        f"💰 SOLD {ticker}\\n\\n"
+        f"💰 SOLD {ticker}\n\n"
 
-        f"📦 Shares: {shares}\\n"
+        f"📦 Shares: {shares}\n"
 
-        f"💵 Exit Price: {price}\\n"
+        f"💵 Exit Price: {price}\n"
 
-        f"📊 P/L: {format_money(trade['profit'])}\\n"
+        f"📊 P/L: {format_money(trade['profit'])}\n"
 
         f"💼 Cash: {format_money(portfolio['cash'])}"
 
@@ -8630,15 +8630,15 @@ def void_buy(
 
     return True, (
 
-        f"🧹 VOID BUY COMPLETE {ticker}\\n\\n"
+        f"🧹 VOID BUY COMPLETE {ticker}\n\n"
 
-        f"📦 Removed shares: {shares}\\n"
+        f"📦 Removed shares: {shares}\n"
 
-        f"💵 Entry price: {round(entry_price, 2)}\\n"
+        f"💵 Entry price: {round(entry_price, 2)}\n"
 
-        f"💰 Cash refunded: {format_money(refund)}\\n"
+        f"💰 Cash refunded: {format_money(refund)}\n"
 
-        f"💼 Cash now: {format_money(portfolio['cash'])}\\n\\n"
+        f"💼 Cash now: {format_money(portfolio['cash'])}\n\n"
 
         "No fake sell trade was created."
 
@@ -9052,25 +9052,25 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
     return True, (
 
-        "🧨 RESET ALL COMPLETE\\n\\n"
+        "🧨 RESET ALL COMPLETE\n\n"
 
-        "A backup was exported first.\\n\\n"
+        "A backup was exported first.\n\n"
 
-        "Current bot state:\\n"
+        "Current bot state:\n"
 
-        f"💵 Cash: {format_money(portfolio['cash'])}\\n"
+        f"💵 Cash: {format_money(portfolio['cash'])}\n"
 
-        f"📦 Positions: {len(portfolio['positions'])}\\n\\n"
+        f"📦 Positions: {len(portfolio['positions'])}\n\n"
 
-        "Next live-start commands:\\n"
+        "Next live-start commands:\n"
 
-        "1) setcash YOUR_REAL_CASH\\n"
+        "1) setcash YOUR_REAL_CASH\n"
 
-        "2) withdrawinit\\n"
+        "2) withdrawinit\n"
 
-        "3) scanstatus\\n"
+        "3) scanstatus\n"
 
-        "4) portfolio\\n"
+        "4) portfolio\n"
 
         "5) openrisk"
 
@@ -9138,9 +9138,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "🚨 PANIC MODE ENABLED\\n\\n"
+            "🚨 PANIC MODE ENABLED\n\n"
 
-            "🔒 Scanning disabled.\\n"
+            "🔒 Scanning disabled.\n"
 
             "🛡️ Position management still active."
 
@@ -9164,7 +9164,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-        send("✅ Bot resumed.\\n\\n🔎 Scanning enabled again.")
+        send("✅ Bot resumed.\n\n🔎 Scanning enabled again.")
 
 
 
@@ -9180,31 +9180,31 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            "Commands:\\n"
+            "Commands:\n"
 
 
 
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\\n"
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
 
-            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\\n"
+            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
 
-            "testchannel | postchannelterms\\n"
+            "testchannel | postchannelterms\n"
 
-            "download_state | download_portfolio | download_signals | download_withdrawals\\n"
+            "download_state | download_portfolio | download_signals | download_withdrawals\n"
 
-            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\\n"
+            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
 
-            "resetall  (then resetall CONFIRM-LIVE)\\n"
+            "resetall  (then resetall CONFIRM-LIVE)\n"
 
-            "setcash AMOUNT\\n"
+            "setcash AMOUNT\n"
 
-            "voidbuy TICKER  (undo mistaken buy without fake sell trade)\\n"
+            "voidbuy TICKER  (undo mistaken buy without fake sell trade)\n"
 
-            "editbuy TICKER PRICE\\n"
+            "editbuy TICKER PRICE\n"
 
-            "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\\n"
+            "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\n"
 
-            "bought TICKER SHARES at PRICE\\n"
+            "bought TICKER SHARES at PRICE\n"
 
             "sold TICKER SHARES at PRICE"
 
@@ -9220,7 +9220,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         ok, info = send_public_signal(
 
-            "🧪 TEST SIGNAL CHANNEL\\n\\n"
+            "🧪 TEST SIGNAL CHANNEL\n\n"
 
             "If you see this, public channel forwarding works."
 
@@ -9234,7 +9234,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         else:
 
-            send(f"❌ Public signal channel test failed:\\n\\n{info}")
+            send(f"❌ Public signal channel test failed:\n\n{info}")
 
 
 
@@ -9252,7 +9252,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             send(
 
-                "✅ Channel disclaimer posted.\\n\\n"
+                "✅ Channel disclaimer posted.\n\n"
 
                 "Now open the channel and pin that message manually."
 
@@ -9260,7 +9260,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         else:
 
-            send(f"❌ Channel disclaimer failed:\\n\\n{info}")
+            send(f"❌ Channel disclaimer failed:\n\n{info}")
 
 
 
@@ -9278,15 +9278,15 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "📊 REALIZED P/L — ALL TIME\\n\\n"
+            "📊 REALIZED P/L — ALL TIME\n\n"
 
             f"💰 Realized P/L: {format_money(perf['profit'])} "
 
-            f"({format_pct(perf['pct'])})\\n"
+            f"({format_pct(perf['pct'])})\n"
 
-            f"📏 Base capital: {format_money(perf['base_capital'])}\\n"
+            f"📏 Base capital: {format_money(perf['base_capital'])}\n"
 
-            f"🧾 Trade records: {perf['trade_records']}\\n\\n"
+            f"🧾 Trade records: {perf['trade_records']}\n\n"
 
             "Note: this is realized P/L only. Open unrealized P/L is not included."
 
@@ -9312,11 +9312,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "💼 ACCOUNT EQUITY\\n\\n"
+            "💼 ACCOUNT EQUITY\n\n"
 
-            f"💵 Cash: {format_money(snapshot['cash'])}\\n"
+            f"💵 Cash: {format_money(snapshot['cash'])}\n"
 
-            f"📦 Positions: {format_money(snapshot['positions_value'])}\\n"
+            f"📦 Positions: {format_money(snapshot['positions_value'])}\n"
 
             f"🏦 Total Equity: {format_money(snapshot['equity'])}"
 
@@ -9342,17 +9342,17 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "🛡️ OPEN RISK\\n\\n"
+            "🛡️ OPEN RISK\n\n"
 
-            f"💼 Equity: {format_money(details['equity'])}\\n"
+            f"💼 Equity: {format_money(details['equity'])}\n"
 
             f"⚠️ Initial open risk: {format_money(details['initial_risk_dollars'])} "
 
-            f"({round(details['initial_risk_pct'] * 100, 2)}%)\\n"
+            f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
 
             f"📉 Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
 
-            f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\\n"
+            f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\n"
 
             f"🚦 Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
 
@@ -9398,25 +9398,25 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "📈 EXPECTANCY\\n\\n"
+            "📈 EXPECTANCY\n\n"
 
-            f"🧾 Trades: {e['trades']}\\n"
+            f"🧾 Trades: {e['trades']}\n"
 
-            f"🎯 R-trades: {e['r_trades']}\\n"
+            f"🎯 R-trades: {e['r_trades']}\n"
 
-            f"📊 Avg R/trade: {e['avg_r']}\\n"
+            f"📊 Avg R/trade: {e['avg_r']}\n"
 
-            f"📍 Median R: {e['median_r']}\\n"
+            f"📍 Median R: {e['median_r']}\n"
 
-            f"✅ Avg win R: {e['avg_win_r']}\\n"
+            f"✅ Avg win R: {e['avg_win_r']}\n"
 
-            f"❌ Avg loss R: {e['avg_loss_r']}\\n"
+            f"❌ Avg loss R: {e['avg_loss_r']}\n"
 
-            f"⚖️ Profit factor: {e['profit_factor']}\\n\\n"
+            f"⚖️ Profit factor: {e['profit_factor']}\n\n"
 
-            f"📦 Position-level count: {p['positions_closed_or_partially_closed']}\\n"
+            f"📦 Position-level count: {p['positions_closed_or_partially_closed']}\n"
 
-            f"📊 Avg position R: {p['avg_position_r']}\\n"
+            f"📊 Avg position R: {p['avg_position_r']}\n"
 
             f"📍 Median position R: {p['median_position_r']}"
 
@@ -9442,9 +9442,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            f"📊 TICKER STATS\\n\\n"
+            f"📊 TICKER STATS\n\n"
 
-            f"📈 Best: {best[0]} ({format_money(best[1])})\\n"
+            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
 
             f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
 
@@ -9502,19 +9502,19 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "📋 SUMMARY\\n\\n"
+            "📋 SUMMARY\n\n"
 
-            f"📊 Realized P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\\n"
+            f"📊 Realized P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
 
-            f"🏆 Win Rate: {wr}%\\n"
+            f"🏆 Win Rate: {wr}%\n"
 
-            f"⏱️ Avg Duration: {duration}\\n"
+            f"⏱️ Avg Duration: {duration}\n"
 
-            f"🎯 Avg R: {e['avg_r']}\\n"
+            f"🎯 Avg R: {e['avg_r']}\n"
 
-            f"⚖️ Profit Factor: {e['profit_factor']}\\n\\n"
+            f"⚖️ Profit Factor: {e['profit_factor']}\n\n"
 
-            f"📈 Best: {best[0]} ({format_money(best[1])})\\n"
+            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
 
             f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
 
@@ -9538,23 +9538,23 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "🧭 SCAN STATUS\\n\\n"
+            "🧭 SCAN STATUS\n\n"
 
-            f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\\n"
+            f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
 
-            f"📅 Last scan day: {last_scan_day}\\n"
+            f"📅 Last scan day: {last_scan_day}\n"
 
-            f"📦 Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\\n"
+            f"📦 Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\n"
 
-            f"💵 Cash: {format_money(portfolio['cash'])}\\n"
+            f"💵 Cash: {format_money(portfolio['cash'])}\n"
 
-            f"💼 Equity: {format_money(details['equity'])}\\n"
+            f"💼 Equity: {format_money(details['equity'])}\n"
 
-            f"⚠️ Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\\n"
+            f"⚠️ Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
 
-            f"🛡️ Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\\n"
+            f"🛡️ Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
 
-            f"🕯️ Fresh candle required: {yes_no(REQUIRE_FRESH_DAILY_CANDLE)}\\n"
+            f"🕯️ Fresh candle required: {yes_no(REQUIRE_FRESH_DAILY_CANDLE)}\n"
 
             f"🚨 Panic mode: {yes_no(PANIC_MODE)}"
 
@@ -9578,7 +9578,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-        send("🔄 Scan day reset.\\n\\nBot may scan again during the scan window.")
+        send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
 
         return
 
@@ -9586,7 +9586,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "forcescan":
 
-        send("🔎 Manual scan started.\\n\\nCheck Telegram/logs for signals and scan summary.")
+        send("🔎 Manual scan started.\n\nCheck Telegram/logs for signals and scan summary.")
 
 
 
@@ -9642,13 +9642,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            send("✅ Manual scan completed.\\n\\n📅 Marked done for today.")
+            send("✅ Manual scan completed.\n\n📅 Marked done for today.")
 
         elif scanned_ok:
 
             send(
 
-                "✅ Manual scan completed.\\n\\n"
+                "✅ Manual scan completed.\n\n"
 
                 "ℹ️ Not marked done because this was outside the official scan window."
 
@@ -9678,9 +9678,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "🏔️ WITHDRAWAL HIGH-WATER MARK RESET\\n\\n"
+            "🏔️ WITHDRAWAL HIGH-WATER MARK RESET\n\n"
 
-            f"💼 Current equity: {format_money(equity)}\\n\\n"
+            f"💼 Current equity: {format_money(equity)}\n\n"
 
             "Future withdrawal signals will only use profits above this level."
 
@@ -9702,11 +9702,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             send(
 
-                "🏦 WITHDRAWAL PLAN\\n\\n"
+                "🏦 WITHDRAWAL PLAN\n\n"
 
-                f"💼 Equity: {format_money(plan['equity'])}\\n"
+                f"💼 Equity: {format_money(plan['equity'])}\n"
 
-                f"💵 Cash: {format_money(plan['cash'])}\\n\\n"
+                f"💵 Cash: {format_money(plan['cash'])}\n\n"
 
                 f"⚠️ {plan['reason']}"
 
@@ -9720,29 +9720,29 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "🏦 WITHDRAWAL PLAN\\n\\n"
+            "🏦 WITHDRAWAL PLAN\n\n"
 
-            f"📊 Phase: {plan['phase']}\\n"
+            f"📊 Phase: {plan['phase']}\n"
 
-            f"💼 Equity: {format_money(plan['equity'])}\\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
 
-            f"💵 Cash: {format_money(plan['cash'])}\\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
 
-            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\\n"
+            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\n"
 
-            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\\n\\n"
+            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
 
-            f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\\n"
+            f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
 
-            f"🧮 Gross suggested: {format_money(plan['gross_suggested'])}\\n"
+            f"🧮 Gross suggested: {format_money(plan['gross_suggested'])}\n"
 
-            f"💵 Cash cap: {format_money(plan['cash_cap'])}\\n"
+            f"💵 Cash cap: {format_money(plan['cash_cap'])}\n"
 
-            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\\n\\n"
+            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
 
-            f"🗓️ Days since withdrawal/review start: {plan['days_since_clock']}\\n"
+            f"🗓️ Days since withdrawal/review start: {plan['days_since_clock']}\n"
 
-            f"🚦 Eligible: {yes_no(plan['eligible'])}\\n"
+            f"🚦 Eligible: {yes_no(plan['eligible'])}\n"
 
             f"ℹ️ Reason: {plan['reason']}"
 
@@ -9812,7 +9812,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         if not withdrawals:
 
-            send("🏦 WITHDRAWALS\\n\\nNo withdrawals recorded yet.")
+            send("🏦 WITHDRAWALS\n\nNo withdrawals recorded yet.")
 
             return
 
@@ -9824,11 +9824,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         msg = (
 
-            "🏦 WITHDRAWALS\\n\\n"
+            "🏦 WITHDRAWALS\n\n"
 
-            f"💸 Total withdrawn: {format_money(total)}\\n"
+            f"💸 Total withdrawn: {format_money(total)}\n"
 
-            f"🧾 Count: {len(withdrawals)}\\n\\n"
+            f"🧾 Count: {len(withdrawals)}\n\n"
 
         )
 
@@ -9848,13 +9848,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             msg += (
 
-                f"📅 {dt}\\n"
+                f"📅 {dt}\n"
 
-                f"Amount: {format_money(item['amount'])}\\n"
+                f"Amount: {format_money(item['amount'])}\n"
 
-                f"Equity before: {format_money(item['equity_before'])}\\n"
+                f"Equity before: {format_money(item['equity_before'])}\n"
 
-                f"HWM after: {format_money(item['high_water_mark_after'])}\\n\\n"
+                f"HWM after: {format_money(item['high_water_mark_after'])}\n\n"
 
             )
 
@@ -9888,7 +9888,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            send(f"📋 PORTFOLIO\\n\\n💵 Cash: {format_money(cash)}\\nNo open positions")
+            send(f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\nNo open positions")
 
 
 
@@ -9902,7 +9902,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-        msg = f"PORTFOLIO\\n\\nCash: {format_money(cash)}\\n\\n"
+        msg = f"PORTFOLIO\n\nCash: {format_money(cash)}\n\n"
 
 
 
@@ -9946,35 +9946,35 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-                f"📦 {ticker}\\n"
+                f"📦 {ticker}\n"
 
 
 
-                f"Shares: {shares}\\n"
+                f"Shares: {shares}\n"
 
 
 
-                f"Entry: {round(entry, 2)}\\n"
+                f"Entry: {round(entry, 2)}\n"
 
 
 
-                f"Now: {round(current_price, 2)}\\n"
+                f"Now: {round(current_price, 2)}\n"
 
 
 
-                f"🛡️ Stop: {round(pos['stop'], 2)}\\n"
+                f"🛡️ Stop: {round(pos['stop'], 2)}\n"
 
 
 
-                f"📈 High: {round(pos['highest'], 2)}\\n"
+                f"📈 High: {round(pos['highest'], 2)}\n"
 
 
 
-                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\\n"
+                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\n"
 
 
 
-                f"💰 P/L: {format_money(pnl)}\\n\\n"
+                f"💰 P/L: {format_money(pnl)}\n\n"
 
 
 
@@ -10084,7 +10084,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-        send("🔄 Signals reset.\\n\\nTrade history and portfolio are unchanged.")
+        send("🔄 Signals reset.\n\nTrade history and portfolio are unchanged.")
 
 
 
@@ -10158,9 +10158,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            f"⚙️ SETUP STATS\\n\\n"
+            f"⚙️ SETUP STATS\n\n"
 
-            f"🚀 Breakout: {stats(breakout)}\\n"
+            f"🚀 Breakout: {stats(breakout)}\n"
 
             f"🔁 Pullback: {stats(pullback)}"
 
@@ -10282,15 +10282,15 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         send(
 
-            "⚠️ DANGEROUS RESET COMMAND\\n\\n"
+            "⚠️ DANGEROUS RESET COMMAND\n\n"
 
-            "This will export a backup, then clear:\\n"
+            "This will export a backup, then clear:\n"
 
-            "positions, trades, signals, cooldowns, breakout memory, equity snapshots, withdrawals, and cash.\\n\\n"
+            "positions, trades, signals, cooldowns, breakout memory, equity snapshots, withdrawals, and cash.\n\n"
 
-            "It will NOT delete Telegram update history, so old commands will not be reprocessed.\\n\\n"
+            "It will NOT delete Telegram update history, so old commands will not be reprocessed.\n\n"
 
-            "To confirm, send exactly:\\n"
+            "To confirm, send exactly:\n"
 
             "resetall CONFIRM-LIVE"
 
@@ -10646,15 +10646,15 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            f"BUY UPDATED {ticker}\\n"
+            f"BUY UPDATED {ticker}\n"
 
 
 
-            f"Old: {round(old_price, 2)}\\n"
+            f"Old: {round(old_price, 2)}\n"
 
 
 
-            f"New: {round(new_price, 2)}\\n"
+            f"New: {round(new_price, 2)}\n"
 
 
 
@@ -10878,19 +10878,19 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            f"SELL UPDATED {ticker}\\n"
+            f"SELL UPDATED {ticker}\n"
 
 
 
-            f"Trade ID: {trade['id']}\\n"
+            f"Trade ID: {trade['id']}\n"
 
 
 
-            f"Old: {round(old_price, 2)}\\n"
+            f"Old: {round(old_price, 2)}\n"
 
 
 
-            f"New: {round(new_price, 2)}\\n"
+            f"New: {round(new_price, 2)}\n"
 
 
 
@@ -11847,11 +11847,11 @@ def manage_positions() -> None:
 
                 send(
 
-                    f"📉 EXIT {ticker}\\n"
+                    f"📉 EXIT {ticker}\n"
 
-                    f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\\n"
+                    f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\n"
 
-                    f"P/L: {format_money(trade['profit'])}\\n"
+                    f"P/L: {format_money(trade['profit'])}\n"
 
                     f"R: {trade.get('r_multiple')}"
 
@@ -11999,15 +11999,15 @@ def manage_positions() -> None:
 
                 send(
 
-                    f"💰 PARTIAL {ticker}\\n"
+                    f"💰 PARTIAL {ticker}\n"
 
-                    f"Shares: {sell_shares}\\n"
+                    f"Shares: {sell_shares}\n"
 
-                    f"💵 Partial exit price: {round(price, 2)} ({format_pct(partial_gain_pct)})\\n"
+                    f"💵 Partial exit price: {round(price, 2)} ({format_pct(partial_gain_pct)})\n"
 
-                    f"📌 Trigger: {partial_reason_text}\\n"
+                    f"📌 Trigger: {partial_reason_text}\n"
 
-                    f"P/L: {format_money(trade['profit'])}\\n"
+                    f"P/L: {format_money(trade['profit'])}\n"
 
                     f"R: {trade.get('r_multiple')}"
 
@@ -12659,9 +12659,9 @@ def main() -> None:
 
     send(
 
-        f"🚀 BOT STARTED\\n"
+        f"🚀 BOT STARTED\n"
 
-        f"Strategy: {STRATEGY_VERSION}\\n"
+        f"Strategy: {STRATEGY_VERSION}\n"
 
         f"Panic Mode: {PANIC_MODE}"
 
@@ -12900,3 +12900,4 @@ if __name__ == "__main__":
 
 
     main()
+
