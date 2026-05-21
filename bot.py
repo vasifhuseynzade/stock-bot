@@ -216,108 +216,97 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.1")
-
-
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.5")
 
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
-
-
- 
-
-
-
 # Risk / execution controls.
-
-
-
 MIN_CASH_REQUIRED = float(os.getenv("MIN_CASH_REQUIRED", "100"))
-
-
-
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "12"))
-
-
-
 MAX_TOTAL_RISK = float(os.getenv("MAX_TOTAL_RISK", "0.06"))
-
-
-
 MAX_POSITION_EQUITY_PCT = float(os.getenv("MAX_POSITION_EQUITY_PCT", "0.20"))
-
-
-
 CASH_USAGE_BUFFER = float(os.getenv("CASH_USAGE_BUFFER", "0.98"))
-
-
-
 SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", str(24 * 3600)))
-
-
-
 STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
-
-
-
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
-
-
-
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
-# V2 strategy quality engine.
-# This keeps your aggressive sizing/risk framework, but forces better signals.
-V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "3"))
-V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "68"))
-V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "72"))
-V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "74"))
-V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "80"))
-V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "6"))
+# -----------------------------------------------------------------------------
+# V2.5 STRONG-ONLY LEADER BREAKOUT ENGINE
+# -----------------------------------------------------------------------------
+# This strategy update intentionally removes broad pullbacks, weak names, and
+# ordinary medium-quality names. Backtests showed the more robust edge came from:
+# strong/liquid leaders + real volume expansion + relative strength + broad-market
+# confirmation + wider leader-rider stops/exits.
+V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "5"))
+V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "172"))
+V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "172"))
+V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "999"))
+V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "999"))
+V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "3"))
 
-# Avoid junk/illiquid names but keep opportunity broad enough for paper testing.
-V2_MIN_PRICE = float(os.getenv("V2_MIN_PRICE", "8"))
-V2_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("V2_MIN_AVG_DOLLAR_VOLUME", "30000000"))
+# Universe controls. Strong-only is the default. The STRONG list below is broadened
+# with liquid institutional leaders so we still have enough forward-test opportunity.
+V2_ALLOW_MEDIUM = os.getenv("V2_ALLOW_MEDIUM", "0") != "0"
+V2_ALLOW_WEAK = os.getenv("V2_ALLOW_WEAK", "0") != "0"
+V2_ALLOW_PULLBACKS = os.getenv("V2_ALLOW_PULLBACKS", "0") != "0"
+
+# Liquidity / volatility filters.
+V2_MIN_PRICE = float(os.getenv("V2_MIN_PRICE", "12"))
+V2_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("V2_MIN_AVG_DOLLAR_VOLUME", "100000000"))
 V2_MIN_ATR_PCT = float(os.getenv("V2_MIN_ATR_PCT", "0.01"))
-V2_MAX_ATR_PCT = float(os.getenv("V2_MAX_ATR_PCT", "0.12"))
+V2_MAX_ATR_PCT = float(os.getenv("V2_MAX_ATR_PCT", "0.10"))
 V2_MAX_RISK_PER_SHARE_PCT = float(os.getenv("V2_MAX_RISK_PER_SHARE_PCT", "0.10"))
 
-# Breakout and pullback behavior.
-V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.15"))
-V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "0.30"))
-V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "82"))
-V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "7.0"))
-V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "6.0"))
+# Breakout behavior.
+V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.35"))
+V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "999"))
+V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "80"))
+V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "6.5"))
+V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "0"))
 
-# V2.1 quality gates.
-# These are based on the backtest analysis: breakouts carried the edge,
-# pullbacks were weak unless market/relative strength were clearly supportive.
+# V2.5 leader-breakout quality gates.
+V2_BREAKOUT_REQUIRE_POSITIVE_RS = os.getenv("V2_BREAKOUT_REQUIRE_POSITIVE_RS", "1") != "0"
 V2_BLOCK_PULLBACK_IN_UNCERTAIN = os.getenv("V2_BLOCK_PULLBACK_IN_UNCERTAIN", "1") != "0"
 V2_PULLBACK_REQUIRE_POSITIVE_RS = os.getenv("V2_PULLBACK_REQUIRE_POSITIVE_RS", "1") != "0"
-V2_BREAKOUT_REQUIRE_POSITIVE_RS = os.getenv("V2_BREAKOUT_REQUIRE_POSITIVE_RS", "1") != "0"
+V2_BREAKOUT_MIN_CLOSE_LOCATION = float(os.getenv("V2_BREAKOUT_MIN_CLOSE_LOCATION", "0.60"))
+V2_BREAKOUT_MIN_RS_SCORE = int(os.getenv("V2_BREAKOUT_MIN_RS_SCORE", "10"))
+V2_BREAKOUT_REQUIRE_MA20_SLOPE = os.getenv("V2_BREAKOUT_REQUIRE_MA20_SLOPE", "1") != "0"
+V2_BREAKOUT_MIN_STOCK_RET_20 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_20", "0.00"))
+V2_BREAKOUT_MIN_STOCK_RET_63 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_63", "-0.02"))
+V2_BREAKOUT_MIN_REL_20_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_20_SPY", "0.00"))
+V2_BREAKOUT_MIN_REL_63_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_63_SPY", "-0.01"))
+V2_BREAKOUT_MIN_REL_20_QQQ = float(os.getenv("V2_BREAKOUT_MIN_REL_20_QQQ", "-0.02"))
+V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS = os.getenv("V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS", "1") != "0"
+V2_BREAKOUT_STRONG_RS_20_SPY = float(os.getenv("V2_BREAKOUT_STRONG_RS_20_SPY", "0.05"))
+V2_BREAKOUT_MAX_BASE_RANGE_PCT = float(os.getenv("V2_BREAKOUT_MAX_BASE_RANGE_PCT", "0.34"))
+V2_BREAKOUT_MAX_EXTENSION_MA20 = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_MA20", "0.13"))
+V2_BREAKOUT_MAX_EXTENSION_ATR = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_ATR", "1.90"))
 
-# V2.1 stop model.
-# The old baseline variants showed wider stops were better than tighter stops.
-# Using the wider of ATR-stop and structure-stop means the lower stop price for longs.
-V2_BREAKOUT_ATR_STOP_MULT = float(os.getenv("V2_BREAKOUT_ATR_STOP_MULT", "1.80"))
-V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.80"))
+# Major-index trend filters. These reduce bear-market fake-breakout damage.
+V2_REQUIRE_SPY_ABOVE_MA100 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA100", "0") != "0"
+V2_REQUIRE_QQQ_ABOVE_MA100 = os.getenv("V2_REQUIRE_QQQ_ABOVE_MA100", "1") != "0"
+V2_REQUIRE_SPY_ABOVE_MA200 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA200", "1") != "0"
+V2_REQUIRE_QQQ_ABOVE_MA200 = os.getenv("V2_REQUIRE_QQQ_ABOVE_MA200", "0") != "0"
+
+# Stop model.
+V2_BREAKOUT_ATR_STOP_MULT = float(os.getenv("V2_BREAKOUT_ATR_STOP_MULT", "1.95"))
+V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.95"))
 V2_STOP_WIDER_OF_ATR_AND_STRUCTURE = os.getenv("V2_STOP_WIDER_OF_ATR_AND_STRUCTURE", "1") != "0"
 
-# Exit management.
-# Tested variants favored taking the planned partial at +1R or +8%, not waiting for 1.5R.
-BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.70"))
-PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.00"))
-PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.08"))
-TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "2.80"))
-TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.20"))
+# Winner-capture / exit management.
+BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.85"))
+PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.25"))
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.10"))
+PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
+TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "3.25"))
+TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.55"))
+TRAIL_TIGHTEN_PCT = float(os.getenv("TRAIL_TIGHTEN_PCT", "0.05"))
 
-# Aggressive mode: high-quality scores can slightly increase risk sizing.
-# Total risk, cash, and position caps still protect the portfolio.
-V2_RISK_BOOST_ENABLED = os.getenv("V2_RISK_BOOST_ENABLED", "1") != "0"
-V2_A_PLUS_RISK_BOOST = float(os.getenv("V2_A_PLUS_RISK_BOOST", "1.25"))
-V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.10"))
-
-
+# Risk boost disabled by default; the edge should come from selection, not leverage.
+V2_RISK_BOOST_ENABLED = os.getenv("V2_RISK_BOOST_ENABLED", "0") != "0"
+V2_A_PLUS_RISK_BOOST = float(os.getenv("V2_A_PLUS_RISK_BOOST", "1.08"))
+V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.03"))
 
 
 # Manual buy protection.
@@ -431,129 +420,49 @@ MAX_TELEGRAM_MESSAGE = 3900
 
 
 # -----------------------------------------------------------------------------
-
-
-
 # WATCHLIST
-
-
-
 # -----------------------------------------------------------------------------
 
-
-
- 
-
+# V2.5 uses a broadened STRONG-only universe: liquid ETFs and institutional
+# leader stocks. MEDIUM/WEAK lists are kept empty on purpose so the scanner,
+# manual-buy guard, and risk sizing all operate from the same leader universe.
 STRONG = [
-
     # Broad / sector ETFs
+    "SPY", "QQQ", "IWM", "DIA",
+    "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLP", "XLY", "XLC", "XLB",
 
-    "SPY", "QQQ", "IWM",
+    # Mega-cap / platform leaders
+    "MSFT", "NVDA", "META", "AMZN", "GOOGL", "AVGO", "AAPL", "TSLA", "NFLX",
+    "ORCL", "CRM", "IBM",
 
-    "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLP",
+    # Semiconductors / hardware leaders
+    "AMD", "MU", "LRCX", "ASML", "QCOM", "KLAC", "AMAT", "TSM", "TXN", "ADI",
 
+    # Software / cybersecurity / cloud leaders
+    "PANW", "CRWD", "ZS", "NET", "NOW", "PLTR", "DDOG",
 
+    # Financial / payment leaders
+    "JPM", "GS", "MS", "V", "MA", "AXP", "SCHW", "BLK", "SPGI",
 
-    # Mega-cap / institutional leaders
+    # Industrials / cyclicals / infrastructure leaders
+    "CAT", "DE", "GE", "ETN", "HON", "RTX", "URI", "PH",
 
-    "MSFT", "NVDA", "META", "AMZN", "GOOGL",
+    # Health care / defensive growth leaders
+    "LLY", "UNH", "ABBV", "ISRG", "TMO", "ABT", "MRK",
 
-    "AVGO", "AAPL",
+    # Consumer / travel / retail quality leaders
+    "COST", "WMT", "MCD", "HD", "LOW", "BKNG", "NKE", "SBUX",
 
-
-
-    # Financial leaders
-
-    "JPM", "GS", "MS",
-
-
-
-    # Industrials / cyclicals
-
-    "CAT", "DE", "GE", "ETN",
-
-
-
-    # Health care / defensive growth
-
-    "LLY", "UNH", "ABBV",
-
-
-
-    # Consumer quality
-
-    "COST", "WMT", "MCD",
-
+    # Energy / materials leaders
+    "XOM", "CVX", "SLB", "FCX", "LIN",
 ]
 
- 
+MEDIUM: List[str] = []
+WEAK: List[str] = []
 
-
-
-MEDIUM = [
-
-    # Software / cybersecurity / cloud
-
-    "PANW", "CRWD", "ZS", "NET", "NOW", "PLTR",
-
-
-
-    # Semis / hardware beyond mega leaders
-
-    "AMD", "MU", "LRCX", "ASML", "QCOM",
-
-
-
-    # Consumer / platforms / cyclicals
-
-    "UBER", "SHOP", "BKNG", "NKE",
-
-
-
-    # Financial / fintech / market-sensitive
-
-    "SCHW", "AXP", "COF",
-
-
-
-    # Energy / materials
-
-    "XOM", "CVX", "SLB", "FCX",
-
-]
-
- 
-
-
-
-WEAK = [
-
-    "COIN", "HOOD", "AFRM", "SOFI",
-
-    "MARA", "RIOT",
-
-    "UPST", "AI",
-
-    "ROKU", "SNOW",
-
-]
-
- 
-
-
-
-WATCHLIST = STRONG + MEDIUM + WEAK
-
-
-
- 
-
-
+WATCHLIST = STRONG
 
 # -----------------------------------------------------------------------------
-
-
-
 # GENERAL HELPERS
 
 
@@ -4038,7 +3947,7 @@ def format_public_partial_signal(
 
     return (
 
-        "💰 PARTIAL TAKE-PROFIT (EXIT ~50% OF POSITION)\n\n"
+        f"💰 PARTIAL TAKE-PROFIT (EXIT ~{int(round(PARTIAL_TAKE_PROFIT_FRACTION * 100))}% OF POSITION)\n\n"
 
         f"🏷️ Ticker: {ticker}\n"
 
@@ -5543,15 +5452,15 @@ def close_location(df: pd.DataFrame) -> float:
 
 def market_regime_details() -> Dict[str, Any]:
     """
-    V2 market regime score.
+    V2.5 market regime score.
 
-    Not conservative-noise blocking; it simply stops long entries when the whole
-    market structure is bad, and rewards stronger environments.
+    The score is still simple, but the frames use enough lookback for MA100/MA200
+    filters used by the leader-breakout strategy.
     """
     frames: Dict[str, Optional[pd.DataFrame]] = {}
 
     for symbol in ["SPY", "QQQ", "IWM", "SMH"]:
-        frames[symbol] = get_signal_dataframe(symbol, limit=120)
+        frames[symbol] = get_signal_dataframe(symbol, limit=260)
 
     score = 0
     notes: List[str] = []
@@ -11083,11 +10992,11 @@ def analyze(
     market_details: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
     """
-    V2 Monster scoring engine.
+    V2.5 strong-only leader-breakout engine.
 
-    Goal: keep opportunity and aggressive position sizing, but stop accepting
-    mediocre score-50 setups. This is not conservative; it is selective about
-    quality, then still allows meaningful position size.
+    It only accepts liquid leader breakouts with high score, real volume expansion,
+    relative strength, broad-market support, and controlled extension. Pullbacks,
+    weak names, and ordinary medium names are intentionally blocked for this freeze.
     """
     try:
         if df is None or df.empty:
@@ -11097,7 +11006,16 @@ def analyze(
         print(f"[ANALYZE ERROR] {ticker}: {exc}")
         return None
 
-    if len(df) < 80:
+    if ticker not in STRONG:
+        return None
+
+    if ticker in MEDIUM and not V2_ALLOW_MEDIUM:
+        return None
+
+    if ticker in WEAK and not V2_ALLOW_WEAK:
+        return None
+
+    if len(df) < 220:
         return None
 
     close = df["Close"]
@@ -11116,15 +11034,25 @@ def analyze(
     ma10 = close.rolling(10).mean().iloc[-1]
     ma20 = close.rolling(20).mean().iloc[-1]
     ma50 = close.rolling(50).mean().iloc[-1]
-    ma100 = close.rolling(100).mean().iloc[-1] if len(close) >= 100 else None
+    ma100 = close.rolling(100).mean().iloc[-1]
+    ma200 = close.rolling(200).mean().iloc[-1]
     avg_vol = volume.rolling(20).mean().iloc[-1]
 
-    required_vals = [rsi_val, atr_val, ma10, ma20, ma50, avg_vol]
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9, adjust=False).mean()
+    macd_hist = macd.iloc[-1] - macd_signal.iloc[-1]
+
+    required_vals = [
+        rsi_val, atr_val, ma10, ma20, ma50, ma100, ma200,
+        avg_vol, macd_hist
+    ]
 
     if any(pd.isna(x) for x in required_vals):
         return None
 
-    if ma20 <= 0 or ma50 <= 0 or avg_vol <= 0 or atr_val <= 0:
+    if ma20 <= 0 or ma50 <= 0 or ma100 <= 0 or ma200 <= 0 or avg_vol <= 0 or atr_val <= 0:
         return None
 
     atr_val = float(atr_val)
@@ -11146,26 +11074,54 @@ def analyze(
     market_score = 0
     spy_df = None
     qqq_df = None
+    smh_df = None
 
     if market_details:
         market_score = int(market_details.get("score", 0) or 0)
         frames = market_details.get("frames", {}) or {}
         spy_df = frames.get("SPY")
         qqq_df = frames.get("QQQ")
+        smh_df = frames.get("SMH")
 
     if market == "BEAR" or market_score < V2_MIN_MARKET_SCORE:
         return None
 
-    # Relative strength vs SPY and QQQ. This is the main v2 edge upgrade.
+    def frame_above_ma(frame: Optional[pd.DataFrame], period: int) -> bool:
+        try:
+            if frame is None or frame.empty or len(frame) < period:
+                return False
+            ma_val = frame["Close"].rolling(period).mean().iloc[-1]
+            if pd.isna(ma_val):
+                return False
+            return float(frame["Close"].iloc[-1]) > float(ma_val)
+        except Exception:
+            return False
+
+    if V2_REQUIRE_SPY_ABOVE_MA100 and not frame_above_ma(spy_df, 100):
+        return None
+
+    if V2_REQUIRE_SPY_ABOVE_MA200 and not frame_above_ma(spy_df, 200):
+        return None
+
+    if V2_REQUIRE_QQQ_ABOVE_MA100 and not frame_above_ma(qqq_df, 100):
+        return None
+
+    if V2_REQUIRE_QQQ_ABOVE_MA200 and not frame_above_ma(qqq_df, 200):
+        return None
+
+    # Relative strength vs SPY/QQQ/SMH.
+    stock_ret_10 = pct_change_over(close, 10)
     stock_ret_20 = pct_change_over(close, 20)
     stock_ret_63 = pct_change_over(close, 63)
     spy_ret_20 = pct_change_over(spy_df["Close"], 20) if spy_df is not None and not spy_df.empty else None
     spy_ret_63 = pct_change_over(spy_df["Close"], 63) if spy_df is not None and not spy_df.empty else None
     qqq_ret_20 = pct_change_over(qqq_df["Close"], 20) if qqq_df is not None and not qqq_df.empty else None
+    smh_ret_20 = pct_change_over(smh_df["Close"], 20) if smh_df is not None and not smh_df.empty else None
 
     rel_20 = None if stock_ret_20 is None or spy_ret_20 is None else stock_ret_20 - spy_ret_20
     rel_63 = None if stock_ret_63 is None or spy_ret_63 is None else stock_ret_63 - spy_ret_63
     rel_qqq_20 = None if stock_ret_20 is None or qqq_ret_20 is None else stock_ret_20 - qqq_ret_20
+    rel_smh_20 = None if stock_ret_20 is None or smh_ret_20 is None else stock_ret_20 - smh_ret_20
 
     trend_score = 0
 
@@ -11181,11 +11137,23 @@ def analyze(
     if price > float(ma10):
         trend_score += 4
 
-    if ma100 is not None and not pd.isna(ma100) and price > float(ma100):
+    if price > float(ma100):
         trend_score += 6
+
+    if price > float(ma200):
+        trend_score += 8
+
+    if float(ma50) > float(ma200):
+        trend_score += 4
 
     if rolling_slope_positive(close.rolling(50).mean(), lookback=10):
         trend_score += 10
+
+    if rolling_slope_positive(close.rolling(20).mean(), lookback=5):
+        trend_score += 4
+
+    if float(macd_hist) > 0:
+        trend_score += 4
 
     if close_loc >= 0.55:
         trend_score += 5
@@ -11194,6 +11162,9 @@ def analyze(
         trend_score += 5
 
     rs_score = 0
+
+    if stock_ret_10 is not None and stock_ret_10 > 0:
+        rs_score += 3
 
     if stock_ret_20 is not None and stock_ret_20 > 0:
         rs_score += 5
@@ -11218,160 +11189,118 @@ def analyze(
     if rel_qqq_20 is not None and rel_qqq_20 > 0:
         rs_score += 4
 
-    # Breakout definition upgraded from 20-day only to 20/55-day context.
+    semi_leaders = {"NVDA", "AMD", "MU", "LRCX", "ASML", "QCOM", "AVGO", "SMH", "KLAC", "AMAT", "TSM", "TXN", "ADI"}
+    if rel_smh_20 is not None and rel_smh_20 > 0 and ticker in semi_leaders:
+        rs_score += 3
+
     recent_high_20 = float(close.iloc[-21:-1].max())
-    recent_high_55 = float(close.iloc[-56:-1].max()) if len(close) >= 56 else recent_high_20
+    recent_high_55 = float(close.iloc[-56:-1].max())
     breakout_20 = price > recent_high_20
     breakout_55 = price > recent_high_55
 
-    pullback_distance_ma20 = (price - float(ma20)) / float(ma20)
-    touched_ma20_area = float(low.iloc[-1]) <= float(ma20) * 1.035
+    if not (breakout_20 or breakout_55):
+        return None
 
-    breakout_score = -999
+    recent_high_20_window = float(high.iloc[-21:].max())
+    recent_low_20_window = float(low.iloc[-21:].min())
+    recent_range_20_pct = (recent_high_20_window - recent_low_20_window) / price
 
-    if breakout_20 or breakout_55:
-        breakout_score = trend_score + rs_score
+    breakout_level = recent_high_55 if breakout_55 else recent_high_20
+    breakout_extension_atr = max(0.0, (price - breakout_level) / atr_val) if atr_val > 0 else 999.0
+    extension_ma20 = (price - float(ma20)) / float(ma20)
 
-        if breakout_20:
-            breakout_score += 8
+    score = trend_score + rs_score
 
-        if breakout_55:
-            breakout_score += 12
+    if breakout_20:
+        score += 8
 
-        if volume_ratio >= V2_MIN_BREAKOUT_VOLUME_RATIO:
-            breakout_score += 8
+    if breakout_55:
+        score += 12
 
-        if volume_ratio >= 1.5:
-            breakout_score += 5
+    if volume_ratio >= V2_MIN_BREAKOUT_VOLUME_RATIO:
+        score += 8
 
-        if close_loc >= 0.60:
-            breakout_score += 7
+    if volume_ratio >= 1.5:
+        score += 5
 
-        if 50 <= float(rsi_val) <= V2_MAX_BREAKOUT_RSI:
-            breakout_score += 6
+    if close_loc >= V2_BREAKOUT_MIN_CLOSE_LOCATION:
+        score += 8
 
-        if 0 < daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-            breakout_score += 5
+    if 50 <= float(rsi_val) <= V2_MAX_BREAKOUT_RSI:
+        score += 6
 
-        if float(ma20) > float(ma50):
-            breakout_score += 5
+    if 0 < daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT:
+        score += 5
 
-        # Hard rejection: this killed the SMH-style overheated breakout problem.
-        if float(rsi_val) > V2_MAX_BREAKOUT_RSI:
-            breakout_score = -999
+    if float(ma20) > float(ma50):
+        score += 5
 
-        if daily_move_pct > V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-            breakout_score = -999
+    score = int(round(score))
+    min_score = max(V2_MIN_SCORE, V2_BREAKOUT_MIN_SCORE)
 
-        if volume_ratio < V2_MIN_BREAKOUT_VOLUME_RATIO:
-            breakout_score = -999
+    # Hard filters. These are intentionally strict; they are what separate
+    # leader breakouts from ordinary noisy breakouts.
+    if float(rsi_val) > V2_MAX_BREAKOUT_RSI:
+        return None
 
-        if not (price > float(ma20) > float(ma50)):
-            breakout_score = -999
+    if daily_move_pct <= 0 or daily_move_pct > V2_MAX_BREAKOUT_DAY_MOVE_PCT:
+        return None
 
-    pullback_score = -999
+    if volume_ratio < V2_MIN_BREAKOUT_VOLUME_RATIO:
+        return None
 
-    pullback_candidate = (
-        price > float(ma50)
-        and float(ma20) >= float(ma50) * 0.995
-        and close.iloc[-1] > close.iloc[-2]
-        and -0.06 <= pullback_distance_ma20 <= 0.06
-        and touched_ma20_area
-        and daily_move_pct <= V2_MAX_PULLBACK_DAY_MOVE_PCT
-        and volume_ratio >= V2_MIN_PULLBACK_VOLUME_RATIO
-    )
+    if close_loc < V2_BREAKOUT_MIN_CLOSE_LOCATION:
+        return None
 
-    if pullback_candidate:
-        pullback_score = trend_score + rs_score
+    if not (price > float(ma20) > float(ma50)):
+        return None
 
-        if 32 <= float(rsi_val) <= 58:
-            pullback_score += 10
+    if V2_BREAKOUT_REQUIRE_MA20_SLOPE and not rolling_slope_positive(close.rolling(20).mean(), lookback=5):
+        return None
 
-        if 35 <= float(rsi_val) <= 50:
-            pullback_score += 5
+    if stock_ret_20 is None or stock_ret_20 < V2_BREAKOUT_MIN_STOCK_RET_20:
+        return None
 
-        if close.iloc[-1] > close.iloc[-2]:
-            pullback_score += 8
+    if stock_ret_63 is None or stock_ret_63 < V2_BREAKOUT_MIN_STOCK_RET_63:
+        return None
 
-        if close_loc >= 0.45:
-            pullback_score += 6
+    if rel_20 is None or rel_20 < V2_BREAKOUT_MIN_REL_20_SPY:
+        return None
 
-        if abs(pullback_distance_ma20) <= 0.03:
-            pullback_score += 7
+    if rel_63 is None or rel_63 < V2_BREAKOUT_MIN_REL_63_SPY:
+        return None
 
-        if float(low.iloc[-1]) <= float(ma20) * 1.02:
-            pullback_score += 5
+    if rel_qqq_20 is None or rel_qqq_20 < V2_BREAKOUT_MIN_REL_20_QQQ:
+        return None
 
-        if volume_ratio <= 1.30:
-            pullback_score += 4
-
-        if stock_ret_63 is not None and stock_ret_63 > 0:
-            pullback_score += 4
-
-    if breakout_score >= pullback_score:
-        setup_type = "breakout"
-        score = int(round(breakout_score))
-        min_score = V2_BREAKOUT_MIN_SCORE
-        is_breakout = True
-        breakout_level = recent_high_55 if breakout_55 else recent_high_20
-    else:
-        setup_type = "pullback"
-        score = int(round(pullback_score))
-        min_score = V2_PULLBACK_MIN_SCORE
-        is_breakout = False
-        breakout_level = recent_high_20
-
-    min_score = max(min_score, V2_MIN_SCORE)
-
-    if ticker in WEAK:
-        if not os.getenv("V2_ENABLE_WEAK", "1") != "0":
-            return None
-        min_score = max(min_score, V2_WEAK_MIN_SCORE)
-
-    if market == "UNCERTAIN":
-        min_score += 5
-
-    if setup_type == "pullback":
-        if V2_BLOCK_PULLBACK_IN_UNCERTAIN and market != "BULL":
+    if V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS:
+        strong_rs = rel_20 is not None and rel_20 >= V2_BREAKOUT_STRONG_RS_20_SPY
+        if not (breakout_55 or strong_rs):
             return None
 
-        if V2_PULLBACK_REQUIRE_POSITIVE_RS:
-            pullback_rs_ok = (
-                (rel_20 is not None and rel_20 > 0) or
-                (rel_63 is not None and rel_63 > 0)
-            )
+    if recent_range_20_pct > V2_BREAKOUT_MAX_BASE_RANGE_PCT:
+        return None
 
-            if not pullback_rs_ok:
-                return None
+    if extension_ma20 > V2_BREAKOUT_MAX_EXTENSION_MA20:
+        return None
 
-    if setup_type == "breakout" and V2_BREAKOUT_REQUIRE_POSITIVE_RS:
-        breakout_rs_ok = (
-            (rel_20 is not None and rel_20 > 0) or
-            (rel_63 is not None and rel_63 > 0)
-        )
+    if breakout_extension_atr > V2_BREAKOUT_MAX_EXTENSION_ATR:
+        return None
 
-        if not breakout_rs_ok:
-            return None
+    if rs_score < V2_BREAKOUT_MIN_RS_SCORE:
+        return None
 
     if score < min_score:
         return None
 
-    if setup_type == "breakout":
-        atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-        structure_stop = float(breakout_level) - (0.35 * atr_val)
-        stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
-        stop_model = "breakout_wider_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "breakout_tighter_structure_atr"
-    else:
-        recent_swing_low = float(low.iloc[-6:].min())
-        atr_stop = price - (V2_PULLBACK_ATR_STOP_MULT * atr_val)
-        structure_stop = recent_swing_low - (0.25 * atr_val)
-        stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
-        stop_model = "pullback_wider_swing_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "pullback_tighter_swing_atr"
+    atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
+    structure_stop = float(breakout_level) - (0.35 * atr_val)
+    stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
+    stop_model = "v2_5_leader_breakout_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_5_leader_breakout_tighter_atr"
 
     if stop <= 0 or stop >= price:
-        fallback_mult = V2_BREAKOUT_ATR_STOP_MULT if setup_type == "breakout" else V2_PULLBACK_ATR_STOP_MULT
-        stop = price - (fallback_mult * atr_val)
-        stop_model = "fallback_v21_atr"
+        stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
+        stop_model = "fallback_v25_atr"
 
     risk = price - stop
 
@@ -11387,9 +11316,9 @@ def analyze(
         return None
 
     if V2_RISK_BOOST_ENABLED:
-        if score >= 88:
+        if score >= 180:
             risk_pct *= V2_A_PLUS_RISK_BOOST
-        elif score >= 80:
+        elif score >= 172:
             risk_pct *= V2_A_RISK_BOOST
 
     refresh_portfolio()
@@ -11404,9 +11333,30 @@ def analyze(
     if shares <= 0:
         return None
 
+    rank_score = float(score)
+
+    if breakout_55:
+        rank_score += 8.0
+
+    if rel_20 is not None:
+        rank_score += max(0.0, min(10.0, rel_20 * 100.0))
+
+    if rel_63 is not None:
+        rank_score += max(0.0, min(8.0, rel_63 * 50.0))
+
+    rank_score += max(0.0, min(8.0, (volume_ratio - 1.0) * 6.0))
+    rank_score += max(0.0, min(10.0, (close_loc - 0.50) * 40.0))
+
     metrics = {
-        "setup_type": setup_type,
-        "breakout": is_breakout,
+        "setup_type": "breakout",
+        "strategy_family": "v2_5_strong_only_leader_breakout",
+        "breakout": True,
+        "breakout_20": breakout_20,
+        "breakout_55": breakout_55,
+        "breakout_level": breakout_level,
+        "breakout_extension_atr": breakout_extension_atr,
+        "extension_ma20": extension_ma20,
+        "recent_range_20_pct": recent_range_20_pct,
         "atr": atr_val,
         "atr_pct": atr_pct,
         "volume_ratio": volume_ratio,
@@ -11414,16 +11364,21 @@ def analyze(
         "market_score": market_score,
         "trend_score": trend_score,
         "rs_score": rs_score,
-        "breakout_score": None if breakout_score == -999 else breakout_score,
-        "pullback_score": None if pullback_score == -999 else pullback_score,
+        "rank_score": rank_score,
+        "breakout_score": score,
+        "pullback_score": None,
         "min_score_required": min_score,
+        "stock_ret_10": stock_ret_10,
         "stock_ret_20": stock_ret_20,
         "stock_ret_63": stock_ret_63,
         "rel_20_spy": rel_20,
         "rel_63_spy": rel_63,
         "rel_20_qqq": rel_qqq_20,
+        "rel_20_smh": rel_smh_20,
         "ma20": float(ma20),
         "ma50": float(ma50),
+        "ma100": float(ma100),
+        "ma200": float(ma200),
         "close_location": close_loc,
         "avg_dollar_volume": avg_dollar_volume,
         "stop_model": stop_model,
@@ -11433,11 +11388,7 @@ def analyze(
     return ticker, price, shares, stop, score, metrics
 
 
-
 # -----------------------------------------------------------------------------
-
-
-
 # POSITION MANAGEMENT
 
 
@@ -11814,7 +11765,7 @@ def manage_positions() -> None:
 
 
 
-            multiplier = TRAIL_MULT_LATE if (price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT) or (trade_r is not None and trade_r >= 1.5)) else TRAIL_MULT_EARLY
+            multiplier = TRAIL_MULT_LATE if (price >= entry * (1 + TRAIL_TIGHTEN_PCT) or (trade_r is not None and trade_r >= 1.5) or pos.get("partial_taken", False)) else TRAIL_MULT_EARLY
 
 
 
@@ -11972,7 +11923,7 @@ def manage_positions() -> None:
 
 
 
-        # Partial take-profit logic: +8% OR +1R by default.
+        # Partial take-profit logic: V2.5 defaults are +10% OR +1.25R.
 
 
 
@@ -11984,7 +11935,9 @@ def manage_positions() -> None:
 
 
 
-            sell_shares = int(pos["shares"]) // 2
+            sell_shares = max(1, int(math.floor(int(pos["shares"]) * PARTIAL_TAKE_PROFIT_FRACTION)))
+
+            sell_shares = min(sell_shares, int(pos["shares"]) - 1)
 
 
 
@@ -12296,9 +12249,9 @@ def scan_market() -> bool:
 
             attempted_historical += 1
 
-            df = get_signal_dataframe(ticker, limit=120)
+            df = get_signal_dataframe(ticker, limit=260)
 
-            if df is None or df.empty or len(df) < 80:
+            if df is None or df.empty or len(df) < 220:
                 skip_counts["no_historical"] += 1
                 continue
 
@@ -12409,6 +12362,10 @@ def scan_market() -> bool:
                 "rel_20_spy": None if metrics.get("rel_20_spy") is None else round(float(metrics.get("rel_20_spy")) * 100, 2),
                 "rel_63_spy": None if metrics.get("rel_63_spy") is None else round(float(metrics.get("rel_63_spy")) * 100, 2),
                 "close_location": round(float(metrics.get("close_location", 0)), 2),
+                "rank_score": round(float(metrics.get("rank_score", score) or score), 2),
+                "recent_range_20_pct": round(float(metrics.get("recent_range_20_pct", 0)) * 100, 2),
+                "breakout_extension_atr": round(float(metrics.get("breakout_extension_atr", 0)), 2),
+                "extension_ma20_pct": round(float(metrics.get("extension_ma20", 0)) * 100, 2),
                 "avg_dollar_volume": round(float(metrics.get("avg_dollar_volume", 0)), 2),
                 "stop_model": metrics.get("stop_model"),
                 "strategy_version": STRATEGY_VERSION,
@@ -12431,6 +12388,7 @@ def scan_market() -> bool:
                 "shares": shares,
                 "stop": stop,
                 "score": score,
+                "rank_score": float(metrics.get("rank_score", score) or score),
                 "risk_amount": risk_amount,
                 "capital": capital,
                 "entry_data": entry_data,
@@ -12443,7 +12401,7 @@ def scan_market() -> bool:
             traceback.print_exc()
             send(f"WARNING: scan error for {ticker}: {exc}")
 
-    candidates = sorted(candidates, key=lambda x: int(x["score"]), reverse=True)
+    candidates = sorted(candidates, key=lambda x: float(x.get("rank_score", x.get("score", 0)) or 0), reverse=True)
 
     sent_count = 0
 
@@ -12464,6 +12422,7 @@ def scan_market() -> bool:
         shares = int(candidate["shares"])
         stop = float(candidate["stop"])
         score = int(candidate["score"])
+        rank_score = float(candidate.get("rank_score", score) or score)
         risk_amount = float(candidate["risk_amount"])
         capital = float(candidate["capital"])
         entry_data = candidate["entry_data"]
@@ -12504,9 +12463,10 @@ def scan_market() -> bool:
             f"🟡 MAX ENTRY LIMIT: {entry_data['max_valid_entry']}\n"
             f"🔴 STOP/LOSS: {round(stop, 2)}\n"
             f"📐 Position size: {round(entry_data['position_size_pct'], 2)}% of equity\n\n"
-            f"⭐ V2 Score: {score} / required {entry_data.get('min_score_required')}\n"
+            f"⭐ V2.5 Leader score: {score} / required {entry_data.get('min_score_required')}\n"
             f"📊 RSI: {round(float(entry_data['rsi']), 1)}\n"
             f"📊 Volume ratio: {entry_data.get('volume_ratio')}\n"
+            f"🏅 Rank score: {round(rank_score, 2)}\n"
             f"💪 RS vs SPY: 20d {entry_data.get('rel_20_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
             f"🧱 Trend score: {entry_data.get('trend_score')} | RS score: {entry_data.get('rs_score')}\n\n"
             f"🛒 Bot buy size: {shares} shares\n"
