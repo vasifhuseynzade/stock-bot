@@ -426,41 +426,103 @@ MAX_TELEGRAM_MESSAGE = 3900
 # V2.5 uses a broadened STRONG-only universe: liquid ETFs and institutional
 # leader stocks. MEDIUM/WEAK lists are kept empty on purpose so the scanner,
 # manual-buy guard, and risk sizing all operate from the same leader universe.
+#
+# Important:
+# - Do NOT add meme/weak names here just to get more signals.
+# - This list is intentionally diversified across sectors.
+# - With FMP Premium, this size should be reasonable, but avoid expanding much
+#   above ~180-220 tickers unless you later add earnings-calendar caching.
 STRONG = [
-    # Broad / sector ETFs
+    # -------------------------------------------------------------------------
+    # Broad / index / sector ETFs
+    # -------------------------------------------------------------------------
     "SPY", "QQQ", "IWM", "DIA",
-    "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLP", "XLY", "XLC", "XLB",
+    "SMH", "SOXX",
+    "XLK", "IGV",
+    "XLF", "KRE",
+    "XLE", "XOP",
+    "XLV", "IBB",
+    "XLI", "IYT",
+    "XLP", "XLY", "XLC", "XLB",
+    "XLU", "XLRE",
+    "ITB",
 
-    # Mega-cap / platform leaders
-    "MSFT", "NVDA", "META", "AMZN", "GOOGL", "AVGO", "AAPL", "TSLA", "NFLX",
-    "ORCL", "CRM", "IBM",
+    # -------------------------------------------------------------------------
+    # Mega-cap / platform / dominant compounders
+    # -------------------------------------------------------------------------
+    "MSFT", "NVDA", "META", "AMZN", "GOOGL",
+    "AVGO", "AAPL", "TSLA", "NFLX",
+    "ORCL", "CRM", "ADBE", "INTU", "SHOP",
 
-    # Semiconductors / hardware leaders
-    "AMD", "MU", "LRCX", "ASML", "QCOM", "KLAC", "AMAT", "TSM", "TXN", "ADI",
+    # -------------------------------------------------------------------------
+    # Semiconductors / AI hardware / electronic design / networking leaders
+    # -------------------------------------------------------------------------
+    "AMD", "MU", "LRCX", "ASML", "QCOM",
+    "KLAC", "AMAT", "TSM", "TXN", "ADI",
+    "MRVL", "MPWR", "ON", "NXPI", "ARM",
+    "ANET", "CDNS", "SNPS",
 
-    # Software / cybersecurity / cloud leaders
-    "PANW", "CRWD", "ZS", "NET", "NOW", "PLTR", "DDOG",
+    # -------------------------------------------------------------------------
+    # Software / cybersecurity / cloud / digital infrastructure
+    # -------------------------------------------------------------------------
+    "PANW", "CRWD", "ZS", "NET", "NOW",
+    "PLTR", "DDOG", "MDB", "TEAM", "WDAY",
+    "FTNT", "HUBS", "APP", "TTD", "VRT",
 
-    # Financial / payment leaders
-    "JPM", "GS", "MS", "V", "MA", "AXP", "SCHW", "BLK", "SPGI",
+    # -------------------------------------------------------------------------
+    # Financials / payments / exchanges / asset managers / insurers
+    # -------------------------------------------------------------------------
+    "JPM", "GS", "MS", "BAC", "WFC",
+    "SCHW", "BLK", "SPGI", "MCO",
+    "CME", "ICE", "NDAQ",
+    "V", "MA", "AXP",
+    "BX", "KKR", "APO",
+    "PGR", "CB",
 
-    # Industrials / cyclicals / infrastructure leaders
-    "CAT", "DE", "GE", "ETN", "HON", "RTX", "URI", "PH",
+    # -------------------------------------------------------------------------
+    # Industrials / infrastructure / aerospace / transports
+    # -------------------------------------------------------------------------
+    "CAT", "DE", "GE", "ETN", "HON",
+    "RTX", "URI", "PH", "CMI", "EMR",
+    "ITW", "ROK", "TT", "PWR", "FAST",
+    "PCAR", "LMT", "NOC", "GD", "TDG",
+    "GWW", "UNP", "CSX",
 
-    # Health care / defensive growth leaders
-    "LLY", "UNH", "ABBV", "ISRG", "TMO", "ABT", "MRK",
+    # -------------------------------------------------------------------------
+    # Health care / medtech / pharma / services leaders
+    # -------------------------------------------------------------------------
+    "LLY", "UNH", "ABBV", "ISRG", "TMO",
+    "ABT", "MRK", "JNJ", "AMGN", "REGN",
+    "VRTX", "SYK", "BSX", "MDT", "DHR",
+    "GILD", "HCA", "MCK", "COR", "IQV",
 
-    # Consumer / travel / retail quality leaders
-    "COST", "WMT", "MCD", "HD", "LOW", "BKNG", "NKE", "SBUX",
+    # -------------------------------------------------------------------------
+    # Consumer / retail / travel / restaurants / marketplaces
+    # -------------------------------------------------------------------------
+    "COST", "WMT", "MCD", "HD", "LOW",
+    "BKNG", "NKE", "SBUX", "CMG", "TJX",
+    "ROST", "AZO", "ORLY", "YUM", "DPZ",
+    "MAR", "HLT", "RCL", "MELI", "UBER",
 
-    # Energy / materials leaders
+    # -------------------------------------------------------------------------
+    # Energy / materials / industrial commodities / construction materials
+    # -------------------------------------------------------------------------
     "XOM", "CVX", "SLB", "FCX", "LIN",
+    "COP", "EOG", "MPC", "PSX", "VLO",
+    "NUE", "STLD", "SCCO", "NEM",
+    "APD", "SHW", "ECL", "MLM", "VMC",
+
+    # -------------------------------------------------------------------------
+    # Utilities / power / real estate / defensive infrastructure
+    # -------------------------------------------------------------------------
+    "NEE", "CEG", "VST", "DLR", "EQIX", "PLD", "AMT",
 ]
 
 MEDIUM: List[str] = []
 WEAK: List[str] = []
 
-WATCHLIST = STRONG
+# Deduplicate while preserving order.
+WATCHLIST = list(dict.fromkeys(STRONG))
 
 # -----------------------------------------------------------------------------
 # GENERAL HELPERS
