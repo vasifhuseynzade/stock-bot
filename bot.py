@@ -216,8 +216,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.5")
-
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.7")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 # Risk / execution controls.
@@ -232,58 +231,74 @@ MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
 # -----------------------------------------------------------------------------
-# V2.5 STRONG-ONLY LEADER BREAKOUT ENGINE
+# V2.7 VCP-ONLY LEADER ENGINE
 # -----------------------------------------------------------------------------
-# This strategy update intentionally removes broad pullbacks, weak names, and
-# ordinary medium-quality names. Backtests showed the more robust edge came from:
-# strong/liquid leaders + real volume expansion + relative strength + broad-market
-# confirmation + wider leader-rider stops/exits.
+# Backtest synthesis direction:
+# - Pure weak/high-beta and broad pullbacks were rejected.
+# - Broad pullbacks, weak names, and ordinary RS breakouts were rejected.
+# - The most robust sleeve from testing was leader VCP/contraction breakout.
+# - This version keeps the broad liquid leader universe for opportunity,
+#   but allows only VCP-style breakout setups by default.
+# - Max signals per scan stays at 3 for paper/forward testing.
 V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "5"))
-V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "172"))
-V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "172"))
+V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "80"))
+V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "999"))
+V2_VCP_MIN_SCORE = int(os.getenv("V2_VCP_MIN_SCORE", "86"))
 V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "999"))
 V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "999"))
 V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "3"))
 
-# Universe controls. Strong-only is the default. The STRONG list below is broadened
-# with liquid institutional leaders so we still have enough forward-test opportunity.
+# Universe controls. V2.7 is leader-only and VCP-only by default. MEDIUM/WEAK
+# buckets and ordinary RS breakouts stay disabled because tests showed those
+# sleeves were more cost-sensitive and less robust.
+V2_ALLOW_BREAKOUTS = os.getenv("V2_ALLOW_BREAKOUTS", "0") != "0"
+V2_ALLOW_VCP = os.getenv("V2_ALLOW_VCP", "1") != "0"
 V2_ALLOW_MEDIUM = os.getenv("V2_ALLOW_MEDIUM", "0") != "0"
 V2_ALLOW_WEAK = os.getenv("V2_ALLOW_WEAK", "0") != "0"
 V2_ALLOW_PULLBACKS = os.getenv("V2_ALLOW_PULLBACKS", "0") != "0"
 
 # Liquidity / volatility filters.
 V2_MIN_PRICE = float(os.getenv("V2_MIN_PRICE", "12"))
-V2_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("V2_MIN_AVG_DOLLAR_VOLUME", "100000000"))
-V2_MIN_ATR_PCT = float(os.getenv("V2_MIN_ATR_PCT", "0.01"))
+V2_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("V2_MIN_AVG_DOLLAR_VOLUME", "75000000"))
+V2_MIN_ATR_PCT = float(os.getenv("V2_MIN_ATR_PCT", "0.012"))
 V2_MAX_ATR_PCT = float(os.getenv("V2_MAX_ATR_PCT", "0.10"))
 V2_MAX_RISK_PER_SHARE_PCT = float(os.getenv("V2_MAX_RISK_PER_SHARE_PCT", "0.10"))
 
-# Breakout behavior.
-V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.35"))
+# RS breakout behavior. Disabled by default in v2.7, kept only as an env-test option.
+V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.25"))
 V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "999"))
-V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "80"))
-V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "6.5"))
+V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "79"))
+V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "6.2"))
 V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "0"))
 
-# V2.5 leader-breakout quality gates.
+# VCP/contraction breakout behavior. This is the active v2.7 setup family.
+V2_VCP_MAX_BASE_RANGE_PCT = float(os.getenv("V2_VCP_MAX_BASE_RANGE_PCT", "0.22"))
+V2_VCP_MAX_ATR_RATIO = float(os.getenv("V2_VCP_MAX_ATR_RATIO", "0.88"))
+V2_VCP_MAX_BB_WIDTH_RANK = float(os.getenv("V2_VCP_MAX_BB_WIDTH_RANK", "0.50"))
+V2_VCP_MIN_VOLUME_RATIO = float(os.getenv("V2_VCP_MIN_VOLUME_RATIO", "1.22"))
+V2_VCP_MIN_CLOSE_LOCATION = float(os.getenv("V2_VCP_MIN_CLOSE_LOCATION", "0.65"))
+V2_VCP_REQUIRE_MA200 = os.getenv("V2_VCP_REQUIRE_MA200", "1") != "0"
+
+# Leader breakout quality gates.
 V2_BREAKOUT_REQUIRE_POSITIVE_RS = os.getenv("V2_BREAKOUT_REQUIRE_POSITIVE_RS", "1") != "0"
 V2_BLOCK_PULLBACK_IN_UNCERTAIN = os.getenv("V2_BLOCK_PULLBACK_IN_UNCERTAIN", "1") != "0"
 V2_PULLBACK_REQUIRE_POSITIVE_RS = os.getenv("V2_PULLBACK_REQUIRE_POSITIVE_RS", "1") != "0"
-V2_BREAKOUT_MIN_CLOSE_LOCATION = float(os.getenv("V2_BREAKOUT_MIN_CLOSE_LOCATION", "0.60"))
-V2_BREAKOUT_MIN_RS_SCORE = int(os.getenv("V2_BREAKOUT_MIN_RS_SCORE", "10"))
+V2_BREAKOUT_MIN_CLOSE_LOCATION = float(os.getenv("V2_BREAKOUT_MIN_CLOSE_LOCATION", "0.62"))
+V2_BREAKOUT_MIN_RS_SCORE = int(os.getenv("V2_BREAKOUT_MIN_RS_SCORE", "12"))
 V2_BREAKOUT_REQUIRE_MA20_SLOPE = os.getenv("V2_BREAKOUT_REQUIRE_MA20_SLOPE", "1") != "0"
-V2_BREAKOUT_MIN_STOCK_RET_20 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_20", "0.00"))
-V2_BREAKOUT_MIN_STOCK_RET_63 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_63", "-0.02"))
+V2_BREAKOUT_MIN_STOCK_RET_20 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_20", "-0.01"))
+V2_BREAKOUT_MIN_STOCK_RET_63 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_63", "-0.03"))
 V2_BREAKOUT_MIN_REL_20_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_20_SPY", "0.00"))
-V2_BREAKOUT_MIN_REL_63_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_63_SPY", "-0.01"))
+V2_BREAKOUT_MIN_REL_63_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_63_SPY", "-0.02"))
 V2_BREAKOUT_MIN_REL_20_QQQ = float(os.getenv("V2_BREAKOUT_MIN_REL_20_QQQ", "-0.02"))
 V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS = os.getenv("V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS", "1") != "0"
-V2_BREAKOUT_STRONG_RS_20_SPY = float(os.getenv("V2_BREAKOUT_STRONG_RS_20_SPY", "0.05"))
+V2_BREAKOUT_STRONG_RS_20_SPY = float(os.getenv("V2_BREAKOUT_STRONG_RS_20_SPY", "0.04"))
 V2_BREAKOUT_MAX_BASE_RANGE_PCT = float(os.getenv("V2_BREAKOUT_MAX_BASE_RANGE_PCT", "0.34"))
-V2_BREAKOUT_MAX_EXTENSION_MA20 = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_MA20", "0.13"))
-V2_BREAKOUT_MAX_EXTENSION_ATR = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_ATR", "1.90"))
+V2_BREAKOUT_MAX_EXTENSION_MA20 = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_MA20", "0.12"))
+V2_BREAKOUT_MAX_EXTENSION_ATR = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_ATR", "1.75"))
 
-# Major-index trend filters. These reduce bear-market fake-breakout damage.
+# Major-index trend filters. These are the main defense against 2022-style long
+# fakeouts. Disable through env only if deliberately testing a looser paper mode.
 V2_REQUIRE_SPY_ABOVE_MA100 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA100", "0") != "0"
 V2_REQUIRE_QQQ_ABOVE_MA100 = os.getenv("V2_REQUIRE_QQQ_ABOVE_MA100", "1") != "0"
 V2_REQUIRE_SPY_ABOVE_MA200 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA200", "1") != "0"
@@ -295,15 +310,15 @@ V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.95")
 V2_STOP_WIDER_OF_ATR_AND_STRUCTURE = os.getenv("V2_STOP_WIDER_OF_ATR_AND_STRUCTURE", "1") != "0"
 
 # Winner-capture / exit management.
-BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.85"))
-PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.25"))
-PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.10"))
-PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
-TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "3.25"))
-TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.55"))
+BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.80"))
+PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.05"))
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.085"))
+PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.50"))
+TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "3.05"))
+TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.40"))
 TRAIL_TIGHTEN_PCT = float(os.getenv("TRAIL_TIGHTEN_PCT", "0.05"))
 
-# Risk boost disabled by default; the edge should come from selection, not leverage.
+# Risk boost disabled by default; selection quality should create edge, not leverage.
 V2_RISK_BOOST_ENABLED = os.getenv("V2_RISK_BOOST_ENABLED", "0") != "0"
 V2_A_PLUS_RISK_BOOST = float(os.getenv("V2_A_PLUS_RISK_BOOST", "1.08"))
 V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.03"))
@@ -423,7 +438,7 @@ MAX_TELEGRAM_MESSAGE = 3900
 # WATCHLIST
 # -----------------------------------------------------------------------------
 
-# V2.5 uses a broadened STRONG-only universe: liquid ETFs and institutional
+# V2.7 uses a broadened STRONG-only universe: liquid ETFs and institutional
 # leader stocks. MEDIUM/WEAK lists are kept empty on purpose so the scanner,
 # manual-buy guard, and risk sizing all operate from the same leader universe.
 #
@@ -1152,27 +1167,21 @@ def market_label(market: str) -> str:
 
 
 def setup_label(setup_type: str) -> str:
-
     setup = str(setup_type).lower()
 
-
-
     if setup == "breakout":
+        return "🚀 RS Breakout"
 
-        return "🚀 Breakout"
-
-
+    if setup == "vcp_breakout":
+        return "📦 VCP Breakout"
 
     if setup == "pullback":
-
         return "🔁 Pullback"
 
-
+    if setup == "reclaim":
+        return "♻️ Reclaim"
 
     return f"⚙️ {setup_type}"
-
-
-
 
 
 def yes_no(value: bool) -> str:
@@ -5514,10 +5523,10 @@ def close_location(df: pd.DataFrame) -> float:
 
 def market_regime_details() -> Dict[str, Any]:
     """
-    V2.5 market regime score.
+    V2.7 market regime score.
 
     The score is still simple, but the frames use enough lookback for MA100/MA200
-    filters used by the leader-breakout strategy.
+    filters used by the VCP-only leader contraction-breakout strategy.
     """
     frames: Dict[str, Optional[pd.DataFrame]] = {}
 
@@ -11054,11 +11063,19 @@ def analyze(
     market_details: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
     """
-    V2.5 strong-only leader-breakout engine.
+    V2.7 VCP-only leader engine.
 
-    It only accepts liquid leader breakouts with high score, real volume expansion,
-    relative strength, broad-market support, and controlled extension. Pullbacks,
-    weak names, and ordinary medium names are intentionally blocked for this freeze.
+    Primary and only live setup: VCP / volatility-contraction breakout.
+
+    Kept intentionally disabled by default:
+    - ordinary RS breakout sleeve,
+    - weak bucket,
+    - medium bucket,
+    - broad pullbacks,
+    - random reclaim trades.
+
+    This is balanced rather than dead-conservative: the universe remains broad,
+    but the setup family is restricted to the most robust VCP/contraction pattern.
     """
     try:
         if df is None or df.empty:
@@ -11093,6 +11110,7 @@ def analyze(
 
     rsi_val = rsi(close).iloc[-1]
     atr_val = atr(df).iloc[-1]
+    atr50_val = atr(df, period=50).iloc[-1]
     ma10 = close.rolling(10).mean().iloc[-1]
     ma20 = close.rolling(20).mean().iloc[-1]
     ma50 = close.rolling(50).mean().iloc[-1]
@@ -11106,19 +11124,31 @@ def analyze(
     macd_signal = macd.ewm(span=9, adjust=False).mean()
     macd_hist = macd.iloc[-1] - macd_signal.iloc[-1]
 
+    bb_mid = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_width = ((bb_mid + 2 * bb_std) - (bb_mid - 2 * bb_std)) / bb_mid
+    bb_current = bb_width.iloc[-1]
+    bb_lookback = bb_width.dropna().iloc[-100:]
+
+    bb_width_rank = None
+    if not pd.isna(bb_current) and len(bb_lookback) >= 50:
+        bb_width_rank = float((bb_lookback <= bb_current).mean())
+
     required_vals = [
-        rsi_val, atr_val, ma10, ma20, ma50, ma100, ma200,
+        rsi_val, atr_val, atr50_val, ma10, ma20, ma50, ma100, ma200,
         avg_vol, macd_hist
     ]
 
     if any(pd.isna(x) for x in required_vals):
         return None
 
-    if ma20 <= 0 or ma50 <= 0 or ma100 <= 0 or ma200 <= 0 or avg_vol <= 0 or atr_val <= 0:
+    if ma20 <= 0 or ma50 <= 0 or ma100 <= 0 or ma200 <= 0 or avg_vol <= 0 or atr_val <= 0 or atr50_val <= 0:
         return None
 
     atr_val = float(atr_val)
+    atr50_val = float(atr50_val)
     atr_pct = atr_val / price
+    atr_ratio = atr_val / atr50_val if atr50_val > 0 else None
     avg_dollar_volume = float(avg_vol) * price
     daily_move_pct = ((price - prev_close) / prev_close) * 100
     volume_ratio = float(volume.iloc[-1]) / float(avg_vol)
@@ -11251,7 +11281,7 @@ def analyze(
     if rel_qqq_20 is not None and rel_qqq_20 > 0:
         rs_score += 4
 
-    semi_leaders = {"NVDA", "AMD", "MU", "LRCX", "ASML", "QCOM", "AVGO", "SMH", "KLAC", "AMAT", "TSM", "TXN", "ADI"}
+    semi_leaders = {"NVDA", "AMD", "MU", "LRCX", "ASML", "QCOM", "AVGO", "SMH", "SOXX", "KLAC", "AMAT", "TSM", "TXN", "ADI", "MRVL", "MPWR", "ON", "NXPI", "ARM"}
     if rel_smh_20 is not None and rel_smh_20 > 0 and ticker in semi_leaders:
         rs_score += 3
 
@@ -11271,98 +11301,162 @@ def analyze(
     breakout_extension_atr = max(0.0, (price - breakout_level) / atr_val) if atr_val > 0 else 999.0
     extension_ma20 = (price - float(ma20)) / float(ma20)
 
-    score = trend_score + rs_score
+    breakout_score = -999
 
-    if breakout_20:
-        score += 8
+    if V2_ALLOW_BREAKOUTS:
+        breakout_score = trend_score + rs_score
 
-    if breakout_55:
-        score += 12
+        if breakout_20:
+            breakout_score += 8
 
-    if volume_ratio >= V2_MIN_BREAKOUT_VOLUME_RATIO:
-        score += 8
+        if breakout_55:
+            breakout_score += 12
 
-    if volume_ratio >= 1.5:
-        score += 5
+        if volume_ratio >= V2_MIN_BREAKOUT_VOLUME_RATIO:
+            breakout_score += 8
 
-    if close_loc >= V2_BREAKOUT_MIN_CLOSE_LOCATION:
-        score += 8
+        if volume_ratio >= 1.5:
+            breakout_score += 5
 
-    if 50 <= float(rsi_val) <= V2_MAX_BREAKOUT_RSI:
-        score += 6
+        if close_loc >= V2_BREAKOUT_MIN_CLOSE_LOCATION:
+            breakout_score += 8
 
-    if 0 < daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-        score += 5
+        if 50 <= float(rsi_val) <= V2_MAX_BREAKOUT_RSI:
+            breakout_score += 6
 
-    if float(ma20) > float(ma50):
-        score += 5
+        if 0 < daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT:
+            breakout_score += 5
 
-    score = int(round(score))
-    min_score = max(V2_MIN_SCORE, V2_BREAKOUT_MIN_SCORE)
+        if float(ma20) > float(ma50):
+            breakout_score += 5
 
-    # Hard filters. These are intentionally strict; they are what separate
-    # leader breakouts from ordinary noisy breakouts.
-    if float(rsi_val) > V2_MAX_BREAKOUT_RSI:
-        return None
+        if bb_width_rank is not None and bb_width_rank <= 0.50:
+            breakout_score += 3
 
-    if daily_move_pct <= 0 or daily_move_pct > V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-        return None
+        # Hard filters for the RS-breakout sleeve.
+        if float(rsi_val) > V2_MAX_BREAKOUT_RSI:
+            breakout_score = -999
 
-    if volume_ratio < V2_MIN_BREAKOUT_VOLUME_RATIO:
-        return None
+        if daily_move_pct <= 0 or daily_move_pct > V2_MAX_BREAKOUT_DAY_MOVE_PCT:
+            breakout_score = -999
 
-    if close_loc < V2_BREAKOUT_MIN_CLOSE_LOCATION:
-        return None
+        if volume_ratio < V2_MIN_BREAKOUT_VOLUME_RATIO:
+            breakout_score = -999
 
-    if not (price > float(ma20) > float(ma50)):
-        return None
+        if close_loc < V2_BREAKOUT_MIN_CLOSE_LOCATION:
+            breakout_score = -999
 
-    if V2_BREAKOUT_REQUIRE_MA20_SLOPE and not rolling_slope_positive(close.rolling(20).mean(), lookback=5):
-        return None
+        if not (price > float(ma20) > float(ma50)):
+            breakout_score = -999
 
-    if stock_ret_20 is None or stock_ret_20 < V2_BREAKOUT_MIN_STOCK_RET_20:
-        return None
+        if V2_BREAKOUT_REQUIRE_MA20_SLOPE and not rolling_slope_positive(close.rolling(20).mean(), lookback=5):
+            breakout_score = -999
 
-    if stock_ret_63 is None or stock_ret_63 < V2_BREAKOUT_MIN_STOCK_RET_63:
-        return None
+        if stock_ret_20 is None or stock_ret_20 < V2_BREAKOUT_MIN_STOCK_RET_20:
+            breakout_score = -999
 
-    if rel_20 is None or rel_20 < V2_BREAKOUT_MIN_REL_20_SPY:
-        return None
+        if stock_ret_63 is None or stock_ret_63 < V2_BREAKOUT_MIN_STOCK_RET_63:
+            breakout_score = -999
 
-    if rel_63 is None or rel_63 < V2_BREAKOUT_MIN_REL_63_SPY:
-        return None
+        if rel_20 is None or rel_20 < V2_BREAKOUT_MIN_REL_20_SPY:
+            breakout_score = -999
 
-    if rel_qqq_20 is None or rel_qqq_20 < V2_BREAKOUT_MIN_REL_20_QQQ:
-        return None
+        if rel_63 is None or rel_63 < V2_BREAKOUT_MIN_REL_63_SPY:
+            breakout_score = -999
 
-    if V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS:
-        strong_rs = rel_20 is not None and rel_20 >= V2_BREAKOUT_STRONG_RS_20_SPY
-        if not (breakout_55 or strong_rs):
+        if rel_qqq_20 is None or rel_qqq_20 < V2_BREAKOUT_MIN_REL_20_QQQ:
+            breakout_score = -999
+
+        if V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS:
+            strong_rs = rel_20 is not None and rel_20 >= V2_BREAKOUT_STRONG_RS_20_SPY
+            if not (breakout_55 or strong_rs):
+                breakout_score = -999
+
+        if recent_range_20_pct > V2_BREAKOUT_MAX_BASE_RANGE_PCT:
+            breakout_score = -999
+
+        if extension_ma20 > V2_BREAKOUT_MAX_EXTENSION_MA20:
+            breakout_score = -999
+
+        if breakout_extension_atr > V2_BREAKOUT_MAX_EXTENSION_ATR:
+            breakout_score = -999
+
+        if rs_score < V2_BREAKOUT_MIN_RS_SCORE:
+            breakout_score = -999
+
+    vcp_score = -999
+
+    if V2_ALLOW_VCP:
+        vcp_candidate = (
+            recent_range_20_pct <= V2_VCP_MAX_BASE_RANGE_PCT
+            and atr_ratio is not None and atr_ratio <= V2_VCP_MAX_ATR_RATIO
+            and bb_width_rank is not None and bb_width_rank <= V2_VCP_MAX_BB_WIDTH_RANK
+            and volume_ratio >= V2_VCP_MIN_VOLUME_RATIO
+            and close_loc >= V2_VCP_MIN_CLOSE_LOCATION
+            and price > float(ma20) > float(ma50)
+            and daily_move_pct > 0
+            and daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT
+            and float(rsi_val) <= V2_MAX_BREAKOUT_RSI
+        )
+
+        if V2_VCP_REQUIRE_MA200 and price <= float(ma200):
+            vcp_candidate = False
+
+        if V2_BREAKOUT_REQUIRE_POSITIVE_RS and not (
+            (rel_20 is not None and rel_20 >= V2_BREAKOUT_MIN_REL_20_SPY)
+            or (rel_63 is not None and rel_63 >= V2_BREAKOUT_MIN_REL_63_SPY)
+        ):
+            vcp_candidate = False
+
+        if vcp_candidate:
+            vcp_score = trend_score + rs_score + 18
+
+            if breakout_55:
+                vcp_score += 10
+
+            if recent_range_20_pct <= V2_VCP_MAX_BASE_RANGE_PCT * 0.75:
+                vcp_score += 6
+
+            if atr_ratio is not None and atr_ratio <= V2_VCP_MAX_ATR_RATIO * 0.85:
+                vcp_score += 5
+
+            if bb_width_rank is not None and bb_width_rank <= 0.30:
+                vcp_score += 5
+
+            if volume_ratio >= 1.5:
+                vcp_score += 5
+
+            if rel_20 is not None and rel_20 > 0:
+                vcp_score += 5
+
+    candidates = [
+        ("vcp_breakout", int(round(vcp_score)), max(V2_MIN_SCORE, V2_VCP_MIN_SCORE), True, breakout_level),
+        ("breakout", int(round(breakout_score)), max(V2_MIN_SCORE, V2_BREAKOUT_MIN_SCORE), True, breakout_level),
+    ]
+
+    setup_type, score, min_score, is_breakout, selected_breakout_level = max(candidates, key=lambda x: x[1])
+
+    if market == "UNCERTAIN":
+        min_score += 5
+
+    if setup_type in {"breakout", "vcp_breakout"} and V2_BREAKOUT_REQUIRE_POSITIVE_RS:
+        if not (
+            (rel_20 is not None and rel_20 >= V2_BREAKOUT_MIN_REL_20_SPY)
+            or (rel_63 is not None and rel_63 >= V2_BREAKOUT_MIN_REL_63_SPY)
+        ):
             return None
-
-    if recent_range_20_pct > V2_BREAKOUT_MAX_BASE_RANGE_PCT:
-        return None
-
-    if extension_ma20 > V2_BREAKOUT_MAX_EXTENSION_MA20:
-        return None
-
-    if breakout_extension_atr > V2_BREAKOUT_MAX_EXTENSION_ATR:
-        return None
-
-    if rs_score < V2_BREAKOUT_MIN_RS_SCORE:
-        return None
 
     if score < min_score:
         return None
 
     atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-    structure_stop = float(breakout_level) - (0.35 * atr_val)
+    structure_stop = float(selected_breakout_level) - (0.35 * atr_val)
     stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
-    stop_model = "v2_5_leader_breakout_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_5_leader_breakout_tighter_atr"
+    stop_model = "v2_7_vcp_only_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_7_vcp_only_tighter_atr"
 
     if stop <= 0 or stop >= price:
         stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-        stop_model = "fallback_v25_atr"
+        stop_model = "fallback_v27_atr"
 
     risk = price - stop
 
@@ -11397,6 +11491,9 @@ def analyze(
 
     rank_score = float(score)
 
+    if setup_type == "vcp_breakout":
+        rank_score += 6.0
+
     if breakout_55:
         rank_score += 8.0
 
@@ -11409,25 +11506,34 @@ def analyze(
     rank_score += max(0.0, min(8.0, (volume_ratio - 1.0) * 6.0))
     rank_score += max(0.0, min(10.0, (close_loc - 0.50) * 40.0))
 
+    if bb_width_rank is not None and bb_width_rank <= 0.35:
+        rank_score += 4.0
+
+    if atr_ratio is not None and atr_ratio <= 0.85:
+        rank_score += 3.0
+
     metrics = {
-        "setup_type": "breakout",
-        "strategy_family": "v2_5_strong_only_leader_breakout",
+        "setup_type": setup_type,
+        "strategy_family": "v2_7_vcp_only_leader",
         "breakout": True,
         "breakout_20": breakout_20,
         "breakout_55": breakout_55,
-        "breakout_level": breakout_level,
+        "breakout_level": selected_breakout_level,
         "breakout_extension_atr": breakout_extension_atr,
         "extension_ma20": extension_ma20,
         "recent_range_20_pct": recent_range_20_pct,
         "atr": atr_val,
         "atr_pct": atr_pct,
+        "atr_ratio_14_50": atr_ratio,
+        "bb_width_rank_100": bb_width_rank,
         "volume_ratio": volume_ratio,
         "daily_move_pct": daily_move_pct,
         "market_score": market_score,
         "trend_score": trend_score,
         "rs_score": rs_score,
         "rank_score": rank_score,
-        "breakout_score": score,
+        "breakout_score": breakout_score if breakout_score != -999 else None,
+        "vcp_score": vcp_score if vcp_score != -999 else None,
         "pullback_score": None,
         "min_score_required": min_score,
         "stock_ret_10": stock_ret_10,
@@ -11985,7 +12091,7 @@ def manage_positions() -> None:
 
 
 
-        # Partial take-profit logic: V2.5 defaults are +10% OR +1.25R.
+        # Partial take-profit logic: V2.7 defaults are +8.5% OR +1.05R.
 
 
 
@@ -12525,7 +12631,7 @@ def scan_market() -> bool:
             f"🟡 MAX ENTRY LIMIT: {entry_data['max_valid_entry']}\n"
             f"🔴 STOP/LOSS: {round(stop, 2)}\n"
             f"📐 Position size: {round(entry_data['position_size_pct'], 2)}% of equity\n\n"
-            f"⭐ V2.5 Leader score: {score} / required {entry_data.get('min_score_required')}\n"
+            f"⭐ V2.7 VCP score: {score} / required {entry_data.get('min_score_required')}\n"
             f"📊 RSI: {round(float(entry_data['rsi']), 1)}\n"
             f"📊 Volume ratio: {entry_data.get('volume_ratio')}\n"
             f"🏅 Rank score: {round(rank_score, 2)}\n"
