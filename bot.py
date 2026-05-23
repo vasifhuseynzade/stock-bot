@@ -216,7 +216,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v2.7")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.0")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 # Risk / execution controls.
@@ -231,7 +231,7 @@ MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
 # -----------------------------------------------------------------------------
-# V2.7 VCP-ONLY LEADER ENGINE
+# V2.8 VCP-ONLY LEADER ENGINE + WINNER-CAPTURE UPGRADE
 # -----------------------------------------------------------------------------
 # Backtest synthesis direction:
 # - Pure weak/high-beta and broad pullbacks were rejected.
@@ -240,6 +240,8 @@ MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 # - This version keeps the broad liquid leader universe for opportunity,
 #   but allows only VCP-style breakout setups by default.
 # - Max signals per scan stays at 3 for paper/forward testing.
+# - V2.8 keeps v2.7 entries unchanged and only improves winner capture: later
+#   breakeven, later/smaller partial, and wider trailing stop.
 V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "5"))
 V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "80"))
 V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "999"))
@@ -248,7 +250,7 @@ V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "999"))
 V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "999"))
 V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "3"))
 
-# Universe controls. V2.7 is leader-only and VCP-only by default. MEDIUM/WEAK
+# Universe controls. V2.8 is leader-only and VCP-only by default. MEDIUM/WEAK
 # buckets and ordinary RS breakouts stay disabled because tests showed those
 # sleeves were more cost-sensitive and less robust.
 V2_ALLOW_BREAKOUTS = os.getenv("V2_ALLOW_BREAKOUTS", "0") != "0"
@@ -264,14 +266,14 @@ V2_MIN_ATR_PCT = float(os.getenv("V2_MIN_ATR_PCT", "0.012"))
 V2_MAX_ATR_PCT = float(os.getenv("V2_MAX_ATR_PCT", "0.10"))
 V2_MAX_RISK_PER_SHARE_PCT = float(os.getenv("V2_MAX_RISK_PER_SHARE_PCT", "0.10"))
 
-# RS breakout behavior. Disabled by default in v2.7, kept only as an env-test option.
+# RS breakout behavior. Disabled by default in v2.8, kept only as an env-test option.
 V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.25"))
 V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "999"))
 V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "79"))
 V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "6.2"))
 V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "0"))
 
-# VCP/contraction breakout behavior. This is the active v2.7 setup family.
+# VCP/contraction breakout behavior. This is the active v2.8 setup family.
 V2_VCP_MAX_BASE_RANGE_PCT = float(os.getenv("V2_VCP_MAX_BASE_RANGE_PCT", "0.22"))
 V2_VCP_MAX_ATR_RATIO = float(os.getenv("V2_VCP_MAX_ATR_RATIO", "0.88"))
 V2_VCP_MAX_BB_WIDTH_RANK = float(os.getenv("V2_VCP_MAX_BB_WIDTH_RANK", "0.50"))
@@ -310,18 +312,107 @@ V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.95")
 V2_STOP_WIDER_OF_ATR_AND_STRUCTURE = os.getenv("V2_STOP_WIDER_OF_ATR_AND_STRUCTURE", "1") != "0"
 
 # Winner-capture / exit management.
-BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "0.80"))
-PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.05"))
-PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.085"))
-PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.50"))
-TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "3.05"))
-TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "2.40"))
+BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "1.00"))
+PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.25"))
+PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.10"))
+PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
+TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "4.00"))
+TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "3.00"))
 TRAIL_TIGHTEN_PCT = float(os.getenv("TRAIL_TIGHTEN_PCT", "0.05"))
 
 # Risk boost disabled by default; selection quality should create edge, not leverage.
 V2_RISK_BOOST_ENABLED = os.getenv("V2_RISK_BOOST_ENABLED", "0") != "0"
 V2_A_PLUS_RISK_BOOST = float(os.getenv("V2_A_PLUS_RISK_BOOST", "1.08"))
 V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.03"))
+
+
+# -----------------------------------------------------------------------------
+# BEAR SLEEVE V1 - ROBUST 3X INVERSE VCP ENGINE
+# -----------------------------------------------------------------------------
+# Research conclusion:
+# - Do NOT loosen the long VCP strategy to handle bear markets.
+# - Use a separate inverse-ETF sleeve only when market regime is truly risk-off.
+# - The more robust bear candidate was broad 3x inverse VCP, not aggressive 2x
+#   reclaim. It made less money in backtests but survived slippage/execution stress
+#   better and had materially lower drawdown.
+BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "1") != "0"
+BEAR_BLOCK_LONG_SIGNALS_IN_BEAR = os.getenv("BEAR_BLOCK_LONG_SIGNALS_IN_BEAR", "1") != "0"
+BEAR_STRATEGY_VERSION = os.getenv("BEAR_STRATEGY_VERSION", "bear_v1_robust_3x_vcp")
+
+# Broad 3x inverse ETFs only. Keep this tight until forward-tested.
+BEAR_WATCHLIST = [
+    "SPXU",  # 3x inverse S&P 500
+    "SQQQ",  # 3x inverse Nasdaq 100
+    "SDOW",  # 3x inverse Dow
+    "TZA",   # 3x inverse Russell 2000
+]
+
+# Bear regime score: max 60. Defaults mirror the tested 30/15 regime idea.
+BEAR_ENTRY_SCORE = int(os.getenv("BEAR_ENTRY_SCORE", "30"))
+BEAR_EXIT_SCORE = int(os.getenv("BEAR_EXIT_SCORE", "15"))
+BEAR_MAX_SIGNALS_PER_SCAN = int(os.getenv("BEAR_MAX_SIGNALS_PER_SCAN", "2"))
+BEAR_MAX_OPEN_POSITIONS = int(os.getenv("BEAR_MAX_OPEN_POSITIONS", "2"))
+
+# Bear VCP entry filters. These are deliberately not ultra-loose.
+BEAR_MIN_PRICE = float(os.getenv("BEAR_MIN_PRICE", "8"))
+BEAR_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("BEAR_MIN_AVG_DOLLAR_VOLUME", "30000000"))
+BEAR_MIN_ATR_PCT = float(os.getenv("BEAR_MIN_ATR_PCT", "0.015"))
+BEAR_MAX_ATR_PCT = float(os.getenv("BEAR_MAX_ATR_PCT", "0.18"))
+BEAR_VCP_MIN_SCORE = int(os.getenv("BEAR_VCP_MIN_SCORE", "78"))
+BEAR_VCP_MAX_BASE_RANGE_PCT = float(os.getenv("BEAR_VCP_MAX_BASE_RANGE_PCT", "0.34"))
+BEAR_VCP_MAX_ATR_RATIO = float(os.getenv("BEAR_VCP_MAX_ATR_RATIO", "1.02"))
+BEAR_VCP_MAX_BB_WIDTH_RANK = float(os.getenv("BEAR_VCP_MAX_BB_WIDTH_RANK", "0.70"))
+BEAR_VCP_MIN_VOLUME_RATIO = float(os.getenv("BEAR_VCP_MIN_VOLUME_RATIO", "1.05"))
+BEAR_VCP_MIN_CLOSE_LOCATION = float(os.getenv("BEAR_VCP_MIN_CLOSE_LOCATION", "0.58"))
+BEAR_MAX_RSI = float(os.getenv("BEAR_MAX_RSI", "86"))
+BEAR_MAX_DAY_MOVE_PCT = float(os.getenv("BEAR_MAX_DAY_MOVE_PCT", "12"))
+BEAR_MAX_RISK_PER_SHARE_PCT = float(os.getenv("BEAR_MAX_RISK_PER_SHARE_PCT", "0.16"))
+
+# Bear position sizing and exits. Kept separate from long v2.8 exits.
+BEAR_RISK_PCT = float(os.getenv("BEAR_RISK_PCT", "0.03"))
+BEAR_ATR_STOP_MULT = float(os.getenv("BEAR_ATR_STOP_MULT", "2.40"))
+BEAR_TRAIL_MULT_EARLY = float(os.getenv("BEAR_TRAIL_MULT_EARLY", "4.40"))
+BEAR_TRAIL_MULT_LATE = float(os.getenv("BEAR_TRAIL_MULT_LATE", "4.40"))
+BEAR_BREAKEVEN_R_TRIGGER = float(os.getenv("BEAR_BREAKEVEN_R_TRIGGER", "1.20"))
+BEAR_PARTIAL_TAKE_PROFIT_R = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_R", "1.20"))
+BEAR_PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_PCT", "0.10"))
+BEAR_PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
+BEAR_TIME_STOP_DAYS = int(os.getenv("BEAR_TIME_STOP_DAYS", "10"))
+BEAR_TIME_STOP_MIN_R = float(os.getenv("BEAR_TIME_STOP_MIN_R", "0.25"))
+BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "30"))
+
+
+# -----------------------------------------------------------------------------
+# V3.0 PRIVATE WEALTH SLEEVE - CORE ETF ROTATION
+# -----------------------------------------------------------------------------
+# Research conclusion from the 2022-2026 cache run:
+# - Keep v2.8 long VCP + bear inverse as the tactical swing engine.
+# - Add only a private core ETF rotation sleeve now.
+# - Do not integrate speculative/weak/medium or standalone metals sleeves yet;
+#   the research run rejected them after costs. GLD/SLV/metals remain inside
+#   the diversified core universe, where they can win when ranked strongly.
+# - This sleeve sends PRIVATE allocation guidance only. It does not touch the
+#   public channel and it does not automatically mutate cash/positions.
+WEALTH_SLEEVE_ENABLED = os.getenv("WEALTH_SLEEVE_ENABLED", "1") != "0"
+WEALTH_STRATEGY_VERSION = os.getenv("WEALTH_STRATEGY_VERSION", "wealth_core_rotation_v1")
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.50"))
+WEALTH_CORE_TOP_N = int(os.getenv("WEALTH_CORE_TOP_N", "5"))
+WEALTH_ALERT_REPEAT_DAYS = int(os.getenv("WEALTH_ALERT_REPEAT_DAYS", "20"))
+WEALTH_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("WEALTH_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 15)))
+WEALTH_MIN_SCORE = float(os.getenv("WEALTH_MIN_SCORE", "-0.20"))
+
+WEALTH_CORE_UNIVERSE = [
+    # Broad equity / growth / sector leadership
+    "SPY", "QQQ", "VTI", "VOO", "IWM", "DIA",
+    "SMH", "SOXX", "XLK", "XLV", "XLE", "XLF", "XLI", "XLY", "XLC",
+    # Metals / commodities / defensive alternatives
+    "GLD", "IAU", "SLV", "DBC", "DBB", "CPER",
+    # Cash-like / rates / bond defense
+    "BIL", "SGOV", "SHY", "IEF", "TLT",
+]
+
+WEALTH_CASH_LIKE = {"BIL", "SGOV", "SHY"}
+WEALTH_DEFENSIVE_ALLOWED = {"BIL", "SGOV", "SHY", "IEF", "TLT", "GLD", "IAU", "XLP", "XLV", "XLU"}
 
 
 # Manual buy protection.
@@ -438,7 +529,7 @@ MAX_TELEGRAM_MESSAGE = 3900
 # WATCHLIST
 # -----------------------------------------------------------------------------
 
-# V2.7 uses a broadened STRONG-only universe: liquid ETFs and institutional
+# V2.8 uses a broadened STRONG-only universe: liquid ETFs and institutional
 # leader stocks. MEDIUM/WEAK lists are kept empty on purpose so the scanner,
 # manual-buy guard, and risk sizing all operate from the same leader universe.
 #
@@ -538,6 +629,9 @@ WEAK: List[str] = []
 
 # Deduplicate while preserving order.
 WATCHLIST = list(dict.fromkeys(STRONG))
+
+# Manual buys may come from either the long VCP watchlist or the bear inverse sleeve.
+ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
 
 # -----------------------------------------------------------------------------
 # GENERAL HELPERS
@@ -1175,6 +1269,9 @@ def setup_label(setup_type: str) -> str:
     if setup == "vcp_breakout":
         return "📦 VCP Breakout"
 
+    if setup == "bear_vcp_inverse":
+        return "🐻 Inverse VCP Bear Sleeve"
+
     if setup == "pullback":
         return "🔁 Pullback"
 
@@ -1182,6 +1279,30 @@ def setup_label(setup_type: str) -> str:
         return "♻️ Reclaim"
 
     return f"⚙️ {setup_type}"
+
+
+def sleeve_label(entry_data: Dict[str, Any]) -> str:
+    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
+
+    if sleeve == "BEAR_INVERSE":
+        return "🐻 BEAR INVERSE SLEEVE"
+
+    if sleeve == "LONG_VCP":
+        return "🐂 BULL / LONG VCP SLEEVE"
+
+    return f"⚙️ {sleeve}"
+
+
+def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
+    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
+
+    if sleeve == "BEAR_INVERSE":
+        return "BEAR INVERSE"
+
+    if sleeve == "LONG_VCP":
+        return "LONG VCP"
+
+    return sleeve
 
 
 def yes_no(value: bool) -> str:
@@ -3964,6 +4085,8 @@ def format_public_entry_signal(
 
         f"🌎 Market: {market_label(market)}\n"
 
+        f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
+
         f"⚙️ Setup: {setup_label(setup)}\n\n"
 
 
@@ -4016,11 +4139,24 @@ def format_public_partial_signal(
 
 
 
+    entry_data = trade.get("entry_data", {}) or {}
+
+    partial_fraction = entry_data.get("partial_take_profit_fraction", PARTIAL_TAKE_PROFIT_FRACTION)
+
+    try:
+        partial_pct_label = int(round(float(partial_fraction) * 100))
+    except Exception:
+        partial_pct_label = int(round(PARTIAL_TAKE_PROFIT_FRACTION * 100))
+
     return (
 
-        f"💰 PARTIAL TAKE-PROFIT (EXIT ~{int(round(PARTIAL_TAKE_PROFIT_FRACTION * 100))}% OF POSITION)\n\n"
+        f"💰 PARTIAL TAKE-PROFIT (EXIT ~{partial_pct_label}% OF POSITION)\n\n"
 
         f"🏷️ Ticker: {ticker}\n"
+
+        f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
+
+        f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
 
         f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
 
@@ -4060,6 +4196,12 @@ def format_public_exit_signal(
 
         "manual": "Manual exit",
 
+        "time_stop": "Time stop",
+
+        "max_hold": "Max holding period",
+
+        "bear_regime_exit": "Bear regime cooled",
+
     }.get(str(reason).lower(), str(reason))
 
 
@@ -4080,7 +4222,11 @@ def format_public_exit_signal(
 
         f"🏷️ Ticker: {ticker}\n"
 
+        f"🧬 Sleeve: {sleeve_label(trade.get('entry_data', {}) or {})}\n"
+
         f"📌 Reason: {reason_label}\n"
+
+        f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
 
         f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\n"
 
@@ -5523,7 +5669,7 @@ def close_location(df: pd.DataFrame) -> float:
 
 def market_regime_details() -> Dict[str, Any]:
     """
-    V2.7 market regime score.
+    V2.8 market regime score.
 
     The score is still simple, but the frames use enough lookback for MA100/MA200
     filters used by the VCP-only leader contraction-breakout strategy.
@@ -5595,6 +5741,97 @@ def market_condition() -> str:
     except Exception as exc:
         print(f"[MARKET ERROR] {exc}")
         return "UNCERTAIN"
+
+
+
+def frame_last_close_ma(df: Optional[pd.DataFrame], ma_period: int) -> Tuple[Optional[float], Optional[float]]:
+    try:
+        if df is None or df.empty or len(df) < ma_period + 5:
+            return None, None
+
+        close = df["Close"].dropna()
+        ma = close.rolling(ma_period).mean().iloc[-1]
+
+        if pd.isna(ma):
+            return None, None
+
+        return float(close.iloc[-1]), float(ma)
+
+    except Exception:
+        return None, None
+
+
+def bear_regime_details(market_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Bear sleeve regime score, max 60.
+
+    This is separate from the long VCP market score. It looks for broad-market
+    risk-off conditions before allowing inverse ETF signals.
+    """
+    frames: Dict[str, Optional[pd.DataFrame]] = {}
+
+    if market_details and isinstance(market_details.get("frames"), dict):
+        frames.update(market_details.get("frames", {}))
+
+    for symbol in ["SPY", "QQQ", "IWM", "SMH"]:
+        if frames.get(symbol) is None:
+            frames[symbol] = get_signal_dataframe(symbol, limit=260)
+
+    score = 0
+    notes: List[str] = []
+
+    for symbol in ["SPY", "QQQ"]:
+        df = frames.get(symbol)
+
+        if df is None or df.empty or len(df) < 220:
+            notes.append(f"{symbol}:no_data")
+            continue
+
+        close = df["Close"].dropna()
+        ma20 = close.rolling(20).mean().iloc[-1]
+        ma50 = close.rolling(50).mean().iloc[-1]
+        ma100 = close.rolling(100).mean().iloc[-1]
+        ma200 = close.rolling(200).mean().iloc[-1]
+        last = float(close.iloc[-1])
+
+        if not pd.isna(ma50) and last < float(ma50):
+            score += 6
+        if not pd.isna(ma20) and not pd.isna(ma50) and float(ma20) < float(ma50):
+            score += 5
+        if not pd.isna(ma100) and last < float(ma100):
+            score += 4
+        if not pd.isna(ma200) and last < float(ma200):
+            score += 8
+
+        ret20 = pct_change_over(close, 20)
+        if ret20 is not None and ret20 < 0:
+            score += 3
+
+    for symbol in ["IWM", "SMH"]:
+        df = frames.get(symbol)
+
+        if df is None or df.empty or len(df) < 60:
+            continue
+
+        close = df["Close"].dropna()
+        ma50 = close.rolling(50).mean().iloc[-1]
+
+        if not pd.isna(ma50) and float(close.iloc[-1]) < float(ma50):
+            score += 4
+
+    active = score >= BEAR_ENTRY_SCORE
+    exit_pressure_low = score <= BEAR_EXIT_SCORE
+
+    return {
+        "active": active,
+        "score": score,
+        "max_score": 60,
+        "exit_pressure_low": exit_pressure_low,
+        "entry_score_required": BEAR_ENTRY_SCORE,
+        "exit_score": BEAR_EXIT_SCORE,
+        "notes": notes,
+        "frames": frames,
+    }
 
 
 
@@ -6628,6 +6865,199 @@ def maybe_send_withdrawal_signal() -> None:
 
 
 
+
+def pct_change_last(df: pd.DataFrame, bars: int) -> Optional[float]:
+    try:
+        if df is None or len(df) <= bars:
+            return None
+        now = float(df["Close"].iloc[-1])
+        old = float(df["Close"].iloc[-1 - bars])
+        if old <= 0:
+            return None
+        return (now / old) - 1
+    except Exception:
+        return None
+
+
+def realized_vol_last(df: pd.DataFrame, bars: int = 63) -> Optional[float]:
+    try:
+        if df is None or len(df) <= bars:
+            return None
+        returns = df["Close"].pct_change().tail(bars).dropna()
+        if returns.empty:
+            return None
+        return float(returns.std() * math.sqrt(252))
+    except Exception:
+        return None
+
+
+def wealth_core_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
+    """Score one asset for the private v3.0 core-rotation sleeve."""
+    try:
+        df = get_historical(ticker, limit=280)
+        if df is None or df.empty or len(df) < 210:
+            return None
+
+        close = df["Close"]
+        price = float(close.iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        ma100 = float(close.rolling(100).mean().iloc[-1])
+
+        roc21 = pct_change_last(df, 21)
+        roc63 = pct_change_last(df, 63)
+        roc126 = pct_change_last(df, 126)
+        vol63 = realized_vol_last(df, 63)
+
+        if roc21 is None or roc63 is None or roc126 is None or vol63 is None:
+            return None
+
+        trend_ok = ticker in WEALTH_CASH_LIKE or price > ma200
+        if not trend_ok:
+            return None
+
+        score = (0.45 * roc126) + (0.35 * roc63) + (0.20 * roc21) - (0.18 * vol63)
+
+        # In confirmed broad bear conditions, require non-defensive assets to be
+        # exceptionally strong; otherwise defensive/cash-like assets can dominate.
+        regime = market_condition()
+        if regime == "BEAR" and ticker not in WEALTH_DEFENSIVE_ALLOWED:
+            if score < 0.12:
+                return None
+
+        if score < WEALTH_MIN_SCORE:
+            return None
+
+        return {
+            "ticker": ticker,
+            "price": round(price, 2),
+            "ma100": round(ma100, 2),
+            "ma200": round(ma200, 2),
+            "roc_1m_pct": round(roc21 * 100, 2),
+            "roc_3m_pct": round(roc63 * 100, 2),
+            "roc_6m_pct": round(roc126 * 100, 2),
+            "vol_3m_pct": round(vol63 * 100, 2),
+            "score": round(score, 4),
+            "trend_ok": trend_ok,
+            "regime": regime,
+        }
+
+    except Exception as exc:
+        print(f"[WEALTH SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def compute_wealth_core_plan() -> Dict[str, Any]:
+    """Build private target allocation for the v3.0 core wealth sleeve."""
+    refresh_portfolio()
+
+    scored = []
+    for ticker in WEALTH_CORE_UNIVERSE:
+        item = wealth_core_score_ticker(ticker)
+        if item is not None:
+            scored.append(item)
+
+    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    top = scored[:max(1, WEALTH_CORE_TOP_N)]
+
+    account_equity = compute_equity_snapshot_data().get("equity", 0.0)
+    sleeve_value = float(account_equity) * WEALTH_CORE_ACCOUNT_ALLOC_PCT
+    target_each_sleeve_pct = (100 / len(top)) if top else 0.0
+    target_each_account_pct = (WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100 / len(top)) if top else 0.0
+
+    return {
+        "strategy_version": WEALTH_STRATEGY_VERSION,
+        "private_only": True,
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "market": market_condition(),
+        "account_equity": round(float(account_equity), 2),
+        "target_core_account_pct": round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2),
+        "target_core_value": round(sleeve_value, 2),
+        "top_n": len(top),
+        "target_each_sleeve_pct": round(target_each_sleeve_pct, 2),
+        "target_each_account_pct": round(target_each_account_pct, 2),
+        "top": top,
+        "all_scored": scored,
+    }
+
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:
+    top = plan.get("top", []) or []
+
+    msg = (
+        "🏛️ PRIVATE WEALTH PLAN — CORE ROTATION v3.0\n\n"
+        "Private bot only. No public-channel alert.\n"
+        "Purpose: long-term wealth sleeve, separate from v2.8 swing trades.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n"
+        f"💼 Account equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🏦 Suggested core sleeve: {plan.get('target_core_account_pct')}% of account\n"
+        f"📦 Core sleeve value guide: {format_money(float(plan.get('target_core_value', 0) or 0))}\n\n"
+    )
+
+    if not top:
+        msg += (
+            "No qualified core assets today.\n"
+            "Default action: stay in cash/cash-like assets until next review."
+        )
+        return msg
+
+    msg += "🎯 Target assets\n"
+    for i, item in enumerate(top, start=1):
+        msg += (
+            f"{i}) {item['ticker']} — target ~{plan.get('target_each_account_pct')}% of account "
+            f"(~{plan.get('target_each_sleeve_pct')}% of core sleeve)\n"
+            f"   Price: {item['price']} | 1m: {format_pct(item['roc_1m_pct'])} | "
+            f"3m: {format_pct(item['roc_3m_pct'])} | 6m: {format_pct(item['roc_6m_pct'])} | "
+            f"Score: {item['score']}\n"
+        )
+
+    msg += (
+        "\nHow to use:\n"
+        "• This is allocation guidance, not an automatic trade.\n"
+        "• Rebalance manually only if your current allocation is materially different.\n"
+        "• Keep v2.8 swing cash/risk separate from this core sleeve.\n"
+        "• Do not use leveraged/inverse ETFs for this long-term core sleeve."
+    )
+
+    return msg
+
+
+def maybe_send_wealth_core_signal() -> None:
+    """Monthly private wealth-sleeve alert after market close."""
+    if not WEALTH_SLEEVE_ENABLED:
+        return
+
+    current_ny = ny_now()
+    minutes = current_ny.hour * 60 + current_ny.minute
+
+    if is_market_weekday(current_ny) and minutes < WEALTH_REVIEW_AFTER_CLOSE_MINUTE:
+        return
+
+    # Review at most once per calendar month, with a repeat-day guard.
+    month_key = current_ny.strftime("%Y-%m")
+    if get_meta("last_wealth_core_month") == month_key:
+        return
+
+    last_raw = get_meta("last_wealth_core_alert_ts")
+    if last_raw:
+        try:
+            days_since = (now_ts() - float(last_raw)) / 86400
+            if days_since < WEALTH_ALERT_REPEAT_DAYS:
+                return
+        except ValueError:
+            pass
+
+    try:
+        plan = compute_wealth_core_plan()
+        set_meta("last_wealth_core_month", month_key)
+        set_meta("last_wealth_core_alert_ts", str(now_ts()))
+        send(format_wealth_core_plan(plan))
+        audit("WEALTH_CORE_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
+    except Exception as exc:
+        logger.exception(f"[WEALTH CORE SIGNAL ERROR] {exc}")
+        print(f"[WEALTH CORE SIGNAL ERROR] {exc}")
+
+
 def risk_pct_for_ticker(ticker: str) -> Optional[float]:
 
 
@@ -7646,15 +8076,15 @@ def record_buy(
 
 
 
-    if REQUIRE_BUY_TICKER_IN_WATCHLIST and ticker not in WATCHLIST:
+    if REQUIRE_BUY_TICKER_IN_WATCHLIST and ticker not in ALLOWED_BUY_TICKERS:
 
         return (
 
             False,
 
-            f"Buy rejected: {ticker} is not in WATCHLIST.\n"
+            f"Buy rejected: {ticker} is not in WATCHLIST or BEAR_WATCHLIST.\n"
 
-            "This may be a typo. Add it to WATCHLIST first if you really want to trade it."
+            "This may be a typo. Add it to the correct universe first if you really want to trade it."
 
         )
 
@@ -7828,7 +8258,7 @@ def record_buy(
 
 
 
-        "strategy_version": STRATEGY_VERSION,
+        "strategy_version": str(signal_data.get("strategy_version", STRATEGY_VERSION)),
 
 
 
@@ -9186,7 +9616,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus\n"
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | wealthplan | wealthstatus\n"
 
             "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
 
@@ -9568,6 +9998,25 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
+    if text_lower == "bearstatus":
+        details = bear_regime_details(market_details=market_regime_details())
+        open_bear = count_open_bear_positions()
+
+        send(
+            "🐻 BEAR SLEEVE STATUS\n\n"
+            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
+            f"Active now: {yes_no(bool(details.get('active')))}\n"
+            f"Bear score: {details.get('score')}/{details.get('max_score')}\n"
+            f"Entry threshold: {BEAR_ENTRY_SCORE}\n"
+            f"Exit/calm threshold: {BEAR_EXIT_SCORE}\n"
+            f"Open bear positions: {open_bear}/{BEAR_MAX_OPEN_POSITIONS}\n"
+            f"Universe: {', '.join(BEAR_WATCHLIST)}\n\n"
+            "Live candidate: robust 3x inverse VCP sleeve.\n"
+            "Aggressive 2x reclaim remains research-only, not live-integrated."
+        )
+
+        return
+
     if text_lower == "resetscan":
 
         with db_tx() as conn:
@@ -9665,6 +10114,25 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
 
 
+
+    if text_lower == "wealthplan":
+        plan = compute_wealth_core_plan()
+        send(format_wealth_core_plan(plan))
+        return
+
+    if text_lower == "wealthstatus":
+        send(
+            "🏛️ WEALTH SLEEVE STATUS\n\n"
+            f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
+            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
+            f"Core target: {round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2)}% of account\n"
+            f"Top assets: {WEALTH_CORE_TOP_N}\n"
+            f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
+            f"Public channel: ❌ never used for this sleeve\n\n"
+            "Commands:\n"
+            "wealthplan — calculate current private core allocation plan"
+        )
+        return
 
     if text_lower == "withdrawinit":
 
@@ -11063,9 +11531,9 @@ def analyze(
     market_details: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
     """
-    V2.7 VCP-only leader engine.
+    V2.8 VCP-only leader engine with winner-capture upgrade.
 
-    Primary and only live setup: VCP / volatility-contraction breakout.
+    Primary and only live setup: VCP / volatility-contraction breakout. Entry logic is kept from v2.7 research; exit logic is upgraded to let winners breathe.
 
     Kept intentionally disabled by default:
     - ordinary RS breakout sleeve,
@@ -11452,11 +11920,11 @@ def analyze(
     atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
     structure_stop = float(selected_breakout_level) - (0.35 * atr_val)
     stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
-    stop_model = "v2_7_vcp_only_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_7_vcp_only_tighter_atr"
+    stop_model = "v2_8_vcp_exit_upgrade_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_8_vcp_exit_upgrade_tighter_atr"
 
     if stop <= 0 or stop >= price:
         stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-        stop_model = "fallback_v27_atr"
+        stop_model = "fallback_v28_atr"
 
     risk = price - stop
 
@@ -11514,7 +11982,7 @@ def analyze(
 
     metrics = {
         "setup_type": setup_type,
-        "strategy_family": "v2_7_vcp_only_leader",
+        "strategy_family": "v2_8_vcp_exit_upgrade",
         "breakout": True,
         "breakout_20": breakout_20,
         "breakout_55": breakout_55,
@@ -11725,6 +12193,28 @@ def repair_position_if_needed(ticker: str, pos: Dict[str, Any]) -> Dict[str, Any
 
 
 
+def position_exit_params(pos: Dict[str, Any]) -> Dict[str, Any]:
+    """Per-position exit settings.
+
+    Long VCP positions use v2.8 defaults. Bear inverse positions carry their own
+    exit settings inside entry_data so both sleeves can coexist in one bot.
+    """
+    entry_data = pos.get("entry_data", {}) or {}
+
+    return {
+        "breakeven_r_trigger": float(entry_data.get("breakeven_r_trigger", BREAKEVEN_R_TRIGGER)),
+        "partial_r": float(entry_data.get("partial_take_profit_r", PARTIAL_TAKE_PROFIT_R)),
+        "partial_pct": float(entry_data.get("partial_take_profit_pct", PARTIAL_TAKE_PROFIT_PCT)),
+        "partial_fraction": float(entry_data.get("partial_take_profit_fraction", PARTIAL_TAKE_PROFIT_FRACTION)),
+        "trail_mult_early": float(entry_data.get("trail_mult_early", TRAIL_MULT_EARLY)),
+        "trail_mult_late": float(entry_data.get("trail_mult_late", TRAIL_MULT_LATE)),
+        "trail_tighten_pct": float(entry_data.get("trail_tighten_pct", TRAIL_TIGHTEN_PCT)),
+        "time_stop_days": int(entry_data.get("time_stop_days", 0) or 0),
+        "time_stop_min_r": float(entry_data.get("time_stop_min_r", 0.25)),
+        "max_holding_days": int(entry_data.get("max_holding_days", 0) or 0),
+    }
+
+
 def manage_positions() -> None:
 
 
@@ -11913,6 +12403,8 @@ def manage_positions() -> None:
 
 
 
+        exit_params = position_exit_params(pos)
+
         # Compute effective stop first. This fixes the gap-through-trailing-stop bug.
 
 
@@ -11933,7 +12425,7 @@ def manage_positions() -> None:
 
 
 
-            multiplier = TRAIL_MULT_LATE if (price >= entry * (1 + TRAIL_TIGHTEN_PCT) or (trade_r is not None and trade_r >= 1.5) or pos.get("partial_taken", False)) else TRAIL_MULT_EARLY
+            multiplier = exit_params["trail_mult_late"] if (price >= entry * (1 + exit_params["trail_tighten_pct"]) or (trade_r is not None and trade_r >= 1.5) or pos.get("partial_taken", False)) else exit_params["trail_mult_early"]
 
 
 
@@ -11957,7 +12449,7 @@ def manage_positions() -> None:
 
 
 
-        if trade_r is not None and trade_r >= BREAKEVEN_R_TRIGGER and effective_stop < entry:
+        if trade_r is not None and trade_r >= exit_params["breakeven_r_trigger"] and effective_stop < entry:
 
 
 
@@ -12012,6 +12504,10 @@ def manage_positions() -> None:
                 send(
 
                     f"📉 EXIT {ticker}\n"
+
+                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
+
+                    f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
 
                     f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\n"
 
@@ -12091,11 +12587,71 @@ def manage_positions() -> None:
 
 
 
-        # Partial take-profit logic: V2.7 defaults are +8.5% OR +1.05R.
+        # Time / regime exits. Used mainly by the bear inverse sleeve.
+        holding_days = (now_ts() - float(pos.get("entry_time", now_ts()))) / 86400
+
+        time_exit_reason: Optional[str] = None
+
+        entry_data_for_exit = pos.get("entry_data", {}) or {}
+
+        if entry_data_for_exit.get("strategy_sleeve") == "BEAR_INVERSE":
+            try:
+                bear_now = bear_regime_details(market_details=market_regime_details())
+                if int(bear_now.get("score", 0) or 0) <= BEAR_EXIT_SCORE:
+                    time_exit_reason = "bear_regime_exit"
+            except Exception as exc:
+                print(f"[BEAR REGIME EXIT CHECK ERROR] {ticker}: {exc}")
+
+        if time_exit_reason is None and exit_params["max_holding_days"] > 0 and holding_days >= exit_params["max_holding_days"]:
+            time_exit_reason = "max_hold"
+
+        elif (
+            time_exit_reason is None
+            and exit_params["time_stop_days"] > 0
+            and holding_days >= exit_params["time_stop_days"]
+            and trade_r is not None
+            and trade_r < exit_params["time_stop_min_r"]
+        ):
+            time_exit_reason = "time_stop"
+
+        if time_exit_reason is not None:
+            trade = record_auto_exit_or_partial(
+                ticker=ticker,
+                shares=int(pos["shares"]),
+                price=price,
+                exit_reason=time_exit_reason,
+                updated_fields={"highest": pos["highest"], "stop": float(pos["stop"])}
+            )
+
+            if trade:
+                exit_gain_pct = pct_from_entry(entry, price)
+                send(
+                    f"⏱️ EXIT {ticker}\n"
+                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
+                    f"Reason: {time_exit_reason}\n"
+                    f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
+                    f"💵 Exit price: {round(price, 2)} ({format_pct(exit_gain_pct)})\n"
+                    f"P/L: {format_money(trade['profit'])}\n"
+                    f"R: {trade.get('r_multiple')}"
+                )
+
+                if should_forward_public_position(pos):
+                    send_public_signal(
+                        format_public_exit_signal(
+                            ticker=ticker,
+                            price=price,
+                            trade=trade,
+                            reason=time_exit_reason
+                        )
+                    )
+
+            continue
+
+        # Partial take-profit logic: V2.8 defaults are +10% OR +1.25R, with 40% partial.
 
 
 
-        partial_trigger = (price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT)) or (trade_r is not None and trade_r >= PARTIAL_TAKE_PROFIT_R)
+        partial_trigger = (price >= entry * (1 + exit_params["partial_pct"])) or (trade_r is not None and trade_r >= exit_params["partial_r"])
 
 
 
@@ -12103,7 +12659,7 @@ def manage_positions() -> None:
 
 
 
-            sell_shares = max(1, int(math.floor(int(pos["shares"]) * PARTIAL_TAKE_PROFIT_FRACTION)))
+            sell_shares = max(1, int(math.floor(int(pos["shares"]) * exit_params["partial_fraction"])))
 
             sell_shares = min(sell_shares, int(pos["shares"]) - 1)
 
@@ -12147,15 +12703,15 @@ def manage_positions() -> None:
 
 
 
-                if price >= entry * (1 + PARTIAL_TAKE_PROFIT_PCT):
+                if price >= entry * (1 + exit_params["partial_pct"]):
 
-                    partial_reasons.append(f"+{round(PARTIAL_TAKE_PROFIT_PCT * 100, 2)}% target")
+                    partial_reasons.append(f"+{round(exit_params['partial_pct'] * 100, 2)}% target")
 
 
 
-                if trade_r is not None and trade_r >= PARTIAL_TAKE_PROFIT_R:
+                if trade_r is not None and trade_r >= exit_params["partial_r"]:
 
-                    partial_reasons.append(f"+{round(PARTIAL_TAKE_PROFIT_R, 2)}R target")
+                    partial_reasons.append(f"+{round(exit_params['partial_r'], 2)}R target")
 
 
 
@@ -12163,11 +12719,19 @@ def manage_positions() -> None:
 
 
 
+                remaining_shares = int(pos["shares"]) - sell_shares
+
+                partial_fraction_label = int(round(float(exit_params.get("partial_fraction", PARTIAL_TAKE_PROFIT_FRACTION)) * 100))
+
                 send(
 
                     f"💰 PARTIAL {ticker}\n"
 
-                    f"Shares: {sell_shares}\n"
+                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
+
+                    f"📤 SELL NOW: {sell_shares} shares (~{partial_fraction_label}% of position)\n"
+
+                    f"📦 Remaining after partial: {remaining_shares} shares\n"
 
                     f"💵 Partial exit price: {round(price, 2)} ({format_pct(partial_gain_pct)})\n"
 
@@ -12273,6 +12837,215 @@ def should_skip_for_existing_signal(
 
 
 
+def count_open_bear_positions() -> int:
+    refresh_portfolio()
+    count = 0
+    for pos in portfolio["positions"].values():
+        entry_data = pos.get("entry_data", {}) or {}
+        if entry_data.get("strategy_sleeve") == "BEAR_INVERSE":
+            count += 1
+    return count
+
+
+def analyze_bear_signal(
+    ticker: str,
+    df: pd.DataFrame,
+    bear_details: Dict[str, Any],
+) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
+    """Robust 3x inverse ETF VCP bear sleeve.
+
+    This is separate from the long v2.8 VCP strategy. It only runs when
+    bear_regime_details() says the broad market is risk-off.
+    """
+    if not BEAR_SLEEVE_ENABLED:
+        return None
+
+    if ticker not in BEAR_WATCHLIST:
+        return None
+
+    if not bear_details.get("active"):
+        return None
+
+    if df is None or df.empty or len(df) < 220:
+        return None
+
+    close = df["Close"].dropna()
+    high = df["High"]
+    low = df["Low"]
+    volume = df["Volume"]
+
+    price = float(close.iloc[-1])
+    prev_close = float(close.iloc[-2])
+
+    if price <= 0 or prev_close <= 0:
+        return None
+
+    rsi_val = rsi(close).iloc[-1]
+    atr_val = atr(df).iloc[-1]
+    atr50_val = atr(df, period=50).iloc[-1]
+    ma10 = close.rolling(10).mean().iloc[-1]
+    ma20 = close.rolling(20).mean().iloc[-1]
+    ma50 = close.rolling(50).mean().iloc[-1]
+    avg_vol = volume.rolling(20).mean().iloc[-1]
+
+    bb_mid = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_width = ((bb_mid + (2 * bb_std)) - (bb_mid - (2 * bb_std))) / bb_mid
+    bb_width_rank = bb_width.rolling(100).rank(pct=True).iloc[-1]
+
+    required = [rsi_val, atr_val, atr50_val, ma10, ma20, ma50, avg_vol, bb_width_rank]
+    if any(pd.isna(x) for x in required):
+        return None
+
+    atr_pct = float(atr_val) / price
+    atr_ratio = float(atr_val) / float(atr50_val) if float(atr50_val) > 0 else None
+    avg_dollar_volume = float(avg_vol) * price
+    volume_ratio = float(volume.iloc[-1]) / float(avg_vol) if float(avg_vol) > 0 else 0.0
+    close_loc = close_location(df)
+    daily_move_pct = ((price - prev_close) / prev_close) * 100
+
+    if price < BEAR_MIN_PRICE:
+        return None
+    if avg_dollar_volume < BEAR_MIN_AVG_DOLLAR_VOLUME:
+        return None
+    if atr_pct < BEAR_MIN_ATR_PCT or atr_pct > BEAR_MAX_ATR_PCT:
+        return None
+
+    recent_high_20 = float(close.iloc[-21:-1].max())
+    recent_high_55 = float(close.iloc[-56:-1].max())
+    breakout_20 = price > recent_high_20
+    breakout_55 = price > recent_high_55
+
+    if not (breakout_20 or breakout_55):
+        return None
+
+    recent_high_20_window = float(high.iloc[-21:].max())
+    recent_low_20_window = float(low.iloc[-21:].min())
+    recent_range_20_pct = (recent_high_20_window - recent_low_20_window) / price
+    breakout_level = recent_high_55 if breakout_55 else recent_high_20
+    breakout_extension_atr = max(0.0, (price - breakout_level) / float(atr_val)) if float(atr_val) > 0 else 999.0
+
+    vcp_candidate = (
+        recent_range_20_pct <= BEAR_VCP_MAX_BASE_RANGE_PCT
+        and atr_ratio is not None and atr_ratio <= BEAR_VCP_MAX_ATR_RATIO
+        and float(bb_width_rank) <= BEAR_VCP_MAX_BB_WIDTH_RANK
+        and volume_ratio >= BEAR_VCP_MIN_VOLUME_RATIO
+        and close_loc >= BEAR_VCP_MIN_CLOSE_LOCATION
+        and price > float(ma20) > float(ma50)
+        and daily_move_pct > 0
+        and daily_move_pct <= BEAR_MAX_DAY_MOVE_PCT
+        and float(rsi_val) <= BEAR_MAX_RSI
+    )
+
+    if not vcp_candidate:
+        return None
+
+    score = 0
+
+    if price > float(ma50):
+        score += 12
+    if float(ma20) > float(ma50):
+        score += 10
+    if price > float(ma20):
+        score += 6
+    if price > float(ma10):
+        score += 4
+    if rolling_slope_positive(close.rolling(20).mean(), lookback=5):
+        score += 6
+    if breakout_20:
+        score += 8
+    if breakout_55:
+        score += 12
+    if volume_ratio >= BEAR_VCP_MIN_VOLUME_RATIO:
+        score += 8
+    if volume_ratio >= 1.5:
+        score += 5
+    if close_loc >= BEAR_VCP_MIN_CLOSE_LOCATION:
+        score += 8
+    if recent_range_20_pct <= BEAR_VCP_MAX_BASE_RANGE_PCT * 0.75:
+        score += 6
+    if atr_ratio is not None and atr_ratio <= BEAR_VCP_MAX_ATR_RATIO * 0.90:
+        score += 5
+    if float(bb_width_rank) <= 0.45:
+        score += 5
+    score += int(bear_details.get("score", 0) or 0) // 4
+
+    if score < BEAR_VCP_MIN_SCORE:
+        return None
+
+    atr_stop = price - (BEAR_ATR_STOP_MULT * float(atr_val))
+    structure_stop = float(breakout_level) - (0.35 * float(atr_val))
+    stop = min(atr_stop, structure_stop)
+
+    if stop <= 0 or stop >= price:
+        stop = price - (BEAR_ATR_STOP_MULT * float(atr_val))
+
+    risk = price - stop
+
+    if risk <= 0:
+        return None
+
+    if (risk / price) > BEAR_MAX_RISK_PER_SHARE_PCT:
+        return None
+
+    refresh_portfolio()
+    account_equity = approximate_equity_from_portfolio()
+    available_cash = float(portfolio["cash"])
+
+    shares_by_risk = int((account_equity * BEAR_RISK_PCT) / risk)
+    shares_by_position_cap = int((account_equity * MAX_POSITION_EQUITY_PCT) / price)
+    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
+    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
+
+    if shares <= 0:
+        return None
+
+    rank_score = float(score)
+    if breakout_55:
+        rank_score += 8
+    rank_score += max(0.0, min(8.0, (volume_ratio - 1.0) * 6.0))
+    rank_score += max(0.0, min(10.0, (close_loc - 0.50) * 40.0))
+
+    metrics = {
+        "setup_type": "bear_vcp_inverse",
+        "strategy_sleeve": "BEAR_INVERSE",
+        "strategy_family": "bear_v1_robust_3x_vcp",
+        "breakout": True,
+        "breakout_20": breakout_20,
+        "breakout_55": breakout_55,
+        "breakout_level": breakout_level,
+        "breakout_extension_atr": breakout_extension_atr,
+        "recent_range_20_pct": recent_range_20_pct,
+        "atr": float(atr_val),
+        "atr_pct": atr_pct,
+        "atr_ratio_14_50": atr_ratio,
+        "bb_width_rank_100": float(bb_width_rank),
+        "volume_ratio": volume_ratio,
+        "daily_move_pct": daily_move_pct,
+        "bear_score": int(bear_details.get("score", 0) or 0),
+        "rank_score": rank_score,
+        "min_score_required": BEAR_VCP_MIN_SCORE,
+        "close_location": close_loc,
+        "avg_dollar_volume": avg_dollar_volume,
+        "risk_pct_used": BEAR_RISK_PCT,
+        "stop_model": "bear_v1_robust_3x_vcp_structure_atr",
+        "exit_params": {
+            "breakeven_r_trigger": BEAR_BREAKEVEN_R_TRIGGER,
+            "partial_take_profit_r": BEAR_PARTIAL_TAKE_PROFIT_R,
+            "partial_take_profit_pct": BEAR_PARTIAL_TAKE_PROFIT_PCT,
+            "partial_take_profit_fraction": BEAR_PARTIAL_TAKE_PROFIT_FRACTION,
+            "trail_mult_early": BEAR_TRAIL_MULT_EARLY,
+            "trail_mult_late": BEAR_TRAIL_MULT_LATE,
+            "trail_tighten_pct": TRAIL_TIGHTEN_PCT,
+            "time_stop_days": BEAR_TIME_STOP_DAYS,
+            "time_stop_min_r": BEAR_TIME_STOP_MIN_R,
+            "max_holding_days": BEAR_MAX_HOLDING_DAYS,
+        },
+    }
+
+    return ticker, price, shares, stop, score, metrics
+
+
 def scan_market() -> bool:
     global last_signals
 
@@ -12297,6 +13070,9 @@ def scan_market() -> bool:
         "cash_reserve": 0,
         "candidates": 0,
         "signals_sent": 0,
+        "bear_regime_block_long": 0,
+        "bear_candidates": 0,
+        "bear_signals_sent": 0,
     }
 
     today = ny_date_str()
@@ -12345,6 +13121,14 @@ def scan_market() -> bool:
 
     print(f"{market_emoji} MARKET | {market} | score={market_score}/8")
 
+    bear_details = bear_regime_details(market_details=market_details)
+    bear_active = bool(BEAR_SLEEVE_ENABLED and bear_details.get("active"))
+    print(
+        f"🐻 BEAR SLEEVE | active={yes_no(bear_active)} | "
+        f"score={bear_details.get('score')}/{bear_details.get('max_score')} | "
+        f"entry={BEAR_ENTRY_SCORE}"
+    )
+
     cooldowns = get_cooldowns()
     base_risk_details = open_risk_details()
 
@@ -12379,7 +13163,13 @@ def scan_market() -> bool:
 
     candidates: List[Dict[str, Any]] = []
 
-    for ticker in WATCHLIST:
+    long_scan_universe = [] if (bear_active and BEAR_BLOCK_LONG_SIGNALS_IN_BEAR) else WATCHLIST
+
+    if bear_active and BEAR_BLOCK_LONG_SIGNALS_IN_BEAR:
+        skip_counts["bear_regime_block_long"] = len(WATCHLIST)
+        print("[LONG SCAN BLOCKED] Bear sleeve is active; no new long VCP signals will be sent.")
+
+    for ticker in long_scan_universe:
         try:
             refresh_portfolio()
 
@@ -12522,6 +13312,8 @@ def scan_market() -> bool:
                 "stop": round(stop, 2),
                 "breakout": bool(metrics.get("breakout")),
                 "setup_type": metrics.get("setup_type"),
+                "strategy_sleeve": "LONG_VCP",
+                "strategy_family": "v2_8_vcp_long",
                 "volume_ratio": None if metrics.get("volume_ratio") is None else round(float(metrics.get("volume_ratio")), 2),
                 "daily_move_pct": round(float(metrics.get("daily_move_pct", 0)), 2),
                 "trend_score": int(metrics.get("trend_score", 0) or 0),
@@ -12569,18 +13361,156 @@ def scan_market() -> bool:
             traceback.print_exc()
             send(f"WARNING: scan error for {ticker}: {exc}")
 
+    # Bear inverse sleeve candidates. This runs only in confirmed risk-off regimes.
+    if bear_active:
+        open_bear_positions = count_open_bear_positions()
+        bear_slots = max(0, BEAR_MAX_OPEN_POSITIONS - open_bear_positions)
+
+        if bear_slots <= 0:
+            print(f"[BEAR SCAN COMPLETE] No bear sleeve slots available: {open_bear_positions}/{BEAR_MAX_OPEN_POSITIONS}")
+
+        else:
+            for ticker in BEAR_WATCHLIST:
+                try:
+                    refresh_portfolio()
+
+                    if ticker in cooldowns and now_ts() - cooldowns[ticker] < STOP_COOLDOWN_SEC:
+                        skip_counts["cooldown"] += 1
+                        continue
+
+                    if ticker in portfolio["positions"]:
+                        skip_counts["existing_position"] += 1
+                        continue
+
+                    if should_skip_for_existing_signal(ticker, expected_bar):
+                        skip_counts["existing_signal"] += 1
+                        continue
+
+                    attempted_historical += 1
+                    df = get_signal_dataframe(ticker, limit=260)
+
+                    if df is None or df.empty or len(df) < 220:
+                        skip_counts["no_historical"] += 1
+                        continue
+
+                    if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
+                        skip_counts["stale_data"] += 1
+                        continue
+
+                    usable_data_found = True
+                    result = analyze_bear_signal(ticker, df, bear_details=bear_details)
+
+                    if not result:
+                        skip_counts["strategy_filter"] += 1
+                        continue
+
+                    ticker, price, shares, stop, score, metrics = result
+                    risk_amount = (price - stop) * shares
+                    capital = shares * price
+                    risk_details = base_risk_details
+                    equity_at_signal = float(risk_details["equity"])
+
+                    if equity_at_signal <= 0:
+                        continue
+
+                    position_size_pct = (capital / equity_at_signal) * 100
+                    single_trade_risk_pct = (risk_amount / equity_at_signal) * 100
+                    max_valid_entry = min(
+                        price * (1 + MAX_ENTRY_EXTENSION_PCT),
+                        price + (0.35 * float(metrics.get("atr", 0) or 0))
+                    )
+
+                    exit_params = metrics.get("exit_params", {}) or {}
+                    entry_data = {
+                        "rsi": round(float(rsi(df["Close"]).iloc[-1]), 2),
+                        "score": int(score),
+                        "market": "BEAR",
+                        "market_score": market_score,
+                        "bear_score": metrics.get("bear_score"),
+                        "atr": round(float(metrics.get("atr", 0)), 4),
+                        "atr_pct": round(float(metrics.get("atr_pct", 0)) * 100, 2),
+                        "stop": round(stop, 2),
+                        "breakout": True,
+                        "setup_type": "bear_vcp_inverse",
+                        "strategy_sleeve": "BEAR_INVERSE",
+                        "volume_ratio": None if metrics.get("volume_ratio") is None else round(float(metrics.get("volume_ratio")), 2),
+                        "daily_move_pct": round(float(metrics.get("daily_move_pct", 0)), 2),
+                        "min_score_required": int(metrics.get("min_score_required", 0) or 0),
+                        "close_location": round(float(metrics.get("close_location", 0)), 2),
+                        "rank_score": round(float(metrics.get("rank_score", score) or score), 2),
+                        "recent_range_20_pct": round(float(metrics.get("recent_range_20_pct", 0)) * 100, 2),
+                        "breakout_extension_atr": round(float(metrics.get("breakout_extension_atr", 0)), 2),
+                        "avg_dollar_volume": round(float(metrics.get("avg_dollar_volume", 0)), 2),
+                        "stop_model": metrics.get("stop_model"),
+                        "strategy_version": BEAR_STRATEGY_VERSION,
+                        "signal_time": now_ts(),
+                        "signal_date_ny": ny_date_str(),
+                        "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
+                        "signal_price": round(price, 2),
+                        "max_valid_entry": round(max_valid_entry, 2),
+                        "shares": int(shares),
+                        "capital": round(capital, 2),
+                        "equity_at_signal": round(equity_at_signal, 2),
+                        "position_size_pct": round(position_size_pct, 2),
+                        "single_trade_risk_pct": round(single_trade_risk_pct, 2),
+                        "risk_amount": round(risk_amount, 2),
+                        "breakeven_r_trigger": exit_params.get("breakeven_r_trigger"),
+                        "partial_take_profit_r": exit_params.get("partial_take_profit_r"),
+                        "partial_take_profit_pct": exit_params.get("partial_take_profit_pct"),
+                        "partial_take_profit_fraction": exit_params.get("partial_take_profit_fraction"),
+                        "trail_mult_early": exit_params.get("trail_mult_early"),
+                        "trail_mult_late": exit_params.get("trail_mult_late"),
+                        "trail_tighten_pct": exit_params.get("trail_tighten_pct"),
+                        "time_stop_days": exit_params.get("time_stop_days"),
+                        "time_stop_min_r": exit_params.get("time_stop_min_r"),
+                        "max_holding_days": exit_params.get("max_holding_days"),
+                    }
+
+                    candidates.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "shares": shares,
+                        "stop": stop,
+                        "score": score,
+                        "rank_score": float(metrics.get("rank_score", score) or score),
+                        "risk_amount": risk_amount,
+                        "capital": capital,
+                        "entry_data": entry_data,
+                        "is_bear": True,
+                    })
+
+                    skip_counts["candidates"] += 1
+                    skip_counts["bear_candidates"] += 1
+
+                except Exception as exc:
+                    logger.exception(f"[❌ BEAR SCAN ERROR] {ticker}: {exc}")
+                    traceback.print_exc()
+                    send(f"WARNING: bear scan error for {ticker}: {exc}")
+
     candidates = sorted(candidates, key=lambda x: float(x.get("rank_score", x.get("score", 0)) or 0), reverse=True)
 
     sent_count = 0
+    bear_sent_count = 0
 
     for candidate in candidates:
-        if sent_count >= V2_MAX_SIGNALS_PER_SCAN:
-            break
+        is_bear_candidate = bool(candidate.get("is_bear"))
 
-        if sent_count >= available_signal_slots:
+        if is_bear_candidate:
+            if bear_sent_count >= BEAR_MAX_SIGNALS_PER_SCAN:
+                continue
+            if bear_sent_count >= max(0, BEAR_MAX_OPEN_POSITIONS - count_open_bear_positions()):
+                skip_counts["max_positions"] += 1
+                continue
+        else:
+            if sent_count >= V2_MAX_SIGNALS_PER_SCAN:
+                break
+
+        total_signals_this_scan = sent_count + bear_sent_count
+
+        if total_signals_this_scan >= available_signal_slots:
             skip_counts["max_positions"] += 1
             print(
-                f"[SIGNAL SLOT LIMIT] sent={sent_count} "
+                f"[SIGNAL SLOT LIMIT] sent={total_signals_this_scan} "
                 f"available_slots={available_signal_slots}"
             )
             break
@@ -12622,21 +13552,36 @@ def scan_market() -> bool:
 
         entry_data["projected_total_risk_pct"] = round(projected_risk_pct * 100, 2)
 
+        score_label = "🐻 Bear VCP score" if is_bear_candidate else "⭐ V2.8 VCP score"
+        extra_context = ""
+
+        if is_bear_candidate:
+            extra_context = (
+                f"🐻 Bear regime score: {entry_data.get('bear_score')}/60\n"
+                f"⏱️ Time stop: {entry_data.get('time_stop_days')} days if below {entry_data.get('time_stop_min_r')}R\n"
+                f"📅 Max hold: {entry_data.get('max_holding_days')} days\n"
+            )
+        else:
+            extra_context = (
+                f"💪 RS vs SPY: 20d {entry_data.get('rel_20_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
+                f"🧱 Trend score: {entry_data.get('trend_score')} | RS score: {entry_data.get('rs_score')}\n"
+            )
+
         send(
             "📈 ENTRY SIGNAL\n\n"
             f"🏷️ Ticker: {ticker}\n"
             f"🌎 Market: {market_label(entry_data['market'])} ({entry_data.get('market_score')}/8)\n"
+            f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
             f"⚙️ Setup: {setup_label(entry_data['setup_type'])}\n\n"
             f"🟢 ENTRY: {round(price, 2)}\n"
             f"🟡 MAX ENTRY LIMIT: {entry_data['max_valid_entry']}\n"
             f"🔴 STOP/LOSS: {round(stop, 2)}\n"
             f"📐 Position size: {round(entry_data['position_size_pct'], 2)}% of equity\n\n"
-            f"⭐ V2.7 VCP score: {score} / required {entry_data.get('min_score_required')}\n"
+            f"{score_label}: {score} / required {entry_data.get('min_score_required')}\n"
             f"📊 RSI: {round(float(entry_data['rsi']), 1)}\n"
             f"📊 Volume ratio: {entry_data.get('volume_ratio')}\n"
             f"🏅 Rank score: {round(rank_score, 2)}\n"
-            f"💪 RS vs SPY: 20d {entry_data.get('rel_20_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
-            f"🧱 Trend score: {entry_data.get('trend_score')} | RS score: {entry_data.get('rs_score')}\n\n"
+            f"{extra_context}\n"
             f"🛒 Bot buy size: {shares} shares\n"
             f"💰 Capital: {format_money(capital)}\n"
             f"⚠️ Trade risk: {format_money(risk_amount)} "
@@ -12656,7 +13601,11 @@ def scan_market() -> bool:
         save_signal(ticker, now_ts(), entry_data)
 
         skip_counts["signals_sent"] += 1
-        sent_count += 1
+        if is_bear_candidate:
+            skip_counts["bear_signals_sent"] += 1
+            bear_sent_count += 1
+        else:
+            sent_count += 1
         reserved_signal_risk += risk_amount
         reserved_signal_capital += capital
 
