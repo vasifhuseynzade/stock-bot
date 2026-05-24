@@ -216,7 +216,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.7-aggressive-45-15-40")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.8-aggressive-45-15-40-monitor")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 # Risk / execution controls.
@@ -18524,6 +18524,663 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
     )
 
     return ok, msg, backup_path
+
+
+# -----------------------------------------------------------------------------
+# V3.8 INSTITUTIONAL MONITOR LAYER
+# -----------------------------------------------------------------------------
+# This layer is intentionally diagnostic-only. It does not change entries,
+# exits, stops, allocation, public/private signals, or any trading decision.
+# It exists so download_state / download_institutional include the data needed
+# to review the bot professionally without slowing the main loop.
+
+INSTITUTIONAL_MONITOR_ENABLED = os.getenv("INSTITUTIONAL_MONITOR_ENABLED", "1") != "0"
+INSTITUTIONAL_CONCENTRATION_WARN_PCT = float(os.getenv("INSTITUTIONAL_CONCENTRATION_WARN_PCT", "35"))
+INSTITUTIONAL_TOP_POSITION_WARN_PCT = float(os.getenv("INSTITUTIONAL_TOP_POSITION_WARN_PCT", "15"))
+INSTITUTIONAL_VAR_LOOKBACK_TRADES = int(os.getenv("INSTITUTIONAL_VAR_LOOKBACK_TRADES", "50"))
+
+
+def _v38_float(value: Any, default: float = 0.0) -> float:
+    try:
+        val = float(value)
+        return val if math.isfinite(val) else default
+    except Exception:
+        return default
+
+
+def _v38_pct(part: float, whole: float) -> float:
+    return 0.0 if whole <= 0 else (part / whole) * 100.0
+
+
+def _v38_cluster_for_ticker(ticker: str) -> str:
+    t = str(ticker).upper()
+
+    clusters = {
+        "cash_like": {"BIL", "SGOV", "SHY", "IEF", "TLT"},
+        "broad_equity": {"SPY", "VOO", "VTI", "DIA", "IWM"},
+        "growth_tech": {"QQQ", "XLK", "IGV", "XLC", "MSFT", "AAPL", "META", "GOOGL", "AMZN", "NFLX", "CRM", "ADBE", "INTU", "SHOP"},
+        "semis_ai": {"SMH", "SOXX", "NVDA", "AVGO", "AMD", "MU", "LRCX", "ASML", "QCOM", "KLAC", "AMAT", "TSM", "TXN", "ADI", "MRVL", "MPWR", "ON", "NXPI", "ARM", "ANET", "CDNS", "SNPS"},
+        "cyber_cloud": {"PANW", "CRWD", "ZS", "NET", "NOW", "PLTR", "DDOG", "MDB", "TEAM", "WDAY", "FTNT", "HUBS", "APP", "TTD"},
+        "financials": {"XLF", "KRE", "JPM", "GS", "MS", "BAC", "WFC", "SCHW", "BLK", "SPGI", "MCO", "CME", "ICE", "NDAQ", "V", "MA", "AXP", "BX", "KKR", "APO", "PGR", "CB"},
+        "industrials": {"XLI", "IYT", "CAT", "DE", "GE", "ETN", "HON", "RTX", "URI", "PH", "CMI", "EMR", "ITW", "ROK", "TT", "PWR", "FAST", "PCAR", "LMT", "NOC", "GD", "TDG", "GWW", "UNP", "CSX", "LUNR", "PL", "RKLB"},
+        "healthcare": {"XLV", "IBB", "LLY", "UNH", "ABBV", "ISRG", "TMO", "ABT", "MRK", "JNJ", "AMGN", "REGN", "VRTX", "SYK", "BSX", "MDT", "DHR", "GILD", "HCA", "MCK", "COR", "IQV", "LQDA", "SYRE"},
+        "consumer": {"XLP", "XLY", "COST", "WMT", "MCD", "HD", "LOW", "BKNG", "NKE", "SBUX", "CMG", "TJX", "ROST", "AZO", "ORLY", "YUM", "DPZ", "MAR", "HLT", "RCL", "MELI", "UBER"},
+        "energy_materials": {"XLE", "XOP", "XLB", "XOM", "CVX", "SLB", "FCX", "LIN", "COP", "EOG", "MPC", "PSX", "VLO", "NUE", "STLD", "SCCO", "NEM", "APD", "SHW", "ECL", "MLM", "VMC", "DBC", "DBB", "CPER"},
+        "metals": {"GLD", "IAU", "SLV", "GDX", "GDXJ", "SIL", "SILJ", "AEM", "GOLD", "KGC", "WPM", "FNV"},
+        "real_estate_utilities": {"XLU", "XLRE", "NEE", "CEG", "VST", "DLR", "EQIX", "PLD", "AMT", "HOUS"},
+        "crypto_beta": {"COIN", "HOOD", "MSTR", "MARA", "RIOT", "CLSK", "IREN", "WULF", "HUT", "BITF"},
+        "bear_inverse": {"SQQQ", "SPXU", "SDOW", "TZA"},
+    }
+
+    for name, members in clusters.items():
+        if t in members:
+            return name
+    return "other"
+
+
+def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
+    entry_data = pos.get("entry_data", {}) if isinstance(pos, dict) else {}
+    sleeve = str(entry_data.get("strategy_sleeve") or entry_data.get("sleeve") or "").upper()
+    if sleeve:
+        return sleeve
+    if str(ticker).upper() in {"SQQQ", "SPXU", "SDOW", "TZA"}:
+        return "BEAR_INVERSE"
+    return "LONG_VCP_OR_TACTICAL"
+
+
+def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
+    refresh_portfolio()
+    swing_positions = portfolio.get("positions", {}) or {}
+    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
+    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
+
+    tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys())))
+    if prices is None:
+        prices = get_prices_batch(tickers) if tickers else {}
+
+    holdings: List[Dict[str, Any]] = []
+
+    for ticker, pos in swing_positions.items():
+        shares = _v38_float(pos.get("shares"), 0.0)
+        entry = _v38_float(pos.get("price"), 0.0)
+        price = _v38_float(prices.get(ticker, entry), entry)
+        value = shares * price
+        holdings.append({
+            "ticker": ticker,
+            "ledger": "swing",
+            "sleeve": _v38_entry_sleeve_from_pos(ticker, pos),
+            "cluster": _v38_cluster_for_ticker(ticker),
+            "shares": shares,
+            "entry_price": entry,
+            "mark_price": price,
+            "market_value": round(value, 2),
+            "cost_basis": round(entry * shares, 2),
+            "unrealized_profit": round((price - entry) * shares, 2),
+            "stop": pos.get("stop"),
+            "highest": pos.get("highest"),
+        })
+
+    for ticker, pos in core_positions.items():
+        shares = _v38_float(pos.get("shares"), 0.0)
+        entry = _v38_float(pos.get("avg_entry_price"), 0.0)
+        cost_basis = _v38_float(pos.get("cost_basis"), entry * shares)
+        price = _v38_float(prices.get(ticker, entry), entry)
+        value = shares * price
+        holdings.append({
+            "ticker": ticker,
+            "ledger": "core",
+            "sleeve": "CORE_WEALTH",
+            "cluster": _v38_cluster_for_ticker(ticker),
+            "shares": shares,
+            "entry_price": entry,
+            "mark_price": price,
+            "market_value": round(value, 2),
+            "cost_basis": round(cost_basis, 2),
+            "unrealized_profit": round(value - cost_basis, 2),
+            "target_account_pct": pos.get("target_account_pct"),
+        })
+
+    for ticker, pos in spec_positions.items():
+        shares = _v38_float(pos.get("shares"), 0.0)
+        entry = _v38_float(pos.get("avg_entry_price"), 0.0)
+        cost_basis = _v38_float(pos.get("cost_basis"), entry * shares)
+        price = _v38_float(prices.get(ticker, entry), entry)
+        value = shares * price
+        holdings.append({
+            "ticker": ticker,
+            "ledger": "spec",
+            "sleeve": "SPEC_ALPHA",
+            "cluster": _v38_cluster_for_ticker(ticker),
+            "shares": shares,
+            "entry_price": entry,
+            "mark_price": price,
+            "market_value": round(value, 2),
+            "cost_basis": round(cost_basis, 2),
+            "unrealized_profit": round(value - cost_basis, 2),
+            "target_account_pct": pos.get("target_account_pct"),
+        })
+
+    return holdings
+
+
+def institutional_datahealth_snapshot() -> Dict[str, Any]:
+    refresh_portfolio()
+    swing_positions = portfolio.get("positions", {}) or {}
+    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
+    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
+    tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys())))
+    prices = get_prices_batch(tickers) if tickers else {}
+    holdings = _v38_collect_holdings(prices)
+
+    missing_quotes = [t for t in tickers if t not in prices]
+    bad_values = []
+    stop_warnings = []
+
+    for h in holdings:
+        if h["shares"] <= 0 or h["entry_price"] <= 0 or h["mark_price"] <= 0:
+            bad_values.append(h["ticker"])
+        if h["ledger"] == "swing":
+            stop = _v38_float(h.get("stop"), 0.0)
+            if stop <= 0:
+                stop_warnings.append({"ticker": h["ticker"], "issue": "missing_or_invalid_stop"})
+            elif h["sleeve"] != "BEAR_INVERSE" and stop > h["mark_price"] * 1.25:
+                stop_warnings.append({"ticker": h["ticker"], "issue": "stop_far_above_price_check_manually"})
+
+    status = "OK"
+    if missing_quotes or bad_values or len(stop_warnings) >= 3:
+        status = "WARNING"
+    if _v38_float(portfolio.get("cash"), 0.0) < 0:
+        status = "CRITICAL"
+
+    return {
+        "status": status,
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
+        "expected_daily_bar_date": expected_daily_bar_date(),
+        "last_scan_day": get_meta("last_scan_day"),
+        "last_scan_bar_date": get_meta("last_scan_bar_date"),
+        "panic_mode": PANIC_MODE,
+        "cash_negative": _v38_float(portfolio.get("cash"), 0.0) < 0,
+        "holdings_count": len(holdings),
+        "quote_tickers_requested": len(tickers),
+        "quote_tickers_received": len(prices),
+        "missing_quotes": missing_quotes,
+        "bad_value_tickers": bad_values,
+        "stop_warnings": stop_warnings,
+        "notes": [
+            "On-demand diagnostic only; does not block trades.",
+            "Missing quotes may be temporary provider/API issues or market-closed behavior.",
+        ],
+    }
+
+
+def institutional_riskmatrix_snapshot() -> Dict[str, Any]:
+    snapshot = compute_equity_snapshot_data()
+    equity = _v38_float(snapshot.get("equity"), 0.0)
+    holdings = _v38_collect_holdings()
+
+    by_ledger: Dict[str, float] = {"cash": _v38_float(snapshot.get("cash"), 0.0)}
+    by_sleeve: Dict[str, float] = {}
+    by_cluster: Dict[str, float] = {}
+
+    for h in holdings:
+        value = _v38_float(h.get("market_value"), 0.0)
+        by_ledger[h["ledger"]] = by_ledger.get(h["ledger"], 0.0) + value
+        by_sleeve[h["sleeve"]] = by_sleeve.get(h["sleeve"], 0.0) + value
+        by_cluster[h["cluster"]] = by_cluster.get(h["cluster"], 0.0) + value
+
+    top_positions = sorted(holdings, key=lambda x: _v38_float(x.get("market_value"), 0.0), reverse=True)[:10]
+    for h in top_positions:
+        h["account_pct"] = round(_v38_pct(_v38_float(h.get("market_value"), 0.0), equity), 2)
+
+    cluster_rows = []
+    warnings = []
+    for cluster, value in sorted(by_cluster.items(), key=lambda x: x[1], reverse=True):
+        pct_val = round(_v38_pct(value, equity), 2)
+        row = {"cluster": cluster, "value": round(value, 2), "account_pct": pct_val}
+        cluster_rows.append(row)
+        if pct_val >= INSTITUTIONAL_CONCENTRATION_WARN_PCT:
+            warnings.append(f"Cluster {cluster} is {pct_val}% of equity")
+
+    for h in top_positions:
+        if h.get("account_pct", 0) >= INSTITUTIONAL_TOP_POSITION_WARN_PCT:
+            warnings.append(f"Top position {h['ticker']} is {h['account_pct']}% of equity")
+
+    ledger_rows = [
+        {"ledger": k, "value": round(v, 2), "account_pct": round(_v38_pct(v, equity), 2)}
+        for k, v in sorted(by_ledger.items(), key=lambda x: x[1], reverse=True)
+    ]
+    sleeve_rows = [
+        {"sleeve": k, "value": round(v, 2), "account_pct": round(_v38_pct(v, equity), 2)}
+        for k, v in sorted(by_sleeve.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return {
+        "equity": round(equity, 2),
+        "ledger_exposure": ledger_rows,
+        "sleeve_exposure": sleeve_rows,
+        "cluster_exposure": cluster_rows,
+        "top_positions": top_positions,
+        "warnings": warnings,
+        "status": "WARNING" if warnings else "OK",
+    }
+
+
+def institutional_stress_snapshot() -> Dict[str, Any]:
+    risk = institutional_riskmatrix_snapshot()
+    holdings = _v38_collect_holdings()
+    equity = _v38_float(risk.get("equity"), 0.0)
+
+    scenarios = {
+        "broad_risk_off": {
+            "description": "Broad risk-off: core -8%, long swing -10%, SPEC -18%, bear inverse +10%.",
+            "default": -0.08,
+            "CORE_WEALTH": -0.08,
+            "SPEC_ALPHA": -0.18,
+            "LONG_VCP_OR_TACTICAL": -0.10,
+            "BEAR_INVERSE": 0.10,
+        },
+        "spec_momentum_unwind": {
+            "description": "SPEC momentum unwind: SPEC -25%, growth/semis -10%, other core -4%.",
+            "default": -0.04,
+            "SPEC_ALPHA": -0.25,
+            "LONG_VCP_OR_TACTICAL": -0.08,
+            "BEAR_INVERSE": 0.05,
+        },
+        "growth_semis_shock": {
+            "description": "Growth/semis shock: semis/growth clusters -15%, SPEC -12%, other assets -5%.",
+            "default": -0.05,
+            "SPEC_ALPHA": -0.12,
+            "LONG_VCP_OR_TACTICAL": -0.10,
+            "BEAR_INVERSE": 0.05,
+            "cluster_overrides": {"semis_ai": -0.15, "growth_tech": -0.15, "cyber_cloud": -0.15},
+        },
+        "bear_inverse_whipsaw": {
+            "description": "Bear sleeve whipsaw: bear inverse -15%, other risk assets +2%.",
+            "default": 0.02,
+            "BEAR_INVERSE": -0.15,
+        },
+    }
+
+    results = []
+    for name, cfg in scenarios.items():
+        pnl = 0.0
+        for h in holdings:
+            value = _v38_float(h.get("market_value"), 0.0)
+            sleeve = h.get("sleeve")
+            shock = cfg.get(sleeve, cfg.get("default", 0.0))
+            cluster_overrides = cfg.get("cluster_overrides", {}) or {}
+            if h.get("cluster") in cluster_overrides:
+                shock = cluster_overrides[h.get("cluster")]
+            pnl += value * float(shock)
+        results.append({
+            "scenario": name,
+            "description": cfg.get("description"),
+            "estimated_pnl": round(pnl, 2),
+            "estimated_pct_of_equity": round(_v38_pct(pnl, equity), 2),
+        })
+
+    worst = min(results, key=lambda x: x["estimated_pnl"], default=None)
+    return {
+        "equity": round(equity, 2),
+        "scenarios": results,
+        "worst_scenario": worst,
+        "status": "WARNING" if worst and worst.get("estimated_pct_of_equity", 0) <= -10 else "OK",
+        "note": "Scenario model is approximate and for monitoring only; it does not block trades.",
+    }
+
+
+def institutional_execution_snapshot() -> Dict[str, Any]:
+    trades = load_trades()
+    rows = []
+    for t in trades[-INSTITUTIONAL_VAR_LOOKBACK_TRADES:]:
+        entry_data = t.get("entry_data", {}) or {}
+        signal_price = entry_data.get("signal_price")
+        entry_price = t.get("entry_price")
+        if isinstance(signal_price, (int, float)) and signal_price and float(signal_price) > 0:
+            bps = ((float(entry_price) - float(signal_price)) / float(signal_price)) * 10000
+            rows.append({
+                "ticker": t.get("ticker"),
+                "sleeve": entry_data.get("strategy_sleeve") or entry_data.get("strategy_family") or entry_data.get("setup_type") or "unknown",
+                "signal_price": round(float(signal_price), 4),
+                "entry_price": round(float(entry_price), 4),
+                "entry_slippage_bps": round(bps, 2),
+                "exit_reason": t.get("exit_reason"),
+                "profit": t.get("profit"),
+            })
+
+    avg_bps = None
+    worst_bps = None
+    if rows:
+        vals = [float(r["entry_slippage_bps"]) for r in rows]
+        avg_bps = round(sum(vals) / len(vals), 2)
+        worst_bps = round(max(vals), 2)
+
+    core_trades = load_core_trades() if globals().get("CORE_LEDGER_ENABLED", False) else []
+    spec_trades = load_spec_trades() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else []
+
+    return {
+        "swing_trades_with_signal_price": len(rows),
+        "avg_entry_slippage_bps": avg_bps,
+        "worst_entry_slippage_bps": worst_bps,
+        "recent_rows": rows[-20:],
+        "core_trade_records": len(core_trades),
+        "spec_trade_records": len(spec_trades),
+        "status": "WARNING" if worst_bps is not None and worst_bps > 100 else "OK",
+        "note": "Core/SPEC are monthly ledger trades and do not always have a single signal-price slippage metric.",
+    }
+
+
+def institutional_drift_snapshot() -> Dict[str, Any]:
+    perf = realized_performance_all_time()
+    sleeve = sleeve_performance_summary()
+    snapshot = compute_equity_snapshot_data()
+    core_trades = load_core_trades() if globals().get("CORE_LEDGER_ENABLED", False) else []
+    spec_trades = load_spec_trades() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else []
+    swing_trades = load_trades()
+
+    notes = []
+    status = "OK"
+    if len(swing_trades) < 30:
+        notes.append("Swing sample is still small; do not judge model drift yet.")
+    if len(spec_trades) < 10:
+        notes.append("SPEC_ALPHA sample is still small; monthly rotation needs several months before judgment.")
+    if len(core_trades) < 5:
+        notes.append("Core sample is still small; use allocation drift rather than trade stats.")
+    if perf.get("profit", 0) < 0 and perf.get("trade_records", 0) >= 20:
+        status = "WARNING"
+        notes.append("Realized total P/L is negative with at least 20 trade records; review fills and sleeve behavior.")
+
+    return {
+        "status": status,
+        "realized_performance": perf,
+        "sleeve_summary": sleeve,
+        "equity_snapshot": snapshot,
+        "sample_counts": {
+            "swing_trades": len(swing_trades),
+            "core_trades": len(core_trades),
+            "spec_trades": len(spec_trades),
+        },
+        "model_reference": {
+            "version": "v3.7 aggressive 45/15/40 research reference",
+            "modeled_base_return_50bps_pct": 104.10,
+            "modeled_spec_100bps_stress_total_return_pct": 76.40,
+            "modeled_spec_best10_removed_total_return_pct": 61.92,
+            "warning": "Model reference is from historical research; live drift requires forward sample.",
+        },
+        "notes": notes,
+    }
+
+
+def institutional_validation_snapshot() -> Dict[str, Any]:
+    return {
+        "strategy_version": STRATEGY_VERSION,
+        "allocation": "45% core / 15% VCP-bear tactical / 40% SPEC_ALPHA in supportive regimes",
+        "research_reference": {
+            "base_case_50bps": {"modeled_return_pct": 104.10, "modeled_final_equity_on_4000": 8164.00},
+            "optimistic_spec_25bps": {"modeled_return_pct": 120.94, "modeled_final_equity_on_4000": 8837.60},
+            "spec_100bps_stress": {"modeled_return_pct": 76.40, "modeled_final_equity_on_4000": 7056.16},
+            "spec_best10_removed": {"modeled_return_pct": 61.92, "modeled_final_equity_on_4000": 6476.96},
+            "spec_crypto_adjusted": {"modeled_return_pct": 94.77, "modeled_final_equity_on_4000": 7790.72},
+        },
+        "known_limitations": [
+            "Integrated result is a modeled sleeve allocation, not a perfect shared-cash tick-by-tick execution simulation.",
+            "SPEC_ALPHA is aggressive and had meaningful historical sleeve drawdown.",
+            "Forward fills, slippage, and monthly rotation behavior must be monitored.",
+            "Research cache quality and survivorship limitations still matter.",
+        ],
+        "live_validation_rules": [
+            "Do not judge SPEC_ALPHA until several monthly rotations exist.",
+            "Compare execution slippage to 50 bps model assumption.",
+            "Watch concentration in semis/growth/spec momentum clusters.",
+            "Export download_state regularly for review.",
+        ],
+    }
+
+
+def institutional_snapshot() -> Dict[str, Any]:
+    data = {}
+    sections = [
+        ("datahealth", institutional_datahealth_snapshot),
+        ("riskmatrix", institutional_riskmatrix_snapshot),
+        ("stressstatus", institutional_stress_snapshot),
+        ("executionstatus", institutional_execution_snapshot),
+        ("driftstatus", institutional_drift_snapshot),
+        ("validationstatus", institutional_validation_snapshot),
+    ]
+    for name, fn in sections:
+        try:
+            data[name] = fn()
+        except Exception as exc:
+            data[name] = {"status": "ERROR", "error": str(exc)}
+    data["generated_at"] = ny_now().strftime("%Y-%m-%d %H:%M:%S %Z")
+    data["monitor_version"] = "v3.8_institutional_monitor_diagnostic_only"
+    data["trading_logic_changed"] = False
+    return data
+
+
+def _v38_status_emoji(status: Any) -> str:
+    s = str(status or "").upper()
+    if s == "OK":
+        return "✅"
+    if s == "WARNING":
+        return "🟡"
+    if s == "CRITICAL" or s == "ERROR":
+        return "🔴"
+    return "⚪"
+
+
+def format_institutional_status() -> str:
+    snap = institutional_snapshot()
+    dh = snap.get("datahealth", {})
+    rm = snap.get("riskmatrix", {})
+    ss = snap.get("stressstatus", {})
+    ex = snap.get("executionstatus", {})
+    dr = snap.get("driftstatus", {})
+    val = snap.get("validationstatus", {})
+    worst = ss.get("worst_scenario") or {}
+    top_clusters = (rm.get("cluster_exposure") or [])[:5]
+    cluster_text = "\n".join(
+        f"• {row.get('cluster')}: {row.get('account_pct')}%"
+        for row in top_clusters
+    ) or "No holdings yet."
+
+    return (
+        "🏛️ INSTITUTIONAL STATUS v3.8\n\n"
+        "Diagnostic-only layer. Trading logic is unchanged.\n\n"
+        f"🧪 Data health: {_v38_status_emoji(dh.get('status'))} {dh.get('status')} "
+        f"({dh.get('quote_tickers_received')}/{dh.get('quote_tickers_requested')} quotes)\n"
+        f"🧮 Risk matrix: {_v38_status_emoji(rm.get('status'))} {rm.get('status')}\n"
+        f"🔥 Stress: {_v38_status_emoji(ss.get('status'))} worst {worst.get('scenario')} "
+        f"{worst.get('estimated_pct_of_equity')}%\n"
+        f"🎯 Execution: {_v38_status_emoji(ex.get('status'))} avg slip {ex.get('avg_entry_slippage_bps')} bps | worst {ex.get('worst_entry_slippage_bps')} bps\n"
+        f"🧭 Drift: {_v38_status_emoji(dr.get('status'))} {dr.get('status')}\n\n"
+        f"💼 Equity: {format_money(float((rm or {}).get('equity', 0) or 0))}\n"
+        "Top exposure clusters:\n"
+        f"{cluster_text}\n\n"
+        "Commands:\n"
+        "datahealth | riskmatrix | stressstatus | executionstatus | driftstatus | validationstatus\n"
+        "download_institutional | download_state"
+    )
+
+
+def format_datahealth_status() -> str:
+    d = institutional_datahealth_snapshot()
+    missing = d.get("missing_quotes") or []
+    stops = d.get("stop_warnings") or []
+    return (
+        "🧪 DATA HEALTH v3.8\n\n"
+        f"Status: {_v38_status_emoji(d.get('status'))} {d.get('status')}\n"
+        f"NY time: {d.get('ny_time')}\n"
+        f"Expected daily bar: {d.get('expected_daily_bar_date')}\n"
+        f"Last scan day/bar: {d.get('last_scan_day')} / {d.get('last_scan_bar_date')}\n"
+        f"Panic mode: {yes_no(bool(d.get('panic_mode')))}\n"
+        f"Quotes: {d.get('quote_tickers_received')}/{d.get('quote_tickers_requested')}\n"
+        f"Missing quotes: {', '.join(missing[:20]) if missing else 'None'}\n"
+        f"Bad value tickers: {', '.join(d.get('bad_value_tickers') or []) or 'None'}\n"
+        f"Stop warnings: {len(stops)}\n\n"
+        "This is diagnostic-only and does not block trades."
+    )
+
+
+def format_riskmatrix_status() -> str:
+    r = institutional_riskmatrix_snapshot()
+    ledgers = "\n".join(f"• {x['ledger']}: {format_money(x['value'])} ({x['account_pct']}%)" for x in r.get("ledger_exposure", []))
+    clusters = "\n".join(f"• {x['cluster']}: {format_money(x['value'])} ({x['account_pct']}%)" for x in (r.get("cluster_exposure") or [])[:10])
+    tops = "\n".join(f"• {x['ticker']}: {format_money(x['market_value'])} ({x.get('account_pct')}%)" for x in (r.get("top_positions") or [])[:8])
+    warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
+    return (
+        "🧮 RISK MATRIX v3.8\n\n"
+        f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
+        f"Total equity: {format_money(r.get('equity', 0))}\n\n"
+        "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
+        "Top clusters:\n" + (clusters or "No holdings.") + "\n\n"
+        "Top positions:\n" + (tops or "No holdings.") + "\n\n"
+        f"{warnings}"
+    )
+
+
+def format_stress_status() -> str:
+    s = institutional_stress_snapshot()
+    rows = "\n".join(
+        f"• {x['scenario']}: {format_money(x['estimated_pnl'])} ({x['estimated_pct_of_equity']}%)"
+        for x in s.get("scenarios", [])
+    )
+    worst = s.get("worst_scenario") or {}
+    return (
+        "🔥 STRESS STATUS v3.8\n\n"
+        f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
+        f"Equity: {format_money(s.get('equity', 0))}\n"
+        f"Worst scenario: {worst.get('scenario')} {format_money(worst.get('estimated_pnl', 0))} ({worst.get('estimated_pct_of_equity')}%)\n\n"
+        f"{rows}\n\n"
+        "Approximate monitoring only. It does not block trades."
+    )
+
+
+def format_execution_status() -> str:
+    e = institutional_execution_snapshot()
+    recent = "\n".join(
+        f"• {r['ticker']}: {r['entry_slippage_bps']} bps | {r.get('exit_reason')} | P/L {format_money(r.get('profit', 0))}"
+        for r in (e.get("recent_rows") or [])[-8:]
+    ) or "No swing trades with stored signal price yet."
+    return (
+        "🎯 EXECUTION STATUS v3.8\n\n"
+        f"Status: {_v38_status_emoji(e.get('status'))} {e.get('status')}\n"
+        f"Swing trades with signal price: {e.get('swing_trades_with_signal_price')}\n"
+        f"Average entry slippage: {e.get('avg_entry_slippage_bps')} bps\n"
+        f"Worst entry slippage: {e.get('worst_entry_slippage_bps')} bps\n"
+        f"Core trade records: {e.get('core_trade_records')}\n"
+        f"SPEC trade records: {e.get('spec_trade_records')}\n\n"
+        "Recent rows:\n" + recent
+    )
+
+
+def format_drift_status() -> str:
+    d = institutional_drift_snapshot()
+    perf = d.get("realized_performance", {})
+    counts = d.get("sample_counts", {})
+    notes = "\n".join(f"• {n}" for n in d.get("notes", [])) or "No major drift notes yet."
+    return (
+        "🧭 MODEL DRIFT STATUS v3.8\n\n"
+        f"Status: {_v38_status_emoji(d.get('status'))} {d.get('status')}\n"
+        f"Realized total P/L: {format_money(perf.get('profit', 0))} ({format_pct(perf.get('pct'))})\n"
+        f"Swing/Core/SPEC realized: {format_money(perf.get('swing_realized_profit', 0))} / {format_money(perf.get('core_realized_profit', 0))} / {format_money(perf.get('spec_realized_profit', 0))}\n"
+        f"Sample counts: swing {counts.get('swing_trades')} | core {counts.get('core_trades')} | spec {counts.get('spec_trades')}\n\n"
+        f"{notes}"
+    )
+
+
+def format_validation_status() -> str:
+    v = institutional_validation_snapshot()
+    rr = v.get("research_reference", {})
+    base = rr.get("base_case_50bps", {})
+    stress = rr.get("spec_100bps_stress", {})
+    best_removed = rr.get("spec_best10_removed", {})
+    limitations = "\n".join(f"• {x}" for x in v.get("known_limitations", []))
+    rules = "\n".join(f"• {x}" for x in v.get("live_validation_rules", []))
+    return (
+        "🧪 VALIDATION STATUS v3.8\n\n"
+        f"Strategy: {v.get('strategy_version')}\n"
+        f"Allocation: {v.get('allocation')}\n\n"
+        f"Base 50 bps model: +{base.get('modeled_return_pct')}% | final ${base.get('modeled_final_equity_on_4000')} on $4,000\n"
+        f"100 bps SPEC stress model: +{stress.get('modeled_return_pct')}% | final ${stress.get('modeled_final_equity_on_4000')}\n"
+        f"Best-10 removed model: +{best_removed.get('modeled_return_pct')}% | final ${best_removed.get('modeled_final_equity_on_4000')}\n\n"
+        "Known limitations:\n" + limitations + "\n\n"
+        "Live validation rules:\n" + rules
+    )
+
+
+def download_institutional_report() -> str:
+    ts = ny_now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(DATA_DIR, f"institutional_snapshot_{ts}.json")
+    write_json_file(path, institutional_snapshot())
+    return path
+
+
+_V38_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    zip_path = _V38_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    if not INSTITUTIONAL_MONITOR_ENABLED:
+        return zip_path
+    try:
+        snap = institutional_snapshot()
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("institutional_snapshot.json", json.dumps(safe_convert(snap), indent=2))
+            z.writestr("institutional_status.txt", format_institutional_status())
+    except Exception as exc:
+        try:
+            with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+                z.writestr("institutional_snapshot_error.json", json.dumps({"error": str(exc)}, indent=2))
+        except Exception:
+            pass
+    return zip_path
+
+
+_V38_OLD_HANDLE_COMMAND = handle_command
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower in {"institutionalstatus", "institutional_status"}:
+        send(format_institutional_status())
+        return
+    if text_lower == "datahealth":
+        send(format_datahealth_status())
+        return
+    if text_lower == "riskmatrix":
+        send(format_riskmatrix_status())
+        return
+    if text_lower == "stressstatus":
+        send(format_stress_status())
+        return
+    if text_lower == "executionstatus":
+        send(format_execution_status())
+        return
+    if text_lower == "driftstatus":
+        send(format_drift_status())
+        return
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+    if text_lower == "download_institutional":
+        path = download_institutional_report()
+        send_document(path, caption="institutional_snapshot.json")
+        return
+    if text_lower in {"help", "/help"}:
+        _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
+        send(
+            "V3.8 institutional diagnostics:\n"
+            "institutionalstatus | datahealth | riskmatrix | stressstatus | executionstatus | driftstatus | validationstatus\n"
+            "download_institutional\n\n"
+            "These are diagnostic-only and do not change trading logic."
+        )
+        return
+
+    return _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
+
 
 if __name__ == "__main__":
 
