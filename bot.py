@@ -216,7 +216,7 @@ NY_TZ = ZoneInfo("America/New_York")
 
 
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.0")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.7-aggressive-45-15-40")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 # Risk / execution controls.
@@ -383,7 +383,7 @@ BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "30"))
 
 
 # -----------------------------------------------------------------------------
-# V3.0 PRIVATE WEALTH SLEEVE - CORE ETF ROTATION
+# V3.6 PRIVATE WEALTH SLEEVE - CORE ETF ROTATION + CORE LEDGER
 # -----------------------------------------------------------------------------
 # Research conclusion from the 2022-2026 cache run:
 # - Keep v2.8 long VCP + bear inverse as the tactical swing engine.
@@ -392,10 +392,10 @@ BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "30"))
 #   the research run rejected them after costs. GLD/SLV/metals remain inside
 #   the diversified core universe, where they can win when ranked strongly.
 # - This sleeve sends PRIVATE allocation guidance only. It does not touch the
-#   public channel and it does not automatically mutate cash/positions.
+#   public channel. In v3.6 it has its own core ledger and updates shared cash only after you confirm with corebuy/coresell.
 WEALTH_SLEEVE_ENABLED = os.getenv("WEALTH_SLEEVE_ENABLED", "1") != "0"
-WEALTH_STRATEGY_VERSION = os.getenv("WEALTH_STRATEGY_VERSION", "wealth_core_rotation_v1")
-WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.50"))
+WEALTH_STRATEGY_VERSION = os.getenv("WEALTH_STRATEGY_VERSION", "wealth_core_rotation_v3_6_core_ledger")
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.45"))
 WEALTH_CORE_TOP_N = int(os.getenv("WEALTH_CORE_TOP_N", "5"))
 WEALTH_ALERT_REPEAT_DAYS = int(os.getenv("WEALTH_ALERT_REPEAT_DAYS", "20"))
 WEALTH_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("WEALTH_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 15)))
@@ -413,6 +413,68 @@ WEALTH_CORE_UNIVERSE = [
 
 WEALTH_CASH_LIKE = {"BIL", "SGOV", "SHY"}
 WEALTH_DEFENSIVE_ALLOWED = {"BIL", "SGOV", "SHY", "IEF", "TLT", "GLD", "IAU", "XLP", "XLV", "XLU"}
+
+
+# -----------------------------------------------------------------------------
+# V3.5 INSTITUTIONAL PORTFOLIO INTELLIGENCE LAYER
+# -----------------------------------------------------------------------------
+# This layer wraps the existing v3.0 sleeves. It does not rewrite the VCP edge.
+# It adds private allocation intelligence, concentration control, volatility
+# weighting, sleeve reporting, and drawdown guardrails.
+WEALTH_DYNAMIC_ALLOCATION_ENABLED = os.getenv("WEALTH_DYNAMIC_ALLOCATION_ENABLED", "1") != "0"
+WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.45"))
+WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.45"))
+WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.45"))
+WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.45"))
+WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.15"))
+WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.10"))
+WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
+WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
+WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.05"))
+WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.15"))
+WEALTH_MIN_CASH_RESERVE_PCT = float(os.getenv("WEALTH_MIN_CASH_RESERVE_PCT", "0.00"))
+
+WEALTH_VOL_WEIGHTING_ENABLED = os.getenv("WEALTH_VOL_WEIGHTING_ENABLED", "1") != "0"
+WEALTH_SCORE_WEIGHTING_ENABLED = os.getenv("WEALTH_SCORE_WEIGHTING_ENABLED", "1") != "0"
+WEALTH_CLUSTER_CONTROL_ENABLED = os.getenv("WEALTH_CLUSTER_CONTROL_ENABLED", "1") != "0"
+WEALTH_MAX_ASSETS_PER_CLUSTER = int(os.getenv("WEALTH_MAX_ASSETS_PER_CLUSTER", "2"))
+WEALTH_MAX_SINGLE_CORE_ASSET_PCT = float(os.getenv("WEALTH_MAX_SINGLE_CORE_ASSET_PCT", "0.25"))
+WEALTH_MIN_SINGLE_CORE_ASSET_PCT = float(os.getenv("WEALTH_MIN_SINGLE_CORE_ASSET_PCT", "0.05"))
+WEALTH_REBALANCE_DRIFT_THRESHOLD_PCT = float(os.getenv("WEALTH_REBALANCE_DRIFT_THRESHOLD_PCT", "0.05"))
+
+# V3.6 core-ledger controls. Core wealth is now a real private sleeve with
+# separate positions/trades/signals, but it shares the same account cash so
+# tactical sizing, equity, risk guards, withdrawals, and statistics stay honest.
+CORE_LEDGER_ENABLED = os.getenv("CORE_LEDGER_ENABLED", "1") != "0"
+CORE_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("CORE_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
+CORE_REQUIRE_LIVE_QUOTE = os.getenv("CORE_REQUIRE_LIVE_QUOTE", "1") != "0"
+CORE_QUOTE_DEVIATION_LIMIT = float(os.getenv("CORE_QUOTE_DEVIATION_LIMIT", "0.05"))
+CORE_MIN_TRADE_DOLLARS = float(os.getenv("CORE_MIN_TRADE_DOLLARS", "25"))
+CORE_ACTION_DOLLAR_THRESHOLD = float(os.getenv("CORE_ACTION_DOLLAR_THRESHOLD", "50"))
+CORE_REBALANCE_SELL_CONFIRM_MONTHS = int(os.getenv("CORE_REBALANCE_SELL_CONFIRM_MONTHS", "2"))
+CORE_POSITION_EPSILON = float(os.getenv("CORE_POSITION_EPSILON", "0.000001"))
+CORE_CASH_RESERVE_PROTECT = os.getenv("CORE_CASH_RESERVE_PROTECT", "1") != "0"
+CORE_ALLOW_FRACTIONAL_SHARES = os.getenv("CORE_ALLOW_FRACTIONAL_SHARES", "1") != "0"
+CORE_ALLOW_BUY_OUTSIDE_PLAN = os.getenv("CORE_ALLOW_BUY_OUTSIDE_PLAN", "0") != "0"
+
+PORTFOLIO_RISK_GUARD_ENABLED = os.getenv("PORTFOLIO_RISK_GUARD_ENABLED", "1") != "0"
+PORTFOLIO_SOFT_DD_REDUCE_PCT = float(os.getenv("PORTFOLIO_SOFT_DD_REDUCE_PCT", "0.12"))
+PORTFOLIO_HARD_DD_PAUSE_PCT = float(os.getenv("PORTFOLIO_HARD_DD_PAUSE_PCT", "0.20"))
+PORTFOLIO_DD_LOOKBACK_DAYS = int(os.getenv("PORTFOLIO_DD_LOOKBACK_DAYS", "400"))
+PORTFOLIO_RISK_ALERT_REPEAT_DAYS = int(os.getenv("PORTFOLIO_RISK_ALERT_REPEAT_DAYS", "1"))
+
+WEALTH_ASSET_CLUSTERS = {
+    # Broad equity / growth
+    "SPY": "broad_equity", "VOO": "broad_equity", "VTI": "broad_equity", "DIA": "broad_equity", "IWM": "small_caps",
+    "QQQ": "growth_tech", "XLK": "growth_tech", "SMH": "semis", "SOXX": "semis",
+    # Sectors
+    "XLV": "defensive_equity", "XLP": "defensive_equity", "XLU": "defensive_equity", "XLF": "financials",
+    "XLE": "energy", "XLI": "industrials", "XLY": "consumer_cyclical", "XLC": "communication",
+    # Metals / commodities
+    "GLD": "gold", "IAU": "gold", "SLV": "silver", "DBC": "commodities", "DBB": "industrial_metals", "CPER": "copper",
+    # Cash / bonds
+    "BIL": "cash_like", "SGOV": "cash_like", "SHY": "short_bonds", "IEF": "intermediate_bonds", "TLT": "long_bonds",
+}
 
 
 # Manual buy protection.
@@ -1174,7 +1236,15 @@ def maybe_set_performance_base_from_cash_tx(
 
 
 
-    if int(pos_count) == 0 and int(trade_count) == 0:
+    core_pos_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM core_positions"
+    ).fetchone()["n"]
+
+    core_trade_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM core_trades"
+    ).fetchone()["n"]
+
+    if int(pos_count) == 0 and int(trade_count) == 0 and int(core_pos_count) == 0 and int(core_trade_count) == 0:
 
         conn.execute(
 
@@ -1189,57 +1259,36 @@ def maybe_set_performance_base_from_cash_tx(
 
 
 def realized_performance_all_time() -> Dict[str, Any]:
-
     """
-
-    All-time realized P/L from closed/partial trade records.
-
-
+    All-time realized P/L from swing trades plus core realized sells.
 
     This does NOT include open unrealized P/L.
-
     """
-
     trades = load_trades()
+    swing_profit = round(sum(float(t.get("profit", 0)) for t in trades), 2)
 
-
-
-    total_profit = round(
-
-        sum(float(t.get("profit", 0)) for t in trades),
-
-        2
-
+    core_trades = load_core_trades() if CORE_LEDGER_ENABLED else []
+    core_profit = round(
+        sum(float(t.get("realized_profit") or 0.0) for t in core_trades if str(t.get("side")).upper() == "SELL"),
+        2,
     )
 
-
-
+    total_profit = round(swing_profit + core_profit, 2)
     base_capital = get_performance_base_capital()
-
-
-
     pct = None
-
-
-
     if base_capital > 0:
-
         pct = (total_profit / base_capital) * 100
 
-
-
     return {
-
         "profit": total_profit,
-
+        "swing_profit": swing_profit,
+        "core_realized_profit": core_profit,
         "pct": pct,
-
         "base_capital": round(base_capital, 2),
-
-        "trade_records": len(trades),
-
+        "trade_records": len(trades) + len(core_trades),
+        "swing_trade_records": len(trades),
+        "core_trade_records": len(core_trades),
     }
-
 
 
 def market_label(market: str) -> str:
@@ -1779,45 +1828,111 @@ def init_db() -> None:
 
             CREATE TABLE IF NOT EXISTS withdrawals (
 
-
-
                 id TEXT PRIMARY KEY,
-
-
 
                 time REAL NOT NULL,
 
-
-
                 amount REAL NOT NULL CHECK (amount > 0),
-
-
 
                 equity_before REAL NOT NULL,
 
-
-
                 cash_before REAL NOT NULL,
-
-
 
                 cash_after REAL NOT NULL,
 
-
-
                 high_water_mark_before REAL NOT NULL,
-
-
 
                 high_water_mark_after REAL NOT NULL,
 
-
-
                 note TEXT NOT NULL DEFAULT ''
 
+            );
 
+            CREATE TABLE IF NOT EXISTS core_positions (
+
+                ticker TEXT PRIMARY KEY,
+
+                core_position_id TEXT NOT NULL UNIQUE,
+
+                strategy_version TEXT NOT NULL,
+
+                shares REAL NOT NULL CHECK (shares > 0),
+
+                avg_entry_price REAL NOT NULL CHECK (avg_entry_price > 0),
+
+                cost_basis REAL NOT NULL CHECK (cost_basis >= 0),
+
+                entry_time REAL NOT NULL,
+
+                last_update_time REAL NOT NULL,
+
+                highest REAL,
+
+                sleeve TEXT NOT NULL DEFAULT 'CORE_WEALTH',
+
+                target_account_pct REAL,
+
+                last_plan_id TEXT,
+
+                notes TEXT NOT NULL DEFAULT ''
 
             );
+
+            CREATE TABLE IF NOT EXISTS core_trades (
+
+                id TEXT PRIMARY KEY,
+
+                core_position_id TEXT,
+
+                ticker TEXT NOT NULL,
+
+                side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+
+                shares REAL NOT NULL CHECK (shares > 0),
+
+                price REAL NOT NULL CHECK (price > 0),
+
+                amount REAL NOT NULL,
+
+                realized_profit REAL,
+
+                time REAL NOT NULL,
+
+                strategy_version TEXT NOT NULL,
+
+                plan_id TEXT,
+
+                reason TEXT NOT NULL DEFAULT '',
+
+                created_at REAL NOT NULL
+
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_core_trades_ticker ON core_trades(ticker);
+
+            CREATE INDEX IF NOT EXISTS idx_core_trades_time ON core_trades(time);
+
+            CREATE TABLE IF NOT EXISTS core_signals (
+
+                id TEXT PRIMARY KEY,
+
+                time REAL NOT NULL,
+
+                plan_date TEXT NOT NULL,
+
+                market_regime TEXT NOT NULL,
+
+                account_equity REAL NOT NULL,
+
+                core_target_pct REAL NOT NULL,
+
+                plan_json TEXT NOT NULL DEFAULT '{}',
+
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_core_signals_time ON core_signals(time);
 
 
 
@@ -4156,7 +4271,7 @@ def format_public_partial_signal(
 
         f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
 
-        f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
+        f"📤 Action: take partial profit on ~{partial_pct_label}% of your own position\n"
 
         f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
 
@@ -4226,7 +4341,7 @@ def format_public_exit_signal(
 
         f"📌 Reason: {reason_label}\n"
 
-        f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
+        "📤 Action: exit your remaining position according to your own sizing\n"
 
         f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\n"
 
@@ -5835,77 +5950,38 @@ def bear_regime_details(market_details: Optional[Dict[str, Any]] = None) -> Dict
 
 
 
+
 def compute_equity_snapshot_data() -> Dict[str, float]:
-
-
-
     refresh_portfolio()
 
+    swing_positions = portfolio["positions"]
+    core_positions = load_core_positions() if CORE_LEDGER_ENABLED else {}
+    all_tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys())))
+    prices = get_prices_batch(all_tickers)
 
-
-    positions = portfolio["positions"]
-
-
-
-    prices = get_prices_batch(list(positions.keys()))
-
-
-
- 
-
-
-
-    market_value = 0.0
-
-
-
-    for ticker, pos in positions.items():
-
-
-
+    swing_value = 0.0
+    for ticker, pos in swing_positions.items():
         price = prices.get(ticker, pos["price"])
+        swing_value += float(price) * int(pos["shares"])
 
+    core_value = 0.0
+    core_cost = 0.0
+    for ticker, pos in core_positions.items():
+        price = prices.get(ticker, pos.get("avg_entry_price", 0))
+        core_value += float(price) * float(pos["shares"])
+        core_cost += float(pos.get("cost_basis", 0) or 0)
 
-
-        market_value += price * pos["shares"]
-
-
-
- 
-
-
-
-    equity = portfolio["cash"] + market_value
-
-
-
+    positions_value = swing_value + core_value
+    equity = float(portfolio["cash"]) + positions_value
     return {
-
-
-
-        "cash": round(portfolio["cash"], 2),
-
-
-
-        "positions_value": round(market_value, 2),
-
-
-
+        "cash": round(float(portfolio["cash"]), 2),
+        "positions_value": round(positions_value, 2),
+        "swing_positions_value": round(swing_value, 2),
+        "core_positions_value": round(core_value, 2),
+        "core_cost_basis": round(core_cost, 2),
+        "core_unrealized_profit": round(core_value - core_cost, 2),
         "equity": round(equity, 2),
-
-
-
     }
-
-
-
- 
-
-
-
- 
-
-
 
 def save_equity_snapshot() -> None:
 
@@ -5971,151 +6047,45 @@ def save_equity_snapshot() -> None:
 
 
 
+
 def open_risk_details() -> Dict[str, float]:
-
-
-
     refresh_portfolio()
-
-
-
     positions = portfolio["positions"]
-
-
-
     prices = get_prices_batch(list(positions.keys()))
-
-
-
- 
-
-
-
-    equity = portfolio["cash"]
-
-
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0.0) or 0.0)
 
     initial_risk_dollars = 0.0
-
-
-
     current_stop_risk_dollars = 0.0
 
-
-
- 
-
-
-
     for ticker, pos in positions.items():
-
-
-
         current_price = prices.get(ticker, pos["price"])
-
-
-
-        equity += current_price * pos["shares"]
-
-
-
- 
-
-
-
         risk_per_share = pos.get("risk_per_share")
-
-
-
         if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-
-
-
-            initial_risk_dollars += risk_per_share * pos["shares"]
-
-
-
- 
-
-
-
-        current_stop_risk = max(0.0, current_price - pos.get("stop", current_price))
-
-
-
-        current_stop_risk_dollars += current_stop_risk * pos["shares"]
-
-
-
- 
-
-
+            initial_risk_dollars += float(risk_per_share) * int(pos["shares"])
+        current_stop_risk = max(0.0, float(current_price) - float(pos.get("stop", current_price)))
+        current_stop_risk_dollars += current_stop_risk * int(pos["shares"])
 
     if equity <= 0:
-
-
-
         return {
-
-
-
             "equity": 0.0,
-
-
-
             "initial_risk_dollars": 0.0,
-
-
-
             "current_stop_risk_dollars": 0.0,
-
-
-
             "initial_risk_pct": 0.0,
-
-
-
             "current_stop_risk_pct": 0.0,
-
-
-
+            "core_value": float(snapshot.get("core_positions_value", 0.0) or 0.0),
+            "swing_value": float(snapshot.get("swing_positions_value", 0.0) or 0.0),
         }
 
-
-
- 
-
-
-
     return {
-
-
-
         "equity": round(equity, 2),
-
-
-
         "initial_risk_dollars": round(initial_risk_dollars, 2),
-
-
-
         "current_stop_risk_dollars": round(current_stop_risk_dollars, 2),
-
-
-
         "initial_risk_pct": initial_risk_dollars / equity,
-
-
-
         "current_stop_risk_pct": current_stop_risk_dollars / equity,
-
-
-
+        "core_value": float(snapshot.get("core_positions_value", 0.0) or 0.0),
+        "swing_value": float(snapshot.get("swing_positions_value", 0.0) or 0.0),
     }
-
-
-
- 
 
 def get_withdrawal_hwm() -> Optional[float]:
 
@@ -6866,6 +6836,305 @@ def maybe_send_withdrawal_signal() -> None:
 
 
 
+
+
+def clamp_float(value: float, low: float, high: float) -> float:
+    return max(low, min(high, float(value)))
+
+
+def wealth_asset_cluster(ticker: str) -> str:
+    return WEALTH_ASSET_CLUSTERS.get(str(ticker).upper(), "other")
+
+
+def current_drawdown_details() -> Dict[str, Any]:
+    """Current equity drawdown from highest known equity snapshot.
+
+    Uses saved equity snapshots plus the current live equity estimate. This is a
+    guardrail, not a broker-grade NAV engine.
+    """
+    snapshot = compute_equity_snapshot_data()
+    current_equity = float(snapshot.get("equity", 0.0) or 0.0)
+
+    high_equity = current_equity
+    since_date = ny_date_str()
+
+    conn = db_connect()
+    try:
+        cutoff_ts = now_ts() - (PORTFOLIO_DD_LOOKBACK_DAYS * 86400)
+        row = conn.execute(
+            """
+            SELECT snapshot_date, equity
+            FROM equity_snapshots
+            WHERE time >= ?
+            ORDER BY equity DESC
+            LIMIT 1
+            """,
+            (cutoff_ts,),
+        ).fetchone()
+
+        if row is not None and float(row["equity"]) > high_equity:
+            high_equity = float(row["equity"])
+            since_date = str(row["snapshot_date"])
+    finally:
+        conn.close()
+
+    dd_pct = 0.0
+    dd_dollars = 0.0
+    if high_equity > 0:
+        dd_dollars = current_equity - high_equity
+        dd_pct = dd_dollars / high_equity
+
+    return {
+        "current_equity": round(current_equity, 2),
+        "high_equity": round(high_equity, 2),
+        "high_equity_date": since_date,
+        "drawdown_dollars": round(dd_dollars, 2),
+        "drawdown_pct": round(dd_pct * 100, 2),
+        "soft_threshold_pct": round(-PORTFOLIO_SOFT_DD_REDUCE_PCT * 100, 2),
+        "hard_threshold_pct": round(-PORTFOLIO_HARD_DD_PAUSE_PCT * 100, 2),
+    }
+
+
+def portfolio_risk_guard_details() -> Dict[str, Any]:
+    dd = current_drawdown_details()
+    dd_raw = float(dd.get("drawdown_pct", 0.0) or 0.0) / 100.0
+
+    soft_active = dd_raw <= -PORTFOLIO_SOFT_DD_REDUCE_PCT
+    hard_active = dd_raw <= -PORTFOLIO_HARD_DD_PAUSE_PCT
+
+    return {
+        **dd,
+        "enabled": PORTFOLIO_RISK_GUARD_ENABLED,
+        "soft_active": bool(soft_active),
+        "hard_active": bool(hard_active),
+        "block_new_entries": bool(PORTFOLIO_RISK_GUARD_ENABLED and hard_active),
+        "recommended_action": (
+            "PAUSE new entries; manage exits only."
+            if hard_active else
+            "Reduce new exposure; keep position management active."
+            if soft_active else
+            "Normal risk mode."
+        ),
+    }
+
+
+def maybe_send_portfolio_risk_guard_alert(details: Optional[Dict[str, Any]] = None) -> None:
+    if not PORTFOLIO_RISK_GUARD_ENABLED:
+        return
+
+    info = details or portfolio_risk_guard_details()
+    if not info.get("soft_active") and not info.get("hard_active"):
+        return
+
+    today = ny_date_str()
+    last_key = "last_portfolio_risk_guard_alert_day"
+    if get_meta(last_key) == today:
+        return
+
+    set_meta(last_key, today)
+    send(format_portfolio_risk_guard(details=info))
+
+
+def sleeve_from_trade(trade: Dict[str, Any]) -> str:
+    entry_data = trade.get("entry_data", {}) or {}
+    sleeve = str(entry_data.get("strategy_sleeve") or "").upper()
+    if sleeve:
+        return sleeve
+
+    family = str(entry_data.get("strategy_family") or "").lower()
+    ticker = str(trade.get("ticker", "")).upper()
+    if "bear" in family or ticker in BEAR_WATCHLIST:
+        return "BEAR_INVERSE"
+    if entry_data:
+        return "LONG_VCP"
+    return "LEGACY_OR_MANUAL"
+
+
+
+def sleeve_performance_summary() -> Dict[str, Any]:
+    trades = load_trades()
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for trade in trades:
+        grouped.setdefault(sleeve_from_trade(trade), []).append(trade)
+
+    rows = []
+    for sleeve, items in sorted(grouped.items()):
+        profits = [float(x.get("profit", 0.0) or 0.0) for x in items]
+        wins = [p for p in profits if p > 0]
+        losses = [p for p in profits if p < 0]
+        gross_profit = sum(wins)
+        gross_loss = abs(sum(losses))
+        pf = None if gross_loss == 0 else gross_profit / gross_loss
+        rows.append({
+            "sleeve": sleeve,
+            "trade_records": len(items),
+            "profit": round(sum(profits), 2),
+            "win_rate_pct": round((len(wins) / len(items)) * 100, 2) if items else 0.0,
+            "profit_factor": None if pf is None else round(pf, 3),
+            "avg_profit": round(sum(profits) / len(profits), 2) if profits else 0.0,
+        })
+
+    core_trades = load_core_trades() if CORE_LEDGER_ENABLED else []
+    core_sells = [t for t in core_trades if str(t.get("side")).upper() == "SELL"]
+    core_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in core_sells), 2)
+    if core_trades:
+        rows.append({
+            "sleeve": "CORE_WEALTH_REALIZED",
+            "trade_records": len(core_trades),
+            "profit": core_profit,
+            "win_rate_pct": None,
+            "profit_factor": None,
+            "avg_profit": round(core_profit / len(core_sells), 2) if core_sells else 0.0,
+        })
+
+    swing_profit = round(sum(float(t.get("profit", 0.0) or 0.0) for t in trades), 2)
+    return {
+        "rows": rows,
+        "total_profit": round(swing_profit + core_profit, 2),
+        "swing_profit": swing_profit,
+        "core_realized_profit": core_profit,
+        "trade_records": len(trades) + len(core_trades),
+    }
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
+    market_details = market_regime_details()
+    market = str(market_details.get("condition", "UNCERTAIN"))
+    bear_details = bear_regime_details(market_details=market_details)
+    risk = portfolio_risk_guard_details()
+
+    if not WEALTH_DYNAMIC_ALLOCATION_ENABLED:
+        core = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+        long_tactical = 0.30
+        bear = 0.0
+        cash = max(0.0, 1.0 - core - long_tactical - bear)
+    elif risk.get("hard_active"):
+        core = WEALTH_CORE_ALLOC_RISK_OFF
+        long_tactical = 0.0
+        bear = 0.0
+        cash = 1.0 - core
+    elif market == "BULL":
+        core = WEALTH_CORE_ALLOC_BULL
+        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_BULL
+        bear = WEALTH_BEAR_ALLOC_BULL
+        cash = 1.0 - core - long_tactical - bear
+    elif market == "BEAR":
+        core = WEALTH_CORE_ALLOC_BEAR
+        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_BEAR
+        bear = WEALTH_BEAR_ALLOC_BEAR if BEAR_SLEEVE_ENABLED else 0.0
+        cash = 1.0 - core - long_tactical - bear
+    else:
+        core = WEALTH_CORE_ALLOC_UNCERTAIN
+        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN
+        bear = WEALTH_BEAR_ALLOC_UNCERTAIN if int(bear_details.get("score", 0) or 0) >= BEAR_EXIT_SCORE else 0.0
+        cash = 1.0 - core - long_tactical - bear
+
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        # Soft drawdown mode: cut tactical sleeve exposure and hold the difference as cash.
+        long_tactical *= 0.5
+        bear *= 0.75
+        cash = 1.0 - core - long_tactical - bear
+
+    if cash < WEALTH_MIN_CASH_RESERVE_PCT:
+        shortfall = WEALTH_MIN_CASH_RESERVE_PCT - cash
+        long_reduction = min(shortfall, max(0.0, long_tactical))
+        long_tactical -= long_reduction
+        shortfall -= long_reduction
+        if shortfall > 0:
+            bear_reduction = min(shortfall, max(0.0, bear))
+            bear -= bear_reduction
+            shortfall -= bear_reduction
+        if shortfall > 0:
+            core = max(0.0, core - shortfall)
+        cash = 1.0 - core - long_tactical - bear
+
+    # Normalize small floating leftovers.
+    values = {
+        "core_wealth_pct": max(0.0, core),
+        "long_vcp_tactical_pct": max(0.0, long_tactical),
+        "bear_inverse_tactical_pct": max(0.0, bear),
+        "cash_reserve_pct": max(0.0, cash),
+    }
+    total = sum(values.values())
+    if total > 0:
+        values = {k: v / total for k, v in values.items()}
+
+    return {
+        "strategy_version": "v3_5_dynamic_allocation",
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "market": market,
+        "market_score": int(market_details.get("score", 0) or 0),
+        "bear_score": int(bear_details.get("score", 0) or 0),
+        "risk_guard": risk,
+        **{k: round(v * 100, 2) for k, v in values.items()},
+    }
+
+
+def format_portfolio_allocation_plan() -> str:
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.6\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
+        f"({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core wealth rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🐻 Bear inverse tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core sleeve is long-term/private allocation guidance.\n"
+        "• VCP/bear sleeves remain signal-driven tactical systems.\n"
+        "• In hard drawdown mode, new entries pause and exits/management continue."
+    )
+
+
+def format_portfolio_risk_guard(details: Optional[Dict[str, Any]] = None) -> str:
+    info = details or portfolio_risk_guard_details()
+    return (
+        "🛡️ PORTFOLIO RISK GUARD v3.6\n\n"
+        f"Enabled: {yes_no(bool(info.get('enabled')))}\n"
+        f"Current equity: {format_money(float(info.get('current_equity', 0) or 0))}\n"
+        f"High equity: {format_money(float(info.get('high_equity', 0) or 0))} "
+        f"({info.get('high_equity_date')})\n"
+        f"Drawdown: {info.get('drawdown_pct')}% "
+        f"({format_money(float(info.get('drawdown_dollars', 0) or 0))})\n\n"
+        f"Soft threshold: {info.get('soft_threshold_pct')}%\n"
+        f"Hard pause threshold: {info.get('hard_threshold_pct')}%\n"
+        f"Soft active: {yes_no(bool(info.get('soft_active')))}\n"
+        f"Hard pause active: {yes_no(bool(info.get('hard_active')))}\n\n"
+        f"Action: {info.get('recommended_action')}"
+    )
+
+
+def format_sleeve_performance_report() -> str:
+    summary = sleeve_performance_summary()
+    rows = summary.get("rows", []) or []
+    msg = (
+        "📊 SLEEVE PERFORMANCE v3.6\n\n"
+        f"Total realized P/L: {format_money(float(summary.get('total_profit', 0) or 0))}\n"
+        f"Trade records: {summary.get('trade_records')}\n\n"
+    )
+    if not rows:
+        msg += "No trade records yet."
+        return msg
+
+    for row in rows:
+        pf = row.get("profit_factor")
+        msg += (
+            f"{row.get('sleeve')}\n"
+            f"  P/L: {format_money(float(row.get('profit', 0) or 0))}\n"
+            f"  Records: {row.get('trade_records')} | WR: {row.get('win_rate_pct')}% | "
+            f"PF: {pf if pf is not None else 'n/a'}\n"
+            f"  Avg record P/L: {format_money(float(row.get('avg_profit', 0) or 0))}\n\n"
+        )
+    return msg
+
 def pct_change_last(df: pd.DataFrame, bars: int) -> Optional[float]:
     try:
         if df is None or len(df) <= bars:
@@ -6891,8 +7160,9 @@ def realized_vol_last(df: pd.DataFrame, bars: int = 63) -> Optional[float]:
         return None
 
 
-def wealth_core_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
-    """Score one asset for the private v3.0 core-rotation sleeve."""
+
+def wealth_core_score_ticker(ticker: str, regime: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Score one asset for the private v3.5 core-rotation sleeve."""
     try:
         df = get_historical(ticker, limit=280)
         if df is None or df.empty or len(df) < 210:
@@ -6915,20 +7185,26 @@ def wealth_core_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
         if not trend_ok:
             return None
 
-        score = (0.45 * roc126) + (0.35 * roc63) + (0.20 * roc21) - (0.18 * vol63)
+        base_score = (0.45 * roc126) + (0.35 * roc63) + (0.20 * roc21) - (0.18 * vol63)
 
         # In confirmed broad bear conditions, require non-defensive assets to be
         # exceptionally strong; otherwise defensive/cash-like assets can dominate.
-        regime = market_condition()
+        regime = regime or market_condition()
         if regime == "BEAR" and ticker not in WEALTH_DEFENSIVE_ALLOWED:
-            if score < 0.12:
+            if base_score < 0.12:
                 return None
 
-        if score < WEALTH_MIN_SCORE:
+        if base_score < WEALTH_MIN_SCORE:
             return None
+
+        cluster = wealth_asset_cluster(ticker)
+        inv_vol = 1.0 / max(float(vol63), 0.03)
+        score_boost = max(0.05, base_score - WEALTH_MIN_SCORE + 0.05)
+        weight_score = inv_vol * (score_boost if WEALTH_SCORE_WEIGHTING_ENABLED else 1.0)
 
         return {
             "ticker": ticker,
+            "cluster": cluster,
             "price": round(price, 2),
             "ma100": round(ma100, 2),
             "ma200": round(ma200, 2),
@@ -6936,7 +7212,8 @@ def wealth_core_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
             "roc_3m_pct": round(roc63 * 100, 2),
             "roc_6m_pct": round(roc126 * 100, 2),
             "vol_3m_pct": round(vol63 * 100, 2),
-            "score": round(score, 4),
+            "score": round(base_score, 4),
+            "weight_score": round(weight_score, 6),
             "trend_ok": trend_ok,
             "regime": regime,
         }
@@ -6946,81 +7223,257 @@ def wealth_core_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def select_cluster_controlled_assets(scored: List[Dict[str, Any]], top_n: int) -> List[Dict[str, Any]]:
+    if not WEALTH_CLUSTER_CONTROL_ENABLED:
+        return scored[:max(1, top_n)]
+
+    selected: List[Dict[str, Any]] = []
+    cluster_counts: Dict[str, int] = {}
+    for item in scored:
+        cluster = str(item.get("cluster", "other"))
+        count = cluster_counts.get(cluster, 0)
+        if count >= WEALTH_MAX_ASSETS_PER_CLUSTER:
+            continue
+        selected.append(item)
+        cluster_counts[cluster] = count + 1
+        if len(selected) >= max(1, top_n):
+            break
+    return selected
+
+
+def assign_core_weights(top: List[Dict[str, Any]], core_account_pct: float) -> List[Dict[str, Any]]:
+    if not top:
+        return []
+
+    if WEALTH_VOL_WEIGHTING_ENABLED:
+        raw_scores = [max(0.0001, float(x.get("weight_score", 0.0001) or 0.0001)) for x in top]
+    else:
+        raw_scores = [1.0 for _ in top]
+
+    total = sum(raw_scores)
+    weights = [x / total for x in raw_scores] if total > 0 else [1.0 / len(top) for _ in top]
+
+    # Cap extreme concentration, then renormalize. This is intentionally simple
+    # and robust rather than an optimizer.
+    cap = clamp_float(WEALTH_MAX_SINGLE_CORE_ASSET_PCT, 0.05, 0.80)
+    floor = clamp_float(WEALTH_MIN_SINGLE_CORE_ASSET_PCT, 0.00, cap)
+
+    weights = [min(cap, max(0.0, w)) for w in weights]
+    total = sum(weights)
+    if total > 0:
+        weights = [w / total for w in weights]
+
+    # Apply small floor only when it is mathematically possible.
+    if floor > 0 and floor * len(weights) <= 0.90:
+        weights = [max(floor, w) for w in weights]
+        total = sum(weights)
+        if total > 0:
+            weights = [w / total for w in weights]
+
+    enriched = []
+    for item, sleeve_weight in zip(top, weights):
+        row = dict(item)
+        row["target_core_pct"] = round(sleeve_weight * 100, 2)
+        row["target_account_pct"] = round(sleeve_weight * core_account_pct * 100, 2)
+        enriched.append(row)
+    return enriched
+
+
+
 def compute_wealth_core_plan() -> Dict[str, Any]:
-    """Build private target allocation for the v3.0 core wealth sleeve."""
+    """Build ranked, actionable private core wealth plan with ledger-aware actions."""
     refresh_portfolio()
+
+    allocation = dynamic_portfolio_allocation_targets()
+    current_regime = str(allocation.get("market", market_condition()))
 
     scored = []
     for ticker in WEALTH_CORE_UNIVERSE:
-        item = wealth_core_score_ticker(ticker)
+        item = wealth_core_score_ticker(ticker, regime=current_regime)
         if item is not None:
             scored.append(item)
 
     scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
-    top = scored[:max(1, WEALTH_CORE_TOP_N)]
+    selected = select_cluster_controlled_assets(scored, WEALTH_CORE_TOP_N)
 
+    if WEALTH_DYNAMIC_ALLOCATION_ENABLED:
+        core_account_pct = float(allocation.get("core_wealth_pct", WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
+    else:
+        core_account_pct = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+
+    top = assign_core_weights(selected, core_account_pct)
     account_equity = compute_equity_snapshot_data().get("equity", 0.0)
-    sleeve_value = float(account_equity) * WEALTH_CORE_ACCOUNT_ALLOC_PCT
-    target_each_sleeve_pct = (100 / len(top)) if top else 0.0
-    target_each_account_pct = (WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100 / len(top)) if top else 0.0
+    sleeve_value = float(account_equity) * core_account_pct
+
+    core_details = core_position_market_value_details() if CORE_LEDGER_ENABLED else {"rows": [], "value": 0.0}
+    current_rows = {str(row.get("ticker", "")).upper(): row for row in core_details.get("rows", [])}
+
+    top_map = {str(item.get("ticker", "")).upper(): item for item in top}
+    actions: List[Dict[str, Any]] = []
+
+    # Ranked BUY/ADD/HOLD/TRIM actions for selected assets, best first.
+    for rank, item in enumerate(top, start=1):
+        ticker = str(item["ticker"]).upper()
+        target_value = float(account_equity) * (float(item.get("target_account_pct", 0) or 0) / 100.0)
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        drift = target_value - current_value
+        drift_pct_account = 0.0 if float(account_equity) <= 0 else (drift / float(account_equity)) * 100.0
+
+        if current_value <= 0 and target_value >= CORE_ACTION_DOLLAR_THRESHOLD:
+            action = "BUY"
+        elif drift >= max(CORE_ACTION_DOLLAR_THRESHOLD, float(account_equity) * WEALTH_REBALANCE_DRIFT_THRESHOLD_PCT):
+            action = "ADD"
+        elif drift <= -max(CORE_ACTION_DOLLAR_THRESHOLD, float(account_equity) * WEALTH_REBALANCE_DRIFT_THRESHOLD_PCT):
+            action = "TRIM"
+        else:
+            action = "HOLD"
+
+        actions.append({
+            "rank": rank,
+            "ticker": ticker,
+            "action": action,
+            "cluster": item.get("cluster"),
+            "score": item.get("score"),
+            "price": item.get("price"),
+            "target_account_pct": item.get("target_account_pct"),
+            "target_core_pct": item.get("target_core_pct"),
+            "target_value": round(target_value, 2),
+            "current_value": round(current_value, 2),
+            "suggested_dollars": round(abs(drift), 2),
+            "drift_dollars": round(drift, 2),
+            "drift_pct_account": round(drift_pct_account, 2),
+            "roc_1m_pct": item.get("roc_1m_pct"),
+            "roc_3m_pct": item.get("roc_3m_pct"),
+            "roc_6m_pct": item.get("roc_6m_pct"),
+            "vol_3m_pct": item.get("vol_3m_pct"),
+        })
+
+    # Exit / rotate candidates: current holdings not selected anymore, or trend/score deteriorated.
+    selected_tickers = set(top_map.keys())
+    scored_map = {str(item.get("ticker", "")).upper(): item for item in scored}
+    for ticker, row in current_rows.items():
+        if ticker in selected_tickers:
+            continue
+        score_item = scored_map.get(ticker)
+        current_value = float(row.get("market_value", 0.0) or 0.0)
+        if score_item is None:
+            reason = "Removed from qualified core universe or lost MA200/trend filter."
+            score = None
+        else:
+            reason = "No longer ranked in selected top core assets."
+            score = score_item.get("score")
+        actions.append({
+            "rank": None,
+            "ticker": ticker,
+            "action": "SELL",
+            "cluster": None if score_item is None else score_item.get("cluster"),
+            "score": score,
+            "price": row.get("mark_price"),
+            "target_account_pct": 0.0,
+            "target_core_pct": 0.0,
+            "target_value": 0.0,
+            "current_value": round(current_value, 2),
+            "suggested_dollars": round(current_value, 2),
+            "drift_dollars": round(-current_value, 2),
+            "drift_pct_account": None if float(account_equity) <= 0 else round((-current_value / float(account_equity)) * 100, 2),
+            "reason": reason,
+        })
+
+    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
+    plan_id = uuid.uuid4().hex
 
     return {
+        "plan_id": plan_id,
         "strategy_version": WEALTH_STRATEGY_VERSION,
         "private_only": True,
         "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
-        "market": market_condition(),
+        "market": allocation.get("market", market_condition()),
+        "market_score": allocation.get("market_score"),
+        "bear_score": allocation.get("bear_score"),
+        "allocation": allocation,
+        "risk_guard": allocation.get("risk_guard", {}),
         "account_equity": round(float(account_equity), 2),
-        "target_core_account_pct": round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2),
+        "target_core_account_pct": round(core_account_pct * 100, 2),
         "target_core_value": round(sleeve_value, 2),
+        "current_core_value": round(float(core_details.get("value", 0.0) or 0.0), 2),
+        "current_core_cost_basis": round(float(core_details.get("cost_basis", 0.0) or 0.0), 2),
+        "current_core_unrealized_profit": round(float(core_details.get("unrealized_profit", 0.0) or 0.0), 2),
         "top_n": len(top),
-        "target_each_sleeve_pct": round(target_each_sleeve_pct, 2),
-        "target_each_account_pct": round(target_each_account_pct, 2),
         "top": top,
+        "actions": actions,
+        "actionable": actionable,
         "all_scored": scored,
+        "cluster_control_enabled": WEALTH_CLUSTER_CONTROL_ENABLED,
+        "vol_weighting_enabled": WEALTH_VOL_WEIGHTING_ENABLED,
+        "ledger_enabled": CORE_LEDGER_ENABLED,
     }
 
 
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:
-    top = plan.get("top", []) or []
+    actions = plan.get("actions", []) or []
+    allocation = plan.get("allocation", {}) or {}
+    risk = plan.get("risk_guard", {}) or {}
 
     msg = (
-        "🏛️ PRIVATE WEALTH PLAN — CORE ROTATION v3.0\n\n"
-        "Private bot only. No public-channel alert.\n"
-        "Purpose: long-term wealth sleeve, separate from v2.8 swing trades.\n\n"
+        "🏛️ CORE WEALTH REBALANCE PLAN v3.6\n\n"
+        "Private bot only. This is a real core-ledger plan. Execute in broker first, then record with corebuy/coresell.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n"
-        f"💼 Account equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
-        f"🏦 Suggested core sleeve: {plan.get('target_core_account_pct')}% of account\n"
-        f"📦 Core sleeve value guide: {format_money(float(plan.get('target_core_value', 0) or 0))}\n\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
+        f"({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"💼 Total equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🏦 Target core sleeve: {plan.get('target_core_account_pct')}% = {format_money(float(plan.get('target_core_value', 0) or 0))}\n"
+        f"📦 Current core value: {format_money(float(plan.get('current_core_value', 0) or 0))}\n"
+        f"📈 Core unrealized P/L: {format_money(float(plan.get('current_core_unrealized_profit', 0) or 0))}\n\n"
+        "Portfolio bucket guide:\n"
+        f"• Core wealth: {allocation.get('core_wealth_pct')}%\n"
+        f"• Long VCP tactical: {allocation.get('long_vcp_tactical_pct')}%\n"
+        f"• Bear inverse tactical: {allocation.get('bear_inverse_tactical_pct')}%\n"
+        f"• Cash reserve: {allocation.get('cash_reserve_pct')}%\n\n"
     )
 
-    if not top:
-        msg += (
-            "No qualified core assets today.\n"
-            "Default action: stay in cash/cash-like assets until next review."
-        )
+    if not actions:
+        msg += "No qualified core assets and no open core positions needing action."
         return msg
 
-    msg += "🎯 Target assets\n"
-    for i, item in enumerate(top, start=1):
-        msg += (
-            f"{i}) {item['ticker']} — target ~{plan.get('target_each_account_pct')}% of account "
-            f"(~{plan.get('target_each_sleeve_pct')}% of core sleeve)\n"
-            f"   Price: {item['price']} | 1m: {format_pct(item['roc_1m_pct'])} | "
-            f"3m: {format_pct(item['roc_3m_pct'])} | 6m: {format_pct(item['roc_6m_pct'])} | "
-            f"Score: {item['score']}\n"
-        )
+    ranked = [a for a in actions if a.get("rank") is not None]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+
+    if ranked:
+        msg += "🎯 Ranked core candidates — best to least attractive\n"
+        for item in ranked:
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+            msg += (
+                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('cluster', 'other')})\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
+                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
+                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')}\n"
+            )
+        msg += "\n"
+
+    if exits:
+        msg += "🔴 Core exit / rotation candidates\n"
+        for item in exits:
+            msg += (
+                f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\n"
+                f"Reason: {item.get('reason', 'No longer qualified')}\n"
+            )
+        msg += "\n"
 
     msg += (
-        "\nHow to use:\n"
-        "• This is allocation guidance, not an automatic trade.\n"
-        "• Rebalance manually only if your current allocation is materially different.\n"
-        "• Keep v2.8 swing cash/risk separate from this core sleeve.\n"
-        "• Do not use leveraged/inverse ETFs for this long-term core sleeve."
+        "How to execute after broker fill:\n"
+        "• corebuy TICKER SHARES at PRICE\n"
+        "• coresell TICKER SHARES at PRICE\n\n"
+        "Core rules:\n"
+        "• BUY/ADD/HOLD/TRIM/SELL is monthly/slow allocation logic, not a swing stop system.\n"
+        "• The core ledger shares the same cash account, so swing sizing stays honest.\n"
+        "• Do not use normal bought/sold for core positions."
     )
 
-    return msg
-
+    return msg[:MAX_TELEGRAM_MESSAGE]
 
 def maybe_send_wealth_core_signal() -> None:
     """Monthly private wealth-sleeve alert after market close."""
@@ -7049,6 +7502,7 @@ def maybe_send_wealth_core_signal() -> None:
 
     try:
         plan = compute_wealth_core_plan()
+        save_core_plan_signal(plan)
         set_meta("last_wealth_core_month", month_key)
         set_meta("last_wealth_core_alert_ts", str(now_ts()))
         send(format_wealth_core_plan(plan))
@@ -7098,37 +7552,10 @@ def risk_pct_for_ticker(ticker: str) -> Optional[float]:
 
 
 
+
 def approximate_equity_from_portfolio() -> float:
-
-
-
-    refresh_portfolio()
-
-
-
-    positions = portfolio["positions"]
-
-
-
-    prices = get_prices_batch(list(positions.keys()))
-
-
-
-    equity = float(portfolio["cash"])
-
-
-
-    for ticker, pos in positions.items():
-
-        mark = prices.get(ticker, pos["price"])
-
-        equity += float(mark) * int(pos["shares"])
-
-
-
-    return equity
-
- 
+    snapshot = compute_equity_snapshot_data()
+    return float(snapshot.get("equity", 0.0) or 0.0)
 
 def daily_drawdown_exceeded() -> bool:
 
@@ -9080,14 +9507,557 @@ def void_buy(
 
 
 
+# -----------------------------------------------------------------------------
+# CORE WEALTH LEDGER v3.6
+# -----------------------------------------------------------------------------
+
+
+def row_to_core_position(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "ticker": row["ticker"],
+        "core_position_id": row["core_position_id"],
+        "strategy_version": row["strategy_version"],
+        "shares": float(row["shares"]),
+        "avg_entry_price": float(row["avg_entry_price"]),
+        "cost_basis": float(row["cost_basis"]),
+        "entry_time": float(row["entry_time"]),
+        "last_update_time": float(row["last_update_time"]),
+        "highest": None if row["highest"] is None else float(row["highest"]),
+        "sleeve": row["sleeve"],
+        "target_account_pct": None if row["target_account_pct"] is None else float(row["target_account_pct"]),
+        "last_plan_id": row["last_plan_id"],
+        "notes": row["notes"],
+    }
+
+
+def load_core_positions() -> Dict[str, Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM core_positions ORDER BY ticker").fetchall()
+        return {row["ticker"]: row_to_core_position(row) for row in rows}
+    finally:
+        conn.close()
+
+
+def load_core_trades() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM core_trades ORDER BY time ASC, created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def load_latest_core_signal() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM core_signals WHERE status = 'ACTIVE' ORDER BY time DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["plan"] = json_loads_dict(data.get("plan_json"))
+        return data
+    finally:
+        conn.close()
+
+
+def save_core_plan_signal(plan: Dict[str, Any]) -> str:
+    plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
+    plan = dict(plan)
+    plan["plan_id"] = plan_id
+    with db_tx() as conn:
+        conn.execute("UPDATE core_signals SET status = 'SUPERSEDED' WHERE status = 'ACTIVE'")
+        conn.execute(
+            """
+            INSERT INTO core_signals(
+                id, time, plan_date, market_regime, account_equity,
+                core_target_pct, plan_json, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """,
+            (
+                plan_id,
+                now_ts(),
+                ny_date_str(),
+                str(plan.get("market", "UNKNOWN")),
+                float(plan.get("account_equity", 0) or 0),
+                float(plan.get("target_core_account_pct", 0) or 0),
+                json_dumps(plan),
+            ),
+        )
+    return plan_id
+
+
+def current_core_plan_for_validation() -> Dict[str, Any]:
+    # Recompute so buys/sells use the latest market/equity state. Also persists
+    # it as the active plan so each confirmed core trade can reference a plan_id.
+    plan = compute_wealth_core_plan()
+    save_core_plan_signal(plan)
+    return plan
+
+
+def latest_core_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    actions = plan.get("actions", []) or []
+    return {str(item.get("ticker", "")).upper(): item for item in actions if item.get("ticker")}
+
+
+def core_position_market_value_details(
+    prices: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
+    positions = load_core_positions()
+    tickers = list(positions.keys())
+    prices = prices or get_prices_batch(tickers)
+    rows: List[Dict[str, Any]] = []
+    total_value = 0.0
+    total_cost = 0.0
+    total_unrealized = 0.0
+
+    for ticker, pos in positions.items():
+        mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or pos.get("avg_entry_price", 0))
+        shares = float(pos.get("shares", 0) or 0)
+        value = shares * mark
+        cost = float(pos.get("cost_basis", 0) or 0)
+        unrealized = value - cost
+        total_value += value
+        total_cost += cost
+        total_unrealized += unrealized
+        rows.append({
+            **pos,
+            "mark_price": round(mark, 4),
+            "market_value": round(value, 2),
+            "unrealized_profit": round(unrealized, 2),
+            "unrealized_pct": None if cost <= 0 else round((unrealized / cost) * 100, 2),
+        })
+
+    realized = sum(float(t.get("realized_profit") or 0.0) for t in load_core_trades() if str(t.get("side")).upper() == "SELL")
+    return {
+        "positions": positions,
+        "rows": rows,
+        "value": round(total_value, 2),
+        "cost_basis": round(total_cost, 2),
+        "unrealized_profit": round(total_unrealized, 2),
+        "realized_profit": round(realized, 2),
+        "total_profit": round(realized + total_unrealized, 2),
+    }
+
+
+def format_core_shares(value: Any) -> str:
+    try:
+        x = float(value)
+        if abs(x - round(x)) < 1e-9:
+            return str(int(round(x)))
+        return (f"{x:.6f}").rstrip("0").rstrip(".")
+    except Exception:
+        return str(value)
+
+
+def validate_core_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
+    if not CORE_REQUIRE_LIVE_QUOTE:
+        return True, "Quote check disabled", None
+    quotes = get_prices_batch([ticker])
+    quote = quotes.get(ticker)
+    if quote is None or quote <= 0:
+        return False, "Live quote unavailable for core trade.", None
+    deviation = abs(price - quote) / quote
+    if deviation > CORE_QUOTE_DEVIATION_LIMIT:
+        return (
+            False,
+            f"Core trade rejected: your price is too far from live quote.\n"
+            f"Live quote: {round(quote, 2)}\n"
+            f"Your price: {round(price, 2)}\n"
+            f"Max deviation: {round(CORE_QUOTE_DEVIATION_LIMIT * 100, 2)}%",
+            quote,
+        )
+    return True, "OK", quote
+
+
+def core_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker = ticker.upper()
+    for item in plan.get("top", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def record_core_buy(
+    ticker: str,
+    shares: float,
+    price: float,
+    update_id: Optional[int] = None,
+) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not CORE_LEDGER_ENABLED:
+        return False, "Core ledger is disabled."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "Core shares must be positive and finite."
+    if (not CORE_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
+        return False, "Fractional core shares are disabled."
+    if not is_finite_positive(price):
+        return False, "Core price must be positive and finite."
+    if ticker not in WEALTH_CORE_UNIVERSE:
+        return False, f"{ticker} is not in the core wealth universe."
+
+    amount = shares * price
+    if amount < CORE_MIN_TRADE_DOLLARS:
+        return False, f"Core trade amount is below minimum {format_money(CORE_MIN_TRADE_DOLLARS)}."
+
+    plan = current_core_plan_for_validation()
+    target = core_target_for_ticker(plan, ticker)
+    action = latest_core_plan_action_map(plan).get(ticker)
+    if CORE_REQUIRE_ACTIVE_PLAN_FOR_BUY and not CORE_ALLOW_BUY_OUTSIDE_PLAN:
+        if target is None:
+            allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", [])[:WEALTH_CORE_TOP_N])
+            return False, (
+                f"Core buy rejected: {ticker} is not in the active core plan.\n"
+                f"Current ranked core candidates: {allowed or 'none'}"
+            )
+        if action and str(action.get("action", "")).upper() in {"TRIM", "SELL", "AVOID"}:
+            return False, f"Core buy rejected: current plan action for {ticker} is {action.get('action')}."
+
+    ok, msg, quote = validate_core_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash:
+            mark_update_processed_tx(conn, update_id, "rejected_core_insufficient_cash")
+            return False, "Not enough cash for core buy."
+
+        row = conn.execute("SELECT * FROM core_positions WHERE ticker = ?", (ticker,)).fetchone()
+        now = now_ts()
+        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+        plan_id = str(plan.get("plan_id"))
+
+        if row is None:
+            core_position_id = f"CORE_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
+            new_shares = shares
+            new_cost = amount
+            avg_price = price
+            entry_time = now
+            highest = price
+            conn.execute(
+                """
+                INSERT INTO core_positions(
+                    ticker, core_position_id, strategy_version, shares,
+                    avg_entry_price, cost_basis, entry_time, last_update_time,
+                    highest, sleeve, target_account_pct, last_plan_id, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CORE_WEALTH', ?, ?, '')
+                """,
+                (
+                    ticker,
+                    core_position_id,
+                    WEALTH_STRATEGY_VERSION,
+                    round(new_shares, 8),
+                    round(avg_price, 6),
+                    round(new_cost, 6),
+                    now,
+                    now,
+                    round(highest, 6),
+                    target_pct,
+                    plan_id,
+                ),
+            )
+        else:
+            pos = row_to_core_position(row)
+            core_position_id = pos["core_position_id"]
+            old_shares = float(pos["shares"])
+            old_cost = float(pos["cost_basis"])
+            new_shares = old_shares + shares
+            new_cost = old_cost + amount
+            avg_price = new_cost / new_shares
+            entry_time = float(pos["entry_time"])
+            highest = max(float(pos.get("highest") or price), price)
+            conn.execute(
+                """
+                UPDATE core_positions
+                SET shares = ?, avg_entry_price = ?, cost_basis = ?,
+                    last_update_time = ?, highest = ?, target_account_pct = ?,
+                    last_plan_id = ?, strategy_version = ?
+                WHERE ticker = ?
+                """,
+                (
+                    round(new_shares, 8),
+                    round(avg_price, 6),
+                    round(new_cost, 6),
+                    now,
+                    round(highest, 6),
+                    target_pct,
+                    plan_id,
+                    WEALTH_STRATEGY_VERSION,
+                    ticker,
+                ),
+            )
+
+        conn.execute(
+            """
+            INSERT INTO core_trades(
+                id, core_position_id, ticker, side, shares, price, amount,
+                realized_profit, time, strategy_version, plan_id, reason, created_at
+            ) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex,
+                core_position_id,
+                ticker,
+                round(shares, 8),
+                round(price, 6),
+                round(amount, 6),
+                now,
+                WEALTH_STRATEGY_VERSION,
+                plan_id,
+                "core_plan_buy",
+                now,
+            ),
+        )
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "processed_core_buy")
+
+    refresh_portfolio()
+    audit("CORE_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
+    return True, (
+        f"🏛️ CORE BUY RECORDED {ticker}\n\n"
+        f"📦 Shares: {format_core_shares(shares)}\n"
+        f"💵 Price: {round(price, 2)}\n"
+        f"💰 Amount: {format_money(amount)}\n"
+        f"🎯 Plan action: {None if action is None else action.get('action')}\n"
+        f"🏦 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
+        f"💵 Cash left: {format_money(portfolio['cash'])}"
+    )
+
+
+def record_core_sell(
+    ticker: str,
+    shares: float,
+    price: float,
+    update_id: Optional[int] = None,
+) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not CORE_LEDGER_ENABLED:
+        return False, "Core ledger is disabled."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "Core shares must be positive and finite."
+    if not is_finite_positive(price):
+        return False, "Core price must be positive and finite."
+
+    ok, msg, quote = validate_core_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+
+    plan = current_core_plan_for_validation()
+    action = latest_core_plan_action_map(plan).get(ticker)
+
+    with db_tx() as conn:
+        row = conn.execute("SELECT * FROM core_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            mark_update_processed_tx(conn, update_id, "rejected_core_no_position")
+            return False, "No core position to sell."
+
+        pos = row_to_core_position(row)
+        current_shares = float(pos["shares"])
+        if shares - current_shares > CORE_POSITION_EPSILON:
+            mark_update_processed_tx(conn, update_id, "rejected_core_too_many_shares")
+            return False, f"You only have {format_core_shares(current_shares)} core shares of {ticker}."
+
+        shares = min(shares, current_shares)
+        avg = float(pos["avg_entry_price"])
+        proceeds = shares * price
+        realized_profit = (price - avg) * shares
+        remaining = current_shares - shares
+        now = now_ts()
+        plan_id = str(plan.get("plan_id"))
+
+        conn.execute(
+            """
+            INSERT INTO core_trades(
+                id, core_position_id, ticker, side, shares, price, amount,
+                realized_profit, time, strategy_version, plan_id, reason, created_at
+            ) VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex,
+                pos["core_position_id"],
+                ticker,
+                round(shares, 8),
+                round(price, 6),
+                round(proceeds, 6),
+                round(realized_profit, 6),
+                now,
+                WEALTH_STRATEGY_VERSION,
+                plan_id,
+                "core_plan_sell",
+                now,
+            ),
+        )
+
+        if remaining <= CORE_POSITION_EPSILON:
+            conn.execute("DELETE FROM core_positions WHERE ticker = ?", (ticker,))
+        else:
+            new_cost = avg * remaining
+            target = core_target_for_ticker(plan, ticker)
+            target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+            conn.execute(
+                """
+                UPDATE core_positions
+                SET shares = ?, cost_basis = ?, last_update_time = ?,
+                    target_account_pct = ?, last_plan_id = ?
+                WHERE ticker = ?
+                """,
+                (round(remaining, 8), round(new_cost, 6), now, target_pct, plan_id, ticker),
+            )
+
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + proceeds)
+        mark_update_processed_tx(conn, update_id, "processed_core_sell")
+
+    refresh_portfolio()
+    audit("CORE_SELL", f"{ticker} shares={shares} price={price} proceeds={proceeds} profit={realized_profit}")
+    return True, (
+        f"🏛️ CORE SELL RECORDED {ticker}\n\n"
+        f"📦 Shares: {format_core_shares(shares)}\n"
+        f"💵 Price: {round(price, 2)}\n"
+        f"💰 Proceeds: {format_money(proceeds)}\n"
+        f"📊 Realized core P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
+        f"🎯 Plan action: {None if action is None else action.get('action')}\n"
+        f"💵 Cash now: {format_money(portfolio['cash'])}"
+    )
+
+
+def format_core_portfolio_report() -> str:
+    details = core_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = (
+        "🏛️ CORE WEALTH PORTFOLIO\n\n"
+        f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
+        f"🏦 Core value: {format_money(float(details.get('value', 0) or 0))}\n"
+        f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+        f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+        f"✅ Realized core P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+        f"💼 Total equity: {format_money(snapshot['equity'])}\n\n"
+    )
+    if not rows:
+        return msg + "No core positions recorded yet. Use wealthplan, then corebuy after broker execution."
+
+    for row in rows:
+        msg += (
+            f"📦 {row['ticker']}\n"
+            f"Shares: {format_core_shares(row['shares'])}\n"
+            f"Avg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\n"
+            f"Value: {format_money(float(row['market_value']))}\n"
+            f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
+            f"Target account weight: {row.get('target_account_pct')}%\n\n"
+        )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_core_pnl_report() -> str:
+    details = core_position_market_value_details()
+    trades = load_core_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return (
+        "🏛️ CORE WEALTH P/L\n\n"
+        f"🏦 Core value: {format_money(float(details.get('value', 0) or 0))}\n"
+        f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+        f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+        f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+        f"💰 Total core P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
+        f"Buy records: {len(buys)}\n"
+        f"Sell records: {len(sells)}"
+    )
+
+
+def format_core_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    plan = compute_wealth_core_plan()
+    details = core_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    target_pct = float(plan.get("target_core_account_pct", 0) or 0)
+    return (
+        "🏛️ CORE EXPOSURE\n\n"
+        f"💼 Total equity: {format_money(equity)}\n"
+        f"🏦 Core value: {format_money(float(details.get('value', 0) or 0))}\n"
+        f"🎯 Target core: {round(target_pct, 2)}% of account\n"
+        f"📊 Actual core: {round(actual_pct, 2)}% of account\n"
+        f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
+        "Use wealthplan for ranked BUY/ADD/HOLD/TRIM/SELL actions."
+    )
+
+
 def write_json_file(path: str, data: Any) -> None:
-
     with open(path, "w", encoding="utf-8") as f:
-
         json.dump(safe_convert(data), f, indent=2)
 
 
 
+
+def format_combined_portfolio_report() -> str:
+    refresh_portfolio()
+    cash = float(portfolio["cash"])
+    swing_positions = portfolio["positions"]
+    core_rows = core_position_market_value_details().get("rows", []) if CORE_LEDGER_ENABLED else []
+    snapshot = compute_equity_snapshot_data()
+
+    if not swing_positions and not core_rows:
+        return (
+            "📋 PORTFOLIO\n\n"
+            f"💵 Cash: {format_money(cash)}\n"
+            f"🏦 Total Equity: {format_money(snapshot['equity'])}\n"
+            "No open swing or core positions"
+        )
+
+    tickers = list(swing_positions.keys())
+    prices = get_prices_batch(tickers)
+    msg = (
+        "📋 PORTFOLIO\n\n"
+        f"💵 Cash: {format_money(cash)}\n"
+        f"⚡ Swing value: {format_money(snapshot.get('swing_positions_value', 0))}\n"
+        f"🏛️ Core value: {format_money(snapshot.get('core_positions_value', 0))}\n"
+        f"🏦 Total equity: {format_money(snapshot['equity'])}\n\n"
+    )
+
+    if swing_positions:
+        msg += "⚡ SWING / TACTICAL POSITIONS\n\n"
+        for ticker, pos in swing_positions.items():
+            current_price = prices.get(ticker, pos["price"])
+            entry = pos["price"]
+            shares = pos["shares"]
+            pnl = (current_price - entry) * shares
+            risk_per_share = pos.get("risk_per_share")
+            r_now = None
+            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+                r_now = (current_price - entry) / risk_per_share
+            msg += (
+                f"📦 {ticker}\n"
+                f"Shares: {shares}\n"
+                f"Entry: {round(entry, 2)}\n"
+                f"Now: {round(current_price, 2)}\n"
+                f"🛡️ Stop: {round(pos['stop'], 2)}\n"
+                f"📈 High: {round(pos['highest'], 2)}\n"
+                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\n"
+                f"💰 P/L: {format_money(pnl)}\n\n"
+            )
+
+    if core_rows:
+        msg += "🏛️ CORE WEALTH POSITIONS\n\n"
+        for row in core_rows:
+            msg += (
+                f"📦 {row['ticker']}\n"
+                f"Shares: {format_core_shares(row['shares'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 2)}\n"
+                f"Now: {round(float(row['mark_price']), 2)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
+            )
+
+    return msg[:MAX_TELEGRAM_MESSAGE]
 
 
 def table_rows(table: str) -> List[Dict[str, Any]]:
@@ -9107,6 +10077,12 @@ def table_rows(table: str) -> List[Dict[str, Any]]:
         "cooldowns",
 
         "breakout_memory",
+
+        "core_positions",
+
+        "core_trades",
+
+        "core_signals",
 
     }
 
@@ -9258,6 +10234,8 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
             "positions_count": len(portfolio["positions"]),
 
+            "core_positions_count": len(load_core_positions()) if CORE_LEDGER_ENABLED else 0,
+
             "cash": portfolio["cash"],
 
             "panic_mode": PANIC_MODE,
@@ -9285,6 +10263,12 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         "cooldowns",
 
         "breakout_memory",
+
+        "core_positions",
+
+        "core_trades",
+
+        "core_signals",
 
     ]:
 
@@ -9421,6 +10405,9 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM equity_snapshots")
 
         conn.execute("DELETE FROM withdrawals")
+        conn.execute("DELETE FROM core_positions")
+        conn.execute("DELETE FROM core_trades")
+        conn.execute("DELETE FROM core_signals")
 
 
 
@@ -9454,7 +10441,9 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
                 'last_withdrawal_alert_ts',
 
-                'performance_base_capital'
+                'performance_base_capital',
+                'last_wealth_core_month',
+                'last_wealth_core_alert_ts'
 
             )
 
@@ -9492,7 +10481,8 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
         f"💵 Cash: {format_money(portfolio['cash'])}\n"
 
-        f"📦 Positions: {len(portfolio['positions'])}\n\n"
+        f"📦 Swing positions: {len(portfolio['positions'])}\n"
+        f"🏛️ Core positions: {len(load_core_positions()) if CORE_LEDGER_ENABLED else 0}\n\n"
 
         "Next live-start commands:\n"
 
@@ -9614,9 +10604,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             "Commands:\n"
 
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | allocationplan | riskstatus | sleevestatus\n"
 
-
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | wealthplan | wealthstatus\n"
+            "wealthplan | wealthstatus | corestatus | coreportfolio | corepnl | coreexposure\n"
 
             "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
 
@@ -9630,7 +10620,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             "setcash AMOUNT\n"
 
-            "voidbuy TICKER  (undo mistaken buy without fake sell trade)\n"
+            "voidbuy TICKER  (undo mistaken swing buy without fake sell trade)\n"
+
+            "corebuy TICKER SHARES at PRICE\n"
+
+            "coresell TICKER SHARES at PRICE\n"
 
             "editbuy TICKER PRICE\n"
 
@@ -9639,7 +10633,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             "bought TICKER SHARES at PRICE\n"
 
             "sold TICKER SHARES at PRICE"
-
         )
 
 
@@ -9736,32 +10729,18 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "equity":
 
-
-
         snapshot = compute_equity_snapshot_data()
 
-
-
         send(
-
             "💼 ACCOUNT EQUITY\n\n"
-
             f"💵 Cash: {format_money(snapshot['cash'])}\n"
-
-            f"📦 Positions: {format_money(snapshot['positions_value'])}\n"
-
+            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
+            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
+            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
             f"🏦 Total Equity: {format_money(snapshot['equity'])}"
-
         )
 
-
-
         return
-
-
-
- 
-
 
 
     if text_lower == "openrisk":
@@ -10117,21 +11096,104 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     if text_lower == "wealthplan":
         plan = compute_wealth_core_plan()
+        save_core_plan_signal(plan)
         send(format_wealth_core_plan(plan))
         return
 
     if text_lower == "wealthstatus":
+        alloc = dynamic_portfolio_allocation_targets()
         send(
-            "🏛️ WEALTH SLEEVE STATUS\n\n"
+            "🏛️ WEALTH / CORE LEDGER STATUS v3.6\n\n"
             f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
             f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
-            f"Core target: {round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2)}% of account\n"
+            f"Dynamic allocation: {yes_no(WEALTH_DYNAMIC_ALLOCATION_ENABLED)}\n"
+            f"Vol weighting: {yes_no(WEALTH_VOL_WEIGHTING_ENABLED)}\n"
+            f"Cluster control: {yes_no(WEALTH_CLUSTER_CONTROL_ENABLED)}\n"
             f"Top assets: {WEALTH_CORE_TOP_N}\n"
+            f"Current core target: {alloc.get('core_wealth_pct')}% of account\n"
+            f"Long VCP target: {alloc.get('long_vcp_tactical_pct')}% of account\n"
+            f"Bear tactical target: {alloc.get('bear_inverse_tactical_pct')}% of account\n"
+            f"Cash reserve target: {alloc.get('cash_reserve_pct')}% of account\n"
             f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
             f"Public channel: ❌ never used for this sleeve\n\n"
             "Commands:\n"
-            "wealthplan — calculate current private core allocation plan"
+            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
+            "corebuy TICKER SHARES at PRICE — record core buy\n"
+            "coresell TICKER SHARES at PRICE — record core sell\n"
+            "coreportfolio | corepnl | coreexposure | corestatus\n"
+            "allocationplan | riskstatus | sleevestatus"
         )
+        return
+
+
+    if text_lower in {"corestatus", "coreledger"}:
+        latest = load_latest_core_signal()
+        details = core_position_market_value_details()
+        alloc = dynamic_portfolio_allocation_targets()
+        send(
+            "🏛️ CORE LEDGER STATUS v3.6\n\n"
+            f"Enabled: {yes_no(CORE_LEDGER_ENABLED)}\n"
+            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
+            f"Core target now: {alloc.get('core_wealth_pct')}% of account\n"
+            f"Core value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"Core realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+            f"Core unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
+            "corebuy TICKER SHARES at PRICE — record broker core buy\n"
+            "coresell TICKER SHARES at PRICE — record broker core sell\n"
+            "coreportfolio | corepnl | coreexposure"
+        )
+        return
+
+    if text_lower == "coreportfolio":
+        send(format_core_portfolio_report())
+        return
+
+    if text_lower == "corepnl":
+        send(format_core_pnl_report())
+        return
+
+    if text_lower == "coreexposure":
+        send(format_core_exposure_report())
+        return
+
+    core_cmd = re.fullmatch(
+        r"(?i)\s*(corebuy|coresell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text,
+    )
+
+    if core_cmd:
+        action = core_cmd.group(1).lower()
+        ticker = normalize_ticker(core_cmd.group(2))
+        shares = float(core_cmd.group(3))
+        price = float(core_cmd.group(4))
+
+        if not ticker:
+            send("Invalid ticker")
+            return
+
+        if action == "corebuy":
+            ok, msg = record_core_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+        if action == "coresell":
+            ok, msg = record_core_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+    if text_lower in {"allocationplan", "allocplan"}:
+        send(format_portfolio_allocation_plan())
+        return
+
+    if text_lower == "riskstatus":
+        send(format_portfolio_risk_guard())
+        return
+
+    if text_lower == "sleevestatus":
+        send(format_sleeve_performance_report())
         return
 
     if text_lower == "withdrawinit":
@@ -10339,130 +11401,8 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
     if text_lower == "portfolio":
-
-
-
-        refresh_portfolio()
-
-
-
-        cash = portfolio["cash"]
-
-
-
-        positions = portfolio["positions"]
-
-
-
-        if not positions:
-
-
-
-            send(f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\nNo open positions")
-
-
-
-            return
-
-
-
-
-
-        prices = get_prices_batch(list(positions.keys()))
-
-
-
-        msg = f"PORTFOLIO\n\nCash: {format_money(cash)}\n\n"
-
-
-
-        for ticker, pos in positions.items():
-
-
-
-            current_price = prices.get(ticker, pos["price"])
-
-
-
-            entry = pos["price"]
-
-
-
-            shares = pos["shares"]
-
-
-
-            pnl = (current_price - entry) * shares
-
-
-
-            risk_per_share = pos.get("risk_per_share")
-
-
-
-            r_now = None
-
-
-
-            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-
-
-
-                r_now = (current_price - entry) / risk_per_share
-
-
-
-            msg += (
-
-
-
-                f"📦 {ticker}\n"
-
-
-
-                f"Shares: {shares}\n"
-
-
-
-                f"Entry: {round(entry, 2)}\n"
-
-
-
-                f"Now: {round(current_price, 2)}\n"
-
-
-
-                f"🛡️ Stop: {round(pos['stop'], 2)}\n"
-
-
-
-                f"📈 High: {round(pos['highest'], 2)}\n"
-
-
-
-                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\n"
-
-
-
-                f"💰 P/L: {format_money(pnl)}\n\n"
-
-
-
-            )
-
-
-
-        send(msg)
-
-
-
+        send(format_combined_portfolio_report())
         return
-
-
-
- 
-
-
 
     if text_lower == "showportfolio_raw":
 
@@ -12507,7 +13447,7 @@ def manage_positions() -> None:
 
                     f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
 
-                    f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
+                    "📤 Action: exit your remaining position according to your own sizing\n"
 
                     f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\n"
 
@@ -12629,7 +13569,7 @@ def manage_positions() -> None:
                     f"⏱️ EXIT {ticker}\n"
                     f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
                     f"Reason: {time_exit_reason}\n"
-                    f"📤 Exit shares: {int(trade.get('shares', 0) or 0)}\n"
+                    "📤 Action: exit your remaining position according to your own sizing\n"
                     f"💵 Exit price: {round(price, 2)} ({format_pct(exit_gain_pct)})\n"
                     f"P/L: {format_money(trade['profit'])}\n"
                     f"R: {trade.get('r_multiple')}"
@@ -13151,6 +14091,15 @@ def scan_market() -> bool:
     if daily_drawdown_exceeded():
        print("[🚨 SCAN BLOCKED] DAILY LOSS LIMIT")
        return True
+
+    guard = portfolio_risk_guard_details()
+    if guard.get("block_new_entries"):
+       print("[🚨 SCAN BLOCKED] PORTFOLIO HARD DRAWDOWN GUARD")
+       maybe_send_portfolio_risk_guard_alert(guard)
+       return True
+
+    if guard.get("soft_active"):
+       maybe_send_portfolio_risk_guard_alert(guard)
 
     available_signal_slots = max(
         0,
@@ -13833,6 +14782,8 @@ def main() -> None:
 
             maybe_send_withdrawal_signal()
 
+            maybe_send_wealth_core_signal()
+
 
 
             get_updates()
@@ -14016,6 +14967,3563 @@ def main() -> None:
  
 
 
+
+
+
+# =============================================================================
+# V3.7 EXTENSION: SPEC_ALPHA LIVE LEDGER + PUBLIC CORE/SPEC PLANS
+# =============================================================================
+# This section wraps v3.6 without rewriting the VCP/bear/core logic.
+# It adds a separate medium/weak monthly momentum sleeve with its own ledger.
+
+CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "1") != "0"
+
+SPEC_ALPHA_ENABLED = os.getenv("SPEC_ALPHA_ENABLED", "1") != "0"
+SPEC_ALPHA_LEDGER_ENABLED = os.getenv("SPEC_ALPHA_LEDGER_ENABLED", "1") != "0"
+SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED", "1") != "0"
+SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.40"))
+SPEC_ALPHA_TOP_N = int(os.getenv("SPEC_ALPHA_TOP_N", "10"))
+SPEC_ALPHA_SCORE_MODE = os.getenv("SPEC_ALPHA_SCORE_MODE", "mom63").strip().lower()
+SPEC_ALPHA_MIN_PRICE = float(os.getenv("SPEC_ALPHA_MIN_PRICE", "5"))
+SPEC_ALPHA_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("SPEC_ALPHA_MIN_AVG_DOLLAR_VOLUME", "5000000"))
+SPEC_ALPHA_REQUIRE_SPY_ABOVE_MA200 = os.getenv("SPEC_ALPHA_REQUIRE_SPY_ABOVE_MA200", "1") != "0"
+SPEC_ALPHA_REQUIRE_STOCK_ABOVE_MA200 = os.getenv("SPEC_ALPHA_REQUIRE_STOCK_ABOVE_MA200", "1") != "0"
+SPEC_ALPHA_MAX_PER_SECTOR = int(os.getenv("SPEC_ALPHA_MAX_PER_SECTOR", "2"))
+SPEC_ALPHA_MAX_CRYPTO_NAMES = int(os.getenv("SPEC_ALPHA_MAX_CRYPTO_NAMES", "2"))
+SPEC_ALPHA_MAX_SINGLE_ASSET_PCT = float(os.getenv("SPEC_ALPHA_MAX_SINGLE_ASSET_PCT", "0.18"))
+SPEC_ALPHA_MIN_SINGLE_ASSET_PCT = float(os.getenv("SPEC_ALPHA_MIN_SINGLE_ASSET_PCT", "0.04"))
+SPEC_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT = float(os.getenv("SPEC_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT", "0.01"))
+SPEC_ALPHA_ACTION_DOLLAR_THRESHOLD = float(os.getenv("SPEC_ALPHA_ACTION_DOLLAR_THRESHOLD", "50"))
+SPEC_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("SPEC_ALPHA_MIN_TRADE_DOLLARS", "25"))
+SPEC_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("SPEC_ALPHA_QUOTE_DEVIATION_LIMIT", "0.06"))
+SPEC_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("SPEC_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
+SPEC_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("SPEC_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
+SPEC_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("SPEC_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
+SPEC_ALPHA_PLAN_VALID_DAYS = int(os.getenv("SPEC_ALPHA_PLAN_VALID_DAYS", "10"))
+SPEC_ALPHA_ALERT_REPEAT_DAYS = int(os.getenv("SPEC_ALPHA_ALERT_REPEAT_DAYS", "7"))
+SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 10)))
+SPEC_ALPHA_SCORE_SLEEP_SEC = float(os.getenv("SPEC_ALPHA_SCORE_SLEEP_SEC", "0.02"))
+
+SPEC_ALPHA_UNIVERSE = [
+    "PBF",
+    "OXY",
+    "LNTH",
+    "MOS",
+    "ATI",
+    "HQY",
+    "AVAV",
+    "CLF",
+    "EQT",
+    "CAR",
+    "DRS",
+    "STLD",
+    "NUE",
+    "SWX",
+    "ALB",
+    "HRB",
+    "UTHR",
+    "ATGE",
+    "PPC",
+    "UNM",
+    "COGT",
+    "LEGN",
+    "OLLI",
+    "LW",
+    "FCN",
+    "EBR",
+    "RBA",
+    "RYTM",
+    "SYM",
+    "ENPH",
+    "CELH",
+    "COMM",
+    "FSLR",
+    "SPXC",
+    "ASTS",
+    "GSAT",
+    "XMTR",
+    "AMBC",
+    "AKRO",
+    "WFRD",
+    "CWAN",
+    "DKS",
+    "IMVT",
+    "NTNX",
+    "PR",
+    "ZETA",
+    "GAP",
+    "AXON",
+    "BURL",
+    "FICO",
+    "AAON",
+    "HL",
+    "ETNB",
+    "CROX",
+    "HAL",
+    "STRL",
+    "WMG",
+    "SMMT",
+    "TGTX",
+    "W",
+    "LTH",
+    "COMP",
+    "CENX",
+    "MKTX",
+    "ESAB",
+    "PTGX",
+    "OSCR",
+    "IOT",
+    "FTAI",
+    "MIR",
+    "PCOR",
+    "COIN",
+    "RIOT",
+    "BBIO",
+    "HUT",
+    "MSTR",
+    "DUOL",
+    "DKNG",
+    "ROKU",
+    "RELY",
+    "CMG",
+    "MARA",
+    "APLD",
+    "IONQ",
+    "POWL",
+    "JOBY",
+    "CUK",
+    "XPO",
+    "AVDL",
+    "ACHR",
+    "RIVN",
+    "SOFI",
+    "AUR",
+    "VNO",
+    "MOD",
+    "UEC",
+    "LBRT",
+    "ESTC",
+    "AFRM",
+    "IBRX",
+    "SRRK",
+    "UUUU",
+    "ALL",
+    "CYTK",
+    "KYMR",
+    "IBP",
+    "CFLT",
+    "LUNR",
+    "SYRE",
+    "VST",
+    "HIMS",
+    "WSM",
+    "PRM",
+    "CDE",
+    "AMRK",
+    "VCTR",
+    "AR",
+    "CAVA",
+    "INSM",
+    "CRS",
+    "WULF",
+    "GME",
+    "ALNY",
+    "CHWY",
+    "LUMN",
+    "YOU",
+    "MIRM",
+    "PCVX",
+    "UAL",
+    "EAT",
+    "RGTI",
+    "CRDO",
+    "PL",
+    "RDDT",
+    "GH",
+    "BROS",
+    "SSRM",
+    "TPR",
+    "MPT",
+    "LQDA",
+    "CORT",
+    "MP",
+    "HALO",
+    "OKTA",
+    "RGLD",
+    "VRSN",
+    "LOAR",
+    "MRCY",
+    "DG",
+    "OKLO",
+    "FL",
+    "AGX",
+    "NRG",
+    "FIVE",
+    "CORZ",
+    "CIFR",
+    "QS",
+    "VSAT",
+    "SATS",
+    "HOUS",
+    "ARWR",
+    "BITF",
+    "PACS",
+    "SPHR",
+    "VICR",
+    "FOLD",
+    "AA",
+    "VIAV",
+    "MRNA",
+    "COHR",
+    "WLK",
+    "KGS",
+    "VG",
+    "APLS",
+    "LYB",
+    "DOCN",
+    "DOW",
+    "PTEN",
+    "DAR",
+    "IRDM",
+    "TTMI",
+    "RSI",
+    "CRWV",
+    "CRCL",
+    "PYPL",
+    "SNOW",
+    "F",
+    "TGT",
+    "CCL",
+    "AAL",
+    "WDAY",
+    "CHTR",
+    "HUM",
+    "DAL",
+    "MDB",
+    "DVN",
+    "FISV",
+    "ZTS",
+    "AZO",
+    "ZS",
+    "KVUE",
+    "TTD",
+    "DHI",
+    "ADSK",
+    "EL",
+    "URI",
+    "BDX",
+    "TEM",
+    "LNG",
+    "ULTA",
+    "DLTR",
+    "FANG",
+    "DXCM",
+    "EA",
+    "PINS",
+    "EXPE",
+    "HUBS",
+    "EW",
+    "KR",
+    "U",
+    "EBAY",
+    "CCI",
+    "STZ",
+    "KHC",
+    "KDP",
+    "O",
+    "COR",
+    "EXC",
+    "LEN",
+    "AIG",
+    "ODFL",
+    "NCLH",
+    "HSY",
+    "GIS",
+    "PCG",
+    "ROP",
+    "ETSY",
+    "CARR",
+    "TTWO",
+    "MET",
+    "CNC",
+    "TSCO",
+    "LUV",
+    "CTSH",
+    "KMB",
+    "D",
+    "MSCI",
+    "LHX",
+    "IDXX",
+    "IQV",
+    "HPQ",
+    "ZM",
+    "LVS",
+    "TWLO",
+    "PSA",
+    "ILMN",
+    "DPZ",
+    "PAYX",
+    "HBAN",
+    "YUM",
+    "XEL",
+    "HPE",
+    "BIIB",
+    "ROK",
+    "DECK",
+    "PCAR",
+    "AJG",
+    "GEHC",
+    "A",
+    "CAH",
+    "OKE",
+    "BBY",
+    "VRSK",
+    "GPN",
+    "ADM",
+    "KEY",
+    "VEEV",
+    "LYV",
+    "FAST",
+    "SYY",
+    "CF",
+    "EFX",
+    "BLDR",
+    "ALGN",
+    "CTVA",
+    "CPRT",
+    "LYFT",
+    "AMP",
+    "MLM",
+    "VICI",
+    "CFG",
+    "SYF",
+    "APA",
+    "PPG",
+    "WYNN",
+    "DOCU",
+    "DRI",
+    "SBAC",
+    "AFL",
+    "OTIS",
+    "CLX",
+    "FITB",
+    "DD",
+    "STT",
+    "PEG",
+    "IR",
+    "PHM",
+    "EXE",
+    "MTB",
+    "RF",
+    "VMC",
+    "ED",
+    "CSGP",
+    "IT",
+    "RMD",
+    "LPLA",
+    "ETR",
+    "NDAQ",
+    "PRU",
+    "AME",
+    "CDW",
+    "TRGP",
+    "GLXY",
+    "MGM",
+    "CBRE",
+    "ZBH",
+    "WEC",
+    "BAX",
+    "KEYS",
+    "TROW",
+    "RBRK",
+    "TOST",
+    "NTAP",
+    "PSKY",
+    "Z",
+    "PODD",
+    "MOH",
+    "IP",
+    "MTCH",
+    "TLN",
+    "WST",
+    "LH",
+    "EXR",
+    "PPL",
+    "TSN",
+    "OMC",
+    "GDDY",
+    "GNRC",
+    "CZR",
+    "HIG",
+    "CHD",
+    "AWK",
+    "HUBB",
+    "CART",
+    "AKAM",
+    "CAG",
+    "DOV",
+    "FTV",
+    "FE",
+    "AGNC",
+    "JBL",
+    "AVB",
+    "XYL",
+    "DTE",
+    "CNP",
+    "EIX",
+    "M",
+    "JBHT",
+    "WAT",
+    "SWK",
+    "KMX",
+    "ES",
+    "POOL",
+    "IFF",
+    "OVV",
+    "CMS",
+    "EXPD",
+    "VLTO",
+    "GPC",
+    "RL",
+    "RJF",
+    "EPAM",
+    "WAB",
+    "TOL",
+    "FND",
+    "P",
+    "SJM",
+    "BG",
+    "SAIA",
+    "ARES",
+    "DT",
+    "ALLY",
+    "NI",
+    "MKC",
+    "CPAY",
+    "BJ",
+    "AES",
+    "AVTR",
+    "HST",
+    "AEE",
+    "PATH",
+    "TRU",
+    "VFC",
+    "ZBRA",
+    "THC",
+    "NLY",
+    "CHRW",
+    "CPB",
+    "CRL",
+    "LII",
+    "ARE",
+    "FOXA",
+    "EQR",
+    "WY",
+    "NXT",
+    "PTC",
+    "FDS",
+    "BRO",
+    "MAS",
+    "TXRH",
+    "BALL",
+    "CE",
+    "COO",
+    "INCY",
+    "SN",
+    "INVH",
+    "BAH",
+    "PKG",
+    "ATO",
+    "IRM",
+    "TYL",
+    "BMRN",
+    "EVRG",
+    "LDOS",
+    "MAA",
+    "OC",
+    "NTRA",
+    "UHS",
+    "GTLB",
+    "KNX",
+    "DOC",
+    "WSO",
+    "FHN",
+    "CG",
+    "CCK",
+    "TAP",
+    "DINO",
+    "PFG",
+    "HAS",
+    "RVTY",
+    "CPT",
+    "RRC",
+    "S",
+    "FFIV",
+    "ALK",
+    "BR",
+    "IEX",
+    "VTRS",
+    "NBIX",
+    "AVY",
+    "BXP",
+    "SUI",
+    "EQH",
+    "WRB",
+    "GEN",
+    "UDR",
+    "WCC",
+    "EMN",
+    "TXT",
+    "RGEN",
+    "MTN",
+    "JKHY",
+    "TKO",
+    "KIM",
+    "LNT",
+    "MASI",
+    "USFD",
+    "GTLS",
+    "H",
+    "KRMN",
+    "J",
+    "SGI",
+    "TW",
+    "DVA",
+    "HRL",
+    "TECH",
+    "SIRI",
+    "PEN",
+    "BWA",
+    "SFM",
+    "BEN",
+    "FBIN",
+    "CRBG",
+    "BLD",
+    "ZION",
+    "GWRE",
+    "AMH",
+    "SSNC",
+    "DBX",
+    "FWONK",
+    "HSIC",
+    "MKSI",
+    "CASY",
+    "RPRX",
+    "TFX",
+    "MTZ",
+    "REXR",
+    "TRMB",
+    "IVZ",
+    "ACI",
+    "MANH",
+    "OWL",
+    "ARMK",
+    "LKQ",
+    "SOLV",
+    "AGCO",
+    "ELS",
+    "MHK",
+    "PNW",
+    "PCTY",
+    "MTDR",
+    "CINF",
+    "ELAN",
+    "CHRD",
+    "WAL",
+    "MIDD",
+    "CHYM",
+    "HEI",
+    "TTAN",
+    "AOS",
+    "WPC",
+    "ROL",
+    "FLG",
+    "ARCC",
+    "BOOT",
+    "RRX",
+    "PFGC",
+    "WMS",
+    "CNM",
+    "ACM",
+    "LEA",
+    "EWBC",
+    "CUBE",
+    "FLR",
+    "REG",
+    "GL",
+    "WSC",
+    "OHI",
+    "GLPI",
+    "FNF",
+    "SCI",
+    "WH",
+    "MPLX",
+    "AXTA",
+    "NWSA",
+    "LNC",
+    "NOV",
+    "BRKR",
+    "URBN",
+    "RPM",
+    "MUR",
+    "LPX",
+    "GMED",
+    "VOYA",
+    "CNX",
+    "FRT",
+    "WEX",
+    "RAL",
+    "JEF",
+    "CLH",
+    "BYD",
+    "ADC",
+    "OSK",
+    "WWD",
+    "SNX",
+    "DOX",
+    "TTC",
+    "NYT",
+    "ARW",
+    "WBS",
+    "GGG",
+    "EXEL",
+    "NDSN",
+    "LECO",
+    "L",
+    "AXSM",
+    "BRX",
+    "WTRG",
+    "BWXT",
+    "EHC",
+    "HR",
+    "TTEK",
+    "PAA",
+    "NE",
+    "SARO",
+    "ST",
+    "UGI",
+    "CHH",
+    "IONS",
+    "CHDN",
+    "AHR",
+    "BC",
+    "SITE",
+    "NNN",
+    "FR",
+    "STWD",
+    "SF",
+    "BSY",
+    "ITT",
+    "OMF",
+    "LINE",
+    "LAMR",
+    "CGNX",
+    "FLS",
+    "LSTR",
+    "GXO",
+    "MGY",
+    "GKOS",
+    "CMC",
+    "OGE",
+    "AMTM",
+    "PSN",
+    "HXL",
+    "HLI",
+    "VLY",
+    "ALSN",
+    "TMHC",
+    "DY",
+    "JXN",
+    "DTM",
+    "PNFP",
+    "BPOP",
+    "INGR",
+    "OZK",
+    "ORI",
+    "RHP",
+    "RITM",
+    "STAG",
+    "SSB",
+    "POR",
+    "R",
+    "ULS",
+    "RVMD",
+    "WTFC",
+    "GNTX",
+    "COLB",
+    "TKR",
+    "RKT",
+    "FOX",
+    "PB",
+    "KEX",
+    "MTG",
+    "MORN",
+    "ONB",
+    "ECG",
+    "MSM",
+    "ATR",
+    "COKE",
+    "FAF",
+    "SEIC",
+    "APPF",
+    "SAIL",
+    "EXLS",
+    "APG",
+    "AM",
+    "ORA",
+    "LEVI",
+    "BTSG",
+    "MC",
+    "TRNO",
+    "KRG",
+    "CRC",
+    "NFG",
+    "WES",
+    "ENSG",
+    "SBRA",
+    "TXNM",
+    "CR",
+    "FNB",
+    "TPG",
+    "PEGA",
+    "SON",
+    "RDN",
+    "ESI",
+    "PTCT",
+    "UMBF",
+    "EPRT",
+    "DLB",
+    "AVT",
+    "CBSH",
+    "ZWS",
+    "PAGP",
+    "ASB",
+    "OBDC",
+    "IDA",
+    "ZG",
+    "DCI",
+    "UFPI",
+    "MDU",
+    "CTRE",
+    "OGS",
+    "SIGI",
+    "ADT",
+    "HLNE",
+    "OUT",
+    "BKH",
+    "VIRT",
+    "VNOM",
+    "LFUS",
+    "HASI",
+    "GTES",
+    "CWST",
+    "MAC",
+    "FROG",
+    "EPR",
+    "HESM",
+    "HWC",
+    "JBTM",
+    "LB",
+    "BEPC",
+    "SANM",
+    "RLI",
+    "CGON",
+    "NOVT",
+    "NUVL",
+    "PECO",
+    "SR",
+    "ENS",
+    "CWEN",
+    "GBCI",
+    "GVA",
+    "HOMB",
+    "NJR",
+    "UBSI",
+    "AEIS",
+    "APGE",
+    "PRMB",
+    "AROC",
+    "KTOS",
+    "PIPR",
+    "SFD",
+    "BIPC",
+    "NWS",
+    "PRIM",
+    "ACA",
+    "MAIN",
+    "SNDR",
+    "BGC",
+    "SUN",
+    "FFIN",
+    "ROAD",
+    "STEP",
+    "AUB",
+    "EBC",
+    "OTF",
+    "RUSHA",
+    "REYN",
+    "IEP",
+    "LAUR",
+    "LGND",
+    "CNA",
+    "SNEX",
+    "INGM",
+    "FI",
+    "HOLX",
+    "EXAS",
+    "IPG",
+    "CMA",
+    "CYBR",
+    "DAY",
+    "CIVI",
+    "FYBR",
+    "CADE",
+    "COOP",
+    "AL",
+    "ERJ",
+    "ACLX",
+    "ASGN",
+    "CCCS",
+    "INFA",
+    "GMS",
+    "DVAX",
+    "ALE",
+    "AVDX",
+    "HI",
+    "CSGS",
+    "AXL",
+    "ATUS",
+    "IBDQ",
+    "BRFS",
+    "EB",
+    "BASE",
+    "DOOO",
+    "ALEX"
+]
+SPEC_ALPHA_SECTOR_MAP = {
+    "A": "Healthcare",
+    "AA": "Basic Materials",
+    "AAL": "Industrials",
+    "AAON": "Industrials",
+    "ACA": "Industrials",
+    "ACHR": "Industrials",
+    "ACI": "Consumer Defensive",
+    "ACLX": "Healthcare",
+    "ACM": "Industrials",
+    "ADC": "Real Estate",
+    "ADM": "Consumer Defensive",
+    "ADSK": "Technology",
+    "ADT": "Industrials",
+    "AEE": "Utilities",
+    "AEIS": "Industrials",
+    "AES": "Utilities",
+    "AFL": "Financial Services",
+    "AFRM": "Technology",
+    "AGCO": "Industrials",
+    "AGNC": "Real Estate",
+    "AGX": "Industrials",
+    "AHR": "Real Estate",
+    "AIG": "Financial Services",
+    "AJG": "Financial Services",
+    "AKAM": "Technology",
+    "AKRO": "Healthcare",
+    "AL": "Industrials",
+    "ALB": "Basic Materials",
+    "ALE": "Utilities",
+    "ALEX": "Real Estate",
+    "ALGN": "Healthcare",
+    "ALK": "Industrials",
+    "ALL": "Financial Services",
+    "ALLY": "Financial Services",
+    "ALNY": "Healthcare",
+    "ALSN": "Consumer Cyclical",
+    "AM": "Energy",
+    "AMBC": "Financial Services",
+    "AME": "Industrials",
+    "AMH": "Real Estate",
+    "AMP": "Financial Services",
+    "AMRK": "Financial Services",
+    "AMTM": "Industrials",
+    "AOS": "Industrials",
+    "APA": "Energy",
+    "APG": "Industrials",
+    "APGE": "Healthcare",
+    "APLD": "Technology",
+    "APLS": "Healthcare",
+    "APPF": "Technology",
+    "AR": "Energy",
+    "ARCC": "Financial Services",
+    "ARE": "Real Estate",
+    "ARES": "Financial Services",
+    "ARMK": "Industrials",
+    "AROC": "Energy",
+    "ARW": "Technology",
+    "ARWR": "Healthcare",
+    "ASB": "Financial Services",
+    "ASGN": "Technology",
+    "ASTS": "Technology",
+    "ATGE": "Consumer Defensive",
+    "ATI": "Industrials",
+    "ATO": "Utilities",
+    "ATR": "Healthcare",
+    "ATUS": "Communication Services",
+    "AUB": "Financial Services",
+    "AUR": "Technology",
+    "AVAV": "Industrials",
+    "AVB": "Real Estate",
+    "AVDL": "Healthcare",
+    "AVDX": "Technology",
+    "AVT": "Technology",
+    "AVTR": "Healthcare",
+    "AVY": "Consumer Cyclical",
+    "AWK": "Utilities",
+    "AXL": "Consumer Cyclical",
+    "AXON": "Industrials",
+    "AXSM": "Healthcare",
+    "AXTA": "Basic Materials",
+    "AZO": "Consumer Cyclical",
+    "BAH": "Industrials",
+    "BALL": "Consumer Cyclical",
+    "BASE": "Technology",
+    "BAX": "Healthcare",
+    "BBIO": "Healthcare",
+    "BBY": "Consumer Cyclical",
+    "BC": "Consumer Cyclical",
+    "BDX": "Healthcare",
+    "BEN": "Financial Services",
+    "BEPC": "Utilities",
+    "BG": "Consumer Defensive",
+    "BGC": "Financial Services",
+    "BIIB": "Healthcare",
+    "BIPC": "Utilities",
+    "BITF": "Financial Services",
+    "BJ": "Consumer Defensive",
+    "BKH": "Utilities",
+    "BLD": "Industrials",
+    "BLDR": "Industrials",
+    "BMRN": "Healthcare",
+    "BOOT": "Consumer Cyclical",
+    "BPOP": "Financial Services",
+    "BR": "Technology",
+    "BRFS": "Consumer Defensive",
+    "BRKR": "Healthcare",
+    "BRO": "Financial Services",
+    "BROS": "Consumer Cyclical",
+    "BRX": "Real Estate",
+    "BSY": "Technology",
+    "BTSG": "Healthcare",
+    "BURL": "Consumer Cyclical",
+    "BWA": "Consumer Cyclical",
+    "BWXT": "Industrials",
+    "BXP": "Real Estate",
+    "BYD": "Consumer Cyclical",
+    "CADE": "Financial Services",
+    "CAG": "Consumer Defensive",
+    "CAH": "Healthcare",
+    "CAR": "Industrials",
+    "CARR": "Industrials",
+    "CART": "Consumer Cyclical",
+    "CASY": "Consumer Cyclical",
+    "CAVA": "Consumer Cyclical",
+    "CBRE": "Real Estate",
+    "CBSH": "Financial Services",
+    "CCCS": "Technology",
+    "CCI": "Real Estate",
+    "CCK": "Consumer Cyclical",
+    "CCL": "Consumer Cyclical",
+    "CDE": "Basic Materials",
+    "CDW": "Technology",
+    "CE": "Basic Materials",
+    "CELH": "Consumer Defensive",
+    "CENX": "Basic Materials",
+    "CF": "Basic Materials",
+    "CFG": "Financial Services",
+    "CFLT": "Technology",
+    "CG": "Financial Services",
+    "CGNX": "Technology",
+    "CGON": "Healthcare",
+    "CHD": "Consumer Defensive",
+    "CHDN": "Consumer Cyclical",
+    "CHH": "Consumer Cyclical",
+    "CHRD": "Energy",
+    "CHRW": "Industrials",
+    "CHTR": "Communication Services",
+    "CHWY": "Consumer Cyclical",
+    "CHYM": "Financial Services",
+    "CIFR": "Financial Services",
+    "CINF": "Financial Services",
+    "CIVI": "Energy",
+    "CLF": "Basic Materials",
+    "CLH": "Industrials",
+    "CLX": "Consumer Defensive",
+    "CMA": "Financial Services",
+    "CMC": "Basic Materials",
+    "CMG": "Consumer Cyclical",
+    "CMS": "Utilities",
+    "CNA": "Financial Services",
+    "CNC": "Healthcare",
+    "CNM": "Industrials",
+    "CNP": "Utilities",
+    "CNX": "Energy",
+    "COGT": "Healthcare",
+    "COHR": "Technology",
+    "COIN": "Financial Services",
+    "COKE": "Consumer Defensive",
+    "COLB": "Financial Services",
+    "COMM": "Technology",
+    "COMP": "Technology",
+    "COO": "Healthcare",
+    "COOP": "Financial Services",
+    "COR": "Healthcare",
+    "CORT": "Healthcare",
+    "CORZ": "Technology",
+    "CPAY": "Technology",
+    "CPB": "Consumer Defensive",
+    "CPRT": "Industrials",
+    "CPT": "Real Estate",
+    "CR": "Industrials",
+    "CRBG": "Financial Services",
+    "CRC": "Energy",
+    "CRCL": "Financial Services",
+    "CRDO": "Technology",
+    "CRL": "Healthcare",
+    "CROX": "Consumer Cyclical",
+    "CRS": "Industrials",
+    "CRWV": "Technology",
+    "CSGP": "Real Estate",
+    "CSGS": "Technology",
+    "CTRE": "Real Estate",
+    "CTSH": "Technology",
+    "CTVA": "Basic Materials",
+    "CUBE": "Real Estate",
+    "CUK": "Consumer Cyclical",
+    "CWAN": "Technology",
+    "CWEN": "Utilities",
+    "CWST": "Industrials",
+    "CYBR": "Technology",
+    "CYTK": "Healthcare",
+    "CZR": "Consumer Cyclical",
+    "D": "Utilities",
+    "DAL": "Industrials",
+    "DAR": "Consumer Defensive",
+    "DAY": "Technology",
+    "DBX": "Technology",
+    "DCI": "Industrials",
+    "DD": "Basic Materials",
+    "DECK": "Consumer Cyclical",
+    "DG": "Consumer Defensive",
+    "DHI": "Consumer Cyclical",
+    "DINO": "Energy",
+    "DKNG": "Consumer Cyclical",
+    "DKS": "Consumer Cyclical",
+    "DLB": "Technology",
+    "DLTR": "Consumer Defensive",
+    "DOC": "Real Estate",
+    "DOCN": "Technology",
+    "DOCU": "Technology",
+    "DOOO": "Consumer Cyclical",
+    "DOV": "Industrials",
+    "DOW": "Basic Materials",
+    "DOX": "Technology",
+    "DPZ": "Consumer Cyclical",
+    "DRI": "Consumer Cyclical",
+    "DRS": "Industrials",
+    "DT": "Technology",
+    "DTE": "Utilities",
+    "DTM": "Energy",
+    "DUOL": "Technology",
+    "DVA": "Healthcare",
+    "DVAX": "Healthcare",
+    "DVN": "Energy",
+    "DXCM": "Healthcare",
+    "DY": "Industrials",
+    "EA": "Communication Services",
+    "EAT": "Consumer Cyclical",
+    "EB": "Technology",
+    "EBAY": "Consumer Cyclical",
+    "EBC": "Financial Services",
+    "EBR": "Utilities",
+    "ECG": "Industrials",
+    "ED": "Utilities",
+    "EFX": "Industrials",
+    "EHC": "Healthcare",
+    "EIX": "Utilities",
+    "EL": "Consumer Defensive",
+    "ELAN": "Healthcare",
+    "ELS": "Real Estate",
+    "EMN": "Basic Materials",
+    "ENPH": "Energy",
+    "ENS": "Industrials",
+    "ENSG": "Healthcare",
+    "EPAM": "Technology",
+    "EPR": "Real Estate",
+    "EPRT": "Real Estate",
+    "EQH": "Financial Services",
+    "EQR": "Real Estate",
+    "EQT": "Energy",
+    "ERJ": "Industrials",
+    "ES": "Utilities",
+    "ESAB": "Industrials",
+    "ESI": "Basic Materials",
+    "ESTC": "Technology",
+    "ETNB": "Healthcare",
+    "ETR": "Utilities",
+    "ETSY": "Consumer Cyclical",
+    "EVRG": "Utilities",
+    "EW": "Healthcare",
+    "EWBC": "Financial Services",
+    "EXAS": "Healthcare",
+    "EXC": "Utilities",
+    "EXE": "Energy",
+    "EXEL": "Healthcare",
+    "EXLS": "Technology",
+    "EXPD": "Industrials",
+    "EXPE": "Consumer Cyclical",
+    "EXR": "Real Estate",
+    "F": "Consumer Cyclical",
+    "FAF": "Financial Services",
+    "FANG": "Energy",
+    "FAST": "Industrials",
+    "FBIN": "Industrials",
+    "FCN": "Industrials",
+    "FDS": "Financial Services",
+    "FE": "Utilities",
+    "FFIN": "Financial Services",
+    "FFIV": "Technology",
+    "FHN": "Financial Services",
+    "FI": "Technology",
+    "FICO": "Technology",
+    "FISV": "Technology",
+    "FITB": "Financial Services",
+    "FIVE": "Consumer Defensive",
+    "FL": "Consumer Cyclical",
+    "FLG": "Financial Services",
+    "FLR": "Industrials",
+    "FLS": "Industrials",
+    "FNB": "Financial Services",
+    "FND": "Consumer Cyclical",
+    "FNF": "Financial Services",
+    "FOLD": "Healthcare",
+    "FOX": "Communication Services",
+    "FOXA": "Communication Services",
+    "FR": "Real Estate",
+    "FROG": "Technology",
+    "FRT": "Real Estate",
+    "FSLR": "Energy",
+    "FTAI": "Industrials",
+    "FTV": "Industrials",
+    "FWONK": "Communication Services",
+    "FYBR": "Communication Services",
+    "GAP": "Consumer Cyclical",
+    "GBCI": "Financial Services",
+    "GDDY": "Technology",
+    "GEHC": "Healthcare",
+    "GEN": "Technology",
+    "GGG": "Industrials",
+    "GH": "Healthcare",
+    "GIS": "Consumer Defensive",
+    "GKOS": "Healthcare",
+    "GL": "Financial Services",
+    "GLPI": "Real Estate",
+    "GLXY": "Financial Services",
+    "GME": "Consumer Cyclical",
+    "GMED": "Healthcare",
+    "GMS": "Industrials",
+    "GNRC": "Industrials",
+    "GNTX": "Consumer Cyclical",
+    "GPC": "Consumer Cyclical",
+    "GPN": "Financial Services",
+    "GSAT": "Communication Services",
+    "GTES": "Industrials",
+    "GTLB": "Technology",
+    "GTLS": "Industrials",
+    "GVA": "Industrials",
+    "GWRE": "Technology",
+    "GXO": "Industrials",
+    "H": "Consumer Cyclical",
+    "HAL": "Energy",
+    "HALO": "Healthcare",
+    "HAS": "Consumer Cyclical",
+    "HASI": "Financial Services",
+    "HBAN": "Financial Services",
+    "HEI": "Industrials",
+    "HESM": "Energy",
+    "HI": "Industrials",
+    "HIG": "Financial Services",
+    "HIMS": "Healthcare",
+    "HL": "Basic Materials",
+    "HLI": "Financial Services",
+    "HLNE": "Financial Services",
+    "HOLX": "Healthcare",
+    "HOMB": "Financial Services",
+    "HOUS": "Real Estate",
+    "HPE": "Technology",
+    "HPQ": "Technology",
+    "HQY": "Healthcare",
+    "HR": "Real Estate",
+    "HRB": "Consumer Cyclical",
+    "HRL": "Consumer Defensive",
+    "HSIC": "Healthcare",
+    "HST": "Real Estate",
+    "HSY": "Consumer Defensive",
+    "HUBB": "Industrials",
+    "HUBS": "Technology",
+    "HUM": "Healthcare",
+    "HUT": "Financial Services",
+    "HWC": "Financial Services",
+    "HXL": "Industrials",
+    "IBDQ": "Financial Services",
+    "IBP": "Consumer Cyclical",
+    "IBRX": "Healthcare",
+    "IDA": "Utilities",
+    "IDXX": "Healthcare",
+    "IEP": "Industrials",
+    "IEX": "Industrials",
+    "IFF": "Basic Materials",
+    "ILMN": "Healthcare",
+    "IMVT": "Healthcare",
+    "INCY": "Healthcare",
+    "INFA": "Technology",
+    "INGM": "Technology",
+    "INGR": "Consumer Defensive",
+    "INSM": "Healthcare",
+    "INVH": "Real Estate",
+    "IONQ": "Technology",
+    "IONS": "Healthcare",
+    "IOT": "Technology",
+    "IP": "Consumer Cyclical",
+    "IPG": "Communication Services",
+    "IQV": "Healthcare",
+    "IR": "Industrials",
+    "IRDM": "Communication Services",
+    "IRM": "Real Estate",
+    "IT": "Industrials",
+    "ITT": "Industrials",
+    "IVZ": "Financial Services",
+    "J": "Industrials",
+    "JBHT": "Industrials",
+    "JBL": "Technology",
+    "JBTM": "Industrials",
+    "JEF": "Financial Services",
+    "JKHY": "Technology",
+    "JOBY": "Industrials",
+    "JXN": "Financial Services",
+    "KDP": "Consumer Defensive",
+    "KEX": "Industrials",
+    "KEY": "Financial Services",
+    "KEYS": "Technology",
+    "KGS": "Energy",
+    "KHC": "Consumer Defensive",
+    "KIM": "Real Estate",
+    "KMB": "Consumer Defensive",
+    "KMX": "Consumer Cyclical",
+    "KNX": "Industrials",
+    "KR": "Consumer Defensive",
+    "KRG": "Real Estate",
+    "KRMN": "Industrials",
+    "KTOS": "Industrials",
+    "KVUE": "Consumer Defensive",
+    "KYMR": "Healthcare",
+    "L": "Financial Services",
+    "LAMR": "Real Estate",
+    "LAUR": "Consumer Defensive",
+    "LB": "Energy",
+    "LBRT": "Energy",
+    "LDOS": "Technology",
+    "LEA": "Consumer Cyclical",
+    "LECO": "Industrials",
+    "LEGN": "Healthcare",
+    "LEN": "Consumer Cyclical",
+    "LEVI": "Consumer Cyclical",
+    "LFUS": "Technology",
+    "LGND": "Healthcare",
+    "LH": "Healthcare",
+    "LHX": "Industrials",
+    "LII": "Industrials",
+    "LINE": "Real Estate",
+    "LKQ": "Consumer Cyclical",
+    "LNC": "Financial Services",
+    "LNG": "Energy",
+    "LNT": "Utilities",
+    "LNTH": "Healthcare",
+    "LOAR": "Industrials",
+    "LPLA": "Financial Services",
+    "LPX": "Basic Materials",
+    "LQDA": "Healthcare",
+    "LSTR": "Industrials",
+    "LTH": "Consumer Cyclical",
+    "LUMN": "Communication Services",
+    "LUNR": "Industrials",
+    "LUV": "Industrials",
+    "LVS": "Consumer Cyclical",
+    "LW": "Consumer Defensive",
+    "LYB": "Basic Materials",
+    "LYFT": "Technology",
+    "LYV": "Communication Services",
+    "M": "Consumer Cyclical",
+    "MAA": "Real Estate",
+    "MAC": "Real Estate",
+    "MAIN": "Financial Services",
+    "MANH": "Technology",
+    "MARA": "Financial Services",
+    "MAS": "Consumer Cyclical",
+    "MASI": "Healthcare",
+    "MC": "Financial Services",
+    "MDB": "Technology",
+    "MDU": "Industrials",
+    "MET": "Financial Services",
+    "MGM": "Consumer Cyclical",
+    "MGY": "Energy",
+    "MHK": "Consumer Cyclical",
+    "MIDD": "Industrials",
+    "MIR": "Industrials",
+    "MIRM": "Healthcare",
+    "MKC": "Consumer Defensive",
+    "MKSI": "Technology",
+    "MKTX": "Financial Services",
+    "MLM": "Basic Materials",
+    "MOD": "Consumer Cyclical",
+    "MOH": "Healthcare",
+    "MORN": "Financial Services",
+    "MOS": "Basic Materials",
+    "MP": "Basic Materials",
+    "MPLX": "Energy",
+    "MPT": "Real Estate",
+    "MRCY": "Industrials",
+    "MRNA": "Healthcare",
+    "MSCI": "Financial Services",
+    "MSM": "Industrials",
+    "MSTR": "Technology",
+    "MTB": "Financial Services",
+    "MTCH": "Communication Services",
+    "MTDR": "Energy",
+    "MTG": "Financial Services",
+    "MTN": "Consumer Cyclical",
+    "MTZ": "Industrials",
+    "MUR": "Energy",
+    "NBIX": "Healthcare",
+    "NCLH": "Consumer Cyclical",
+    "NDAQ": "Financial Services",
+    "NDSN": "Industrials",
+    "NE": "Energy",
+    "NFG": "Energy",
+    "NI": "Utilities",
+    "NJR": "Utilities",
+    "NLY": "Real Estate",
+    "NNN": "Real Estate",
+    "NOV": "Energy",
+    "NOVT": "Technology",
+    "NRG": "Utilities",
+    "NTAP": "Technology",
+    "NTNX": "Technology",
+    "NTRA": "Healthcare",
+    "NUE": "Basic Materials",
+    "NUVL": "Healthcare",
+    "NWS": "Communication Services",
+    "NWSA": "Communication Services",
+    "NXT": "Technology",
+    "NYT": "Communication Services",
+    "O": "Real Estate",
+    "OBDC": "Financial Services",
+    "OC": "Industrials",
+    "ODFL": "Industrials",
+    "OGE": "Utilities",
+    "OGS": "Utilities",
+    "OHI": "Real Estate",
+    "OKE": "Energy",
+    "OKLO": "Utilities",
+    "OKTA": "Technology",
+    "OLLI": "Consumer Defensive",
+    "OMC": "Communication Services",
+    "OMF": "Financial Services",
+    "ONB": "Financial Services",
+    "ORA": "Utilities",
+    "ORI": "Financial Services",
+    "OSCR": "Healthcare",
+    "OSK": "Industrials",
+    "OTF": "Financial Services",
+    "OTIS": "Industrials",
+    "OUT": "Real Estate",
+    "OVV": "Energy",
+    "OWL": "Financial Services",
+    "OXY": "Energy",
+    "OZK": "Financial Services",
+    "P": "Industrials",
+    "PAA": "Energy",
+    "PACS": "Financial Services",
+    "PAGP": "Energy",
+    "PATH": "Technology",
+    "PAYX": "Industrials",
+    "PB": "Financial Services",
+    "PBF": "Energy",
+    "PCAR": "Industrials",
+    "PCG": "Utilities",
+    "PCOR": "Technology",
+    "PCTY": "Technology",
+    "PCVX": "Healthcare",
+    "PECO": "Real Estate",
+    "PEG": "Utilities",
+    "PEGA": "Technology",
+    "PEN": "Healthcare",
+    "PFG": "Financial Services",
+    "PFGC": "Consumer Defensive",
+    "PHM": "Consumer Cyclical",
+    "PINS": "Communication Services",
+    "PIPR": "Financial Services",
+    "PKG": "Consumer Cyclical",
+    "PL": "Industrials",
+    "PNFP": "Financial Services",
+    "PNW": "Utilities",
+    "PODD": "Healthcare",
+    "POOL": "Industrials",
+    "POR": "Utilities",
+    "POWL": "Industrials",
+    "PPC": "Consumer Defensive",
+    "PPG": "Basic Materials",
+    "PPL": "Utilities",
+    "PR": "Energy",
+    "PRIM": "Industrials",
+    "PRM": "Basic Materials",
+    "PRMB": "Consumer Defensive",
+    "PRU": "Financial Services",
+    "PSA": "Real Estate",
+    "PSKY": "Communication Services",
+    "PSN": "Industrials",
+    "PTC": "Technology",
+    "PTCT": "Healthcare",
+    "PTEN": "Energy",
+    "PTGX": "Healthcare",
+    "PYPL": "Financial Services",
+    "QS": "Consumer Cyclical",
+    "R": "Industrials",
+    "RAL": "Industrials",
+    "RBA": "Industrials",
+    "RBRK": "Technology",
+    "RDDT": "Communication Services",
+    "RDN": "Financial Services",
+    "REG": "Real Estate",
+    "RELY": "Technology",
+    "REXR": "Real Estate",
+    "REYN": "Consumer Cyclical",
+    "RF": "Financial Services",
+    "RGEN": "Healthcare",
+    "RGLD": "Basic Materials",
+    "RGTI": "Technology",
+    "RHP": "Real Estate",
+    "RIOT": "Financial Services",
+    "RITM": "Real Estate",
+    "RIVN": "Consumer Cyclical",
+    "RJF": "Financial Services",
+    "RKT": "Financial Services",
+    "RL": "Consumer Cyclical",
+    "RLI": "Financial Services",
+    "RMD": "Healthcare",
+    "ROAD": "Industrials",
+    "ROK": "Industrials",
+    "ROKU": "Communication Services",
+    "ROL": "Consumer Cyclical",
+    "ROP": "Technology",
+    "RPM": "Basic Materials",
+    "RPRX": "Healthcare",
+    "RRC": "Energy",
+    "RRX": "Industrials",
+    "RSI": "Consumer Cyclical",
+    "RUSHA": "Consumer Cyclical",
+    "RVMD": "Healthcare",
+    "RVTY": "Healthcare",
+    "RYTM": "Healthcare",
+    "S": "Technology",
+    "SAIA": "Industrials",
+    "SAIL": "Technology",
+    "SANM": "Technology",
+    "SARO": "Industrials",
+    "SATS": "Technology",
+    "SBAC": "Real Estate",
+    "SBRA": "Real Estate",
+    "SCI": "Consumer Cyclical",
+    "SEIC": "Financial Services",
+    "SF": "Financial Services",
+    "SFD": "Consumer Defensive",
+    "SFM": "Consumer Defensive",
+    "SGI": "Consumer Defensive",
+    "SIGI": "Financial Services",
+    "SIRI": "Communication Services",
+    "SITE": "Industrials",
+    "SJM": "Consumer Defensive",
+    "SMMT": "Healthcare",
+    "SN": "Consumer Cyclical",
+    "SNDR": "Industrials",
+    "SNEX": "Financial Services",
+    "SNOW": "Technology",
+    "SNX": "Technology",
+    "SOFI": "Financial Services",
+    "SOLV": "Healthcare",
+    "SON": "Consumer Cyclical",
+    "SPHR": "Communication Services",
+    "SPXC": "Industrials",
+    "SR": "Utilities",
+    "SRRK": "Healthcare",
+    "SSB": "Financial Services",
+    "SSNC": "Technology",
+    "SSRM": "Basic Materials",
+    "ST": "Technology",
+    "STAG": "Real Estate",
+    "STEP": "Financial Services",
+    "STLD": "Basic Materials",
+    "STRL": "Industrials",
+    "STT": "Financial Services",
+    "STWD": "Real Estate",
+    "STZ": "Consumer Defensive",
+    "SUI": "Real Estate",
+    "SUN": "Energy",
+    "SWK": "Industrials",
+    "SWX": "Utilities",
+    "SYF": "Financial Services",
+    "SYM": "Industrials",
+    "SYRE": "Healthcare",
+    "SYY": "Consumer Defensive",
+    "TAP": "Consumer Defensive",
+    "TECH": "Healthcare",
+    "TEM": "Healthcare",
+    "TFX": "Healthcare",
+    "TGT": "Consumer Defensive",
+    "TGTX": "Healthcare",
+    "THC": "Healthcare",
+    "TKO": "Communication Services",
+    "TKR": "Industrials",
+    "TLN": "Utilities",
+    "TMHC": "Consumer Cyclical",
+    "TOL": "Consumer Cyclical",
+    "TOST": "Technology",
+    "TPG": "Financial Services",
+    "TPR": "Consumer Cyclical",
+    "TRGP": "Energy",
+    "TRMB": "Technology",
+    "TRNO": "Real Estate",
+    "TROW": "Financial Services",
+    "TRU": "Industrials",
+    "TSCO": "Consumer Cyclical",
+    "TSN": "Consumer Defensive",
+    "TTAN": "Technology",
+    "TTC": "Industrials",
+    "TTD": "Communication Services",
+    "TTEK": "Industrials",
+    "TTMI": "Technology",
+    "TTWO": "Communication Services",
+    "TW": "Financial Services",
+    "TWLO": "Technology",
+    "TXNM": "Utilities",
+    "TXRH": "Consumer Cyclical",
+    "TXT": "Industrials",
+    "TYL": "Technology",
+    "U": "Technology",
+    "UAL": "Industrials",
+    "UBSI": "Financial Services",
+    "UDR": "Real Estate",
+    "UEC": "Energy",
+    "UFPI": "Basic Materials",
+    "UGI": "Utilities",
+    "UHS": "Healthcare",
+    "ULS": "Industrials",
+    "ULTA": "Consumer Cyclical",
+    "UMBF": "Financial Services",
+    "UNM": "Financial Services",
+    "URBN": "Consumer Cyclical",
+    "URI": "Industrials",
+    "USFD": "Consumer Defensive",
+    "UTHR": "Healthcare",
+    "UUUU": "Energy",
+    "VCTR": "Financial Services",
+    "VEEV": "Healthcare",
+    "VFC": "Consumer Cyclical",
+    "VG": "Energy",
+    "VIAV": "Technology",
+    "VICI": "Real Estate",
+    "VICR": "Technology",
+    "VIRT": "Financial Services",
+    "VLTO": "Industrials",
+    "VLY": "Financial Services",
+    "VMC": "Basic Materials",
+    "VNO": "Real Estate",
+    "VNOM": "Energy",
+    "VOYA": "Financial Services",
+    "VRSK": "Technology",
+    "VRSN": "Technology",
+    "VSAT": "Technology",
+    "VST": "Utilities",
+    "VTRS": "Healthcare",
+    "W": "Consumer Cyclical",
+    "WAB": "Industrials",
+    "WAL": "Financial Services",
+    "WAT": "Healthcare",
+    "WBS": "Financial Services",
+    "WCC": "Industrials",
+    "WDAY": "Technology",
+    "WEC": "Utilities",
+    "WES": "Energy",
+    "WEX": "Technology",
+    "WFRD": "Energy",
+    "WH": "Consumer Cyclical",
+    "WLK": "Basic Materials",
+    "WMG": "Communication Services",
+    "WMS": "Industrials",
+    "WPC": "Real Estate",
+    "WRB": "Financial Services",
+    "WSC": "Industrials",
+    "WSM": "Consumer Cyclical",
+    "WSO": "Industrials",
+    "WST": "Healthcare",
+    "WTFC": "Financial Services",
+    "WTRG": "Utilities",
+    "WULF": "Financial Services",
+    "WWD": "Industrials",
+    "WY": "Basic Materials",
+    "WYNN": "Consumer Cyclical",
+    "XEL": "Utilities",
+    "XMTR": "Industrials",
+    "XPO": "Industrials",
+    "XYL": "Industrials",
+    "YOU": "Technology",
+    "YUM": "Consumer Cyclical",
+    "Z": "Communication Services",
+    "ZBH": "Healthcare",
+    "ZBRA": "Technology",
+    "ZETA": "Technology",
+    "ZG": "Communication Services",
+    "ZION": "Financial Services",
+    "ZM": "Technology",
+    "ZS": "Technology",
+    "ZTS": "Healthcare",
+    "ZWS": "Industrials"
+}
+SPEC_ALPHA_BUCKET_MAP = {
+    "A": "MEDIUM",
+    "AA": "MEDIUM",
+    "AAL": "MEDIUM",
+    "AAON": "MEDIUM",
+    "ACA": "MEDIUM",
+    "ACHR": "MEDIUM",
+    "ACI": "MEDIUM",
+    "ACLX": "WEAK_DELISTED",
+    "ACM": "MEDIUM",
+    "ADC": "MEDIUM",
+    "ADM": "MEDIUM",
+    "ADSK": "MEDIUM",
+    "ADT": "MEDIUM",
+    "AEE": "MEDIUM",
+    "AEIS": "MEDIUM",
+    "AES": "MEDIUM",
+    "AFL": "MEDIUM",
+    "AFRM": "MEDIUM",
+    "AGCO": "MEDIUM",
+    "AGNC": "MEDIUM",
+    "AGX": "MEDIUM",
+    "AHR": "MEDIUM",
+    "AIG": "MEDIUM",
+    "AJG": "MEDIUM",
+    "AKAM": "MEDIUM",
+    "AKRO": "WEAK_DELISTED",
+    "AL": "WEAK_DELISTED",
+    "ALB": "MEDIUM",
+    "ALE": "WEAK_DELISTED",
+    "ALEX": "WEAK_DELISTED",
+    "ALGN": "MEDIUM",
+    "ALK": "MEDIUM",
+    "ALL": "MEDIUM",
+    "ALLY": "MEDIUM",
+    "ALNY": "MEDIUM",
+    "ALSN": "MEDIUM",
+    "AM": "MEDIUM",
+    "AMBC": "WEAK_DELISTED",
+    "AME": "MEDIUM",
+    "AMH": "MEDIUM",
+    "AMP": "MEDIUM",
+    "AMRK": "WEAK_DELISTED",
+    "AMTM": "MEDIUM",
+    "AOS": "MEDIUM",
+    "APA": "MEDIUM",
+    "APG": "MEDIUM",
+    "APGE": "MEDIUM",
+    "APLD": "MEDIUM",
+    "APLS": "WEAK_DELISTED",
+    "APPF": "MEDIUM",
+    "AR": "MEDIUM",
+    "ARCC": "MEDIUM",
+    "ARE": "MEDIUM",
+    "ARES": "MEDIUM",
+    "ARMK": "MEDIUM",
+    "AROC": "MEDIUM",
+    "ARW": "MEDIUM",
+    "ARWR": "MEDIUM",
+    "ASB": "MEDIUM",
+    "ASGN": "WEAK_DELISTED",
+    "ASTS": "MEDIUM",
+    "ATGE": "WEAK_DELISTED",
+    "ATI": "MEDIUM",
+    "ATO": "MEDIUM",
+    "ATR": "MEDIUM",
+    "ATUS": "WEAK_DELISTED",
+    "AUB": "MEDIUM",
+    "AUR": "MEDIUM",
+    "AVAV": "MEDIUM",
+    "AVB": "MEDIUM",
+    "AVDL": "WEAK_DELISTED",
+    "AVDX": "WEAK_DELISTED",
+    "AVT": "MEDIUM",
+    "AVTR": "MEDIUM",
+    "AVY": "MEDIUM",
+    "AWK": "MEDIUM",
+    "AXL": "WEAK_DELISTED",
+    "AXON": "MEDIUM",
+    "AXSM": "MEDIUM",
+    "AXTA": "MEDIUM",
+    "AZO": "MEDIUM",
+    "BAH": "MEDIUM",
+    "BALL": "MEDIUM",
+    "BASE": "WEAK_DELISTED",
+    "BAX": "MEDIUM",
+    "BBIO": "MEDIUM",
+    "BBY": "MEDIUM",
+    "BC": "MEDIUM",
+    "BDX": "MEDIUM",
+    "BEN": "MEDIUM",
+    "BEPC": "MEDIUM",
+    "BG": "MEDIUM",
+    "BGC": "MEDIUM",
+    "BIIB": "MEDIUM",
+    "BIPC": "MEDIUM",
+    "BITF": "WEAK_DELISTED",
+    "BJ": "MEDIUM",
+    "BKH": "MEDIUM",
+    "BLD": "MEDIUM",
+    "BLDR": "MEDIUM",
+    "BMRN": "MEDIUM",
+    "BOOT": "MEDIUM",
+    "BPOP": "MEDIUM",
+    "BR": "MEDIUM",
+    "BRFS": "WEAK_DELISTED",
+    "BRKR": "MEDIUM",
+    "BRO": "MEDIUM",
+    "BROS": "MEDIUM",
+    "BRX": "MEDIUM",
+    "BSY": "MEDIUM",
+    "BTSG": "MEDIUM",
+    "BURL": "MEDIUM",
+    "BWA": "MEDIUM",
+    "BWXT": "MEDIUM",
+    "BXP": "MEDIUM",
+    "BYD": "MEDIUM",
+    "CADE": "WEAK_DELISTED",
+    "CAG": "MEDIUM",
+    "CAH": "MEDIUM",
+    "CAR": "MEDIUM",
+    "CARR": "MEDIUM",
+    "CART": "MEDIUM",
+    "CASY": "MEDIUM",
+    "CAVA": "MEDIUM",
+    "CBRE": "MEDIUM",
+    "CBSH": "MEDIUM",
+    "CCCS": "WEAK_DELISTED",
+    "CCI": "MEDIUM",
+    "CCK": "MEDIUM",
+    "CCL": "MEDIUM",
+    "CDE": "MEDIUM",
+    "CDW": "MEDIUM",
+    "CE": "MEDIUM",
+    "CELH": "MEDIUM",
+    "CENX": "MEDIUM",
+    "CF": "MEDIUM",
+    "CFG": "MEDIUM",
+    "CFLT": "WEAK_DELISTED",
+    "CG": "MEDIUM",
+    "CGNX": "MEDIUM",
+    "CGON": "MEDIUM",
+    "CHD": "MEDIUM",
+    "CHDN": "MEDIUM",
+    "CHH": "MEDIUM",
+    "CHRD": "MEDIUM",
+    "CHRW": "MEDIUM",
+    "CHTR": "MEDIUM",
+    "CHWY": "MEDIUM",
+    "CHYM": "MEDIUM",
+    "CIFR": "MEDIUM",
+    "CINF": "MEDIUM",
+    "CIVI": "WEAK_DELISTED",
+    "CLF": "MEDIUM",
+    "CLH": "MEDIUM",
+    "CLX": "MEDIUM",
+    "CMA": "WEAK_DELISTED",
+    "CMC": "MEDIUM",
+    "CMG": "MEDIUM",
+    "CMS": "MEDIUM",
+    "CNA": "MEDIUM",
+    "CNC": "MEDIUM",
+    "CNM": "MEDIUM",
+    "CNP": "MEDIUM",
+    "CNX": "MEDIUM",
+    "COGT": "MEDIUM",
+    "COHR": "MEDIUM",
+    "COIN": "MEDIUM",
+    "COKE": "MEDIUM",
+    "COLB": "MEDIUM",
+    "COMM": "WEAK_DELISTED",
+    "COMP": "MEDIUM",
+    "COO": "MEDIUM",
+    "COOP": "WEAK_DELISTED",
+    "COR": "MEDIUM",
+    "CORT": "MEDIUM",
+    "CORZ": "MEDIUM",
+    "CPAY": "MEDIUM",
+    "CPB": "MEDIUM",
+    "CPRT": "MEDIUM",
+    "CPT": "MEDIUM",
+    "CR": "MEDIUM",
+    "CRBG": "MEDIUM",
+    "CRC": "MEDIUM",
+    "CRCL": "MEDIUM",
+    "CRDO": "MEDIUM",
+    "CRL": "MEDIUM",
+    "CROX": "MEDIUM",
+    "CRS": "MEDIUM",
+    "CRWV": "MEDIUM",
+    "CSGP": "MEDIUM",
+    "CSGS": "WEAK_DELISTED",
+    "CTRE": "MEDIUM",
+    "CTSH": "MEDIUM",
+    "CTVA": "MEDIUM",
+    "CUBE": "MEDIUM",
+    "CUK": "WEAK_DELISTED",
+    "CWAN": "MEDIUM",
+    "CWEN": "MEDIUM",
+    "CWST": "MEDIUM",
+    "CYBR": "WEAK_DELISTED",
+    "CYTK": "MEDIUM",
+    "CZR": "MEDIUM",
+    "D": "MEDIUM",
+    "DAL": "MEDIUM",
+    "DAR": "MEDIUM",
+    "DAY": "WEAK_DELISTED",
+    "DBX": "MEDIUM",
+    "DCI": "MEDIUM",
+    "DD": "MEDIUM",
+    "DECK": "MEDIUM",
+    "DG": "MEDIUM",
+    "DHI": "MEDIUM",
+    "DINO": "MEDIUM",
+    "DKNG": "MEDIUM",
+    "DKS": "MEDIUM",
+    "DLB": "MEDIUM",
+    "DLTR": "MEDIUM",
+    "DOC": "MEDIUM",
+    "DOCN": "MEDIUM",
+    "DOCU": "MEDIUM",
+    "DOOO": "WEAK_DELISTED",
+    "DOV": "MEDIUM",
+    "DOW": "MEDIUM",
+    "DOX": "MEDIUM",
+    "DPZ": "MEDIUM",
+    "DRI": "MEDIUM",
+    "DRS": "MEDIUM",
+    "DT": "MEDIUM",
+    "DTE": "MEDIUM",
+    "DTM": "MEDIUM",
+    "DUOL": "MEDIUM",
+    "DVA": "MEDIUM",
+    "DVAX": "WEAK_DELISTED",
+    "DVN": "MEDIUM",
+    "DXCM": "MEDIUM",
+    "DY": "MEDIUM",
+    "EA": "MEDIUM",
+    "EAT": "MEDIUM",
+    "EB": "WEAK_DELISTED",
+    "EBAY": "MEDIUM",
+    "EBC": "MEDIUM",
+    "EBR": "WEAK_DELISTED",
+    "ECG": "MEDIUM",
+    "ED": "MEDIUM",
+    "EFX": "MEDIUM",
+    "EHC": "MEDIUM",
+    "EIX": "MEDIUM",
+    "EL": "MEDIUM",
+    "ELAN": "MEDIUM",
+    "ELS": "MEDIUM",
+    "EMN": "MEDIUM",
+    "ENPH": "MEDIUM",
+    "ENS": "MEDIUM",
+    "ENSG": "MEDIUM",
+    "EPAM": "MEDIUM",
+    "EPR": "MEDIUM",
+    "EPRT": "MEDIUM",
+    "EQH": "MEDIUM",
+    "EQR": "MEDIUM",
+    "EQT": "MEDIUM",
+    "ERJ": "WEAK_DELISTED",
+    "ES": "MEDIUM",
+    "ESAB": "MEDIUM",
+    "ESI": "MEDIUM",
+    "ESTC": "MEDIUM",
+    "ETNB": "WEAK_DELISTED",
+    "ETR": "MEDIUM",
+    "ETSY": "MEDIUM",
+    "EVRG": "MEDIUM",
+    "EW": "MEDIUM",
+    "EWBC": "MEDIUM",
+    "EXAS": "WEAK_DELISTED",
+    "EXC": "MEDIUM",
+    "EXE": "MEDIUM",
+    "EXEL": "MEDIUM",
+    "EXLS": "MEDIUM",
+    "EXPD": "MEDIUM",
+    "EXPE": "MEDIUM",
+    "EXR": "MEDIUM",
+    "F": "MEDIUM",
+    "FAF": "MEDIUM",
+    "FANG": "MEDIUM",
+    "FAST": "MEDIUM",
+    "FBIN": "MEDIUM",
+    "FCN": "MEDIUM",
+    "FDS": "MEDIUM",
+    "FE": "MEDIUM",
+    "FFIN": "MEDIUM",
+    "FFIV": "MEDIUM",
+    "FHN": "MEDIUM",
+    "FI": "WEAK_DELISTED",
+    "FICO": "MEDIUM",
+    "FISV": "MEDIUM",
+    "FITB": "MEDIUM",
+    "FIVE": "MEDIUM",
+    "FL": "WEAK_DELISTED",
+    "FLG": "MEDIUM",
+    "FLR": "MEDIUM",
+    "FLS": "MEDIUM",
+    "FNB": "MEDIUM",
+    "FND": "MEDIUM",
+    "FNF": "MEDIUM",
+    "FOLD": "WEAK_DELISTED",
+    "FOX": "MEDIUM",
+    "FOXA": "MEDIUM",
+    "FR": "MEDIUM",
+    "FROG": "MEDIUM",
+    "FRT": "MEDIUM",
+    "FSLR": "MEDIUM",
+    "FTAI": "MEDIUM",
+    "FTV": "MEDIUM",
+    "FWONK": "MEDIUM",
+    "FYBR": "WEAK_DELISTED",
+    "GAP": "MEDIUM",
+    "GBCI": "MEDIUM",
+    "GDDY": "MEDIUM",
+    "GEHC": "MEDIUM",
+    "GEN": "MEDIUM",
+    "GGG": "MEDIUM",
+    "GH": "MEDIUM",
+    "GIS": "MEDIUM",
+    "GKOS": "MEDIUM",
+    "GL": "MEDIUM",
+    "GLPI": "MEDIUM",
+    "GLXY": "MEDIUM",
+    "GME": "MEDIUM",
+    "GMED": "MEDIUM",
+    "GMS": "WEAK_DELISTED",
+    "GNRC": "MEDIUM",
+    "GNTX": "MEDIUM",
+    "GPC": "MEDIUM",
+    "GPN": "MEDIUM",
+    "GSAT": "MEDIUM",
+    "GTES": "MEDIUM",
+    "GTLB": "MEDIUM",
+    "GTLS": "MEDIUM",
+    "GVA": "MEDIUM",
+    "GWRE": "MEDIUM",
+    "GXO": "MEDIUM",
+    "H": "MEDIUM",
+    "HAL": "MEDIUM",
+    "HALO": "MEDIUM",
+    "HAS": "MEDIUM",
+    "HASI": "MEDIUM",
+    "HBAN": "MEDIUM",
+    "HEI": "MEDIUM",
+    "HESM": "MEDIUM",
+    "HI": "WEAK_DELISTED",
+    "HIG": "MEDIUM",
+    "HIMS": "MEDIUM",
+    "HL": "MEDIUM",
+    "HLI": "MEDIUM",
+    "HLNE": "MEDIUM",
+    "HOLX": "WEAK_DELISTED",
+    "HOMB": "MEDIUM",
+    "HOUS": "WEAK_DELISTED",
+    "HPE": "MEDIUM",
+    "HPQ": "MEDIUM",
+    "HQY": "MEDIUM",
+    "HR": "MEDIUM",
+    "HRB": "MEDIUM",
+    "HRL": "MEDIUM",
+    "HSIC": "MEDIUM",
+    "HST": "MEDIUM",
+    "HSY": "MEDIUM",
+    "HUBB": "MEDIUM",
+    "HUBS": "MEDIUM",
+    "HUM": "MEDIUM",
+    "HUT": "MEDIUM",
+    "HWC": "MEDIUM",
+    "HXL": "MEDIUM",
+    "IBDQ": "WEAK_DELISTED",
+    "IBP": "MEDIUM",
+    "IBRX": "MEDIUM",
+    "IDA": "MEDIUM",
+    "IDXX": "MEDIUM",
+    "IEP": "MEDIUM",
+    "IEX": "MEDIUM",
+    "IFF": "MEDIUM",
+    "ILMN": "MEDIUM",
+    "IMVT": "MEDIUM",
+    "INCY": "MEDIUM",
+    "INFA": "WEAK_DELISTED",
+    "INGM": "MEDIUM",
+    "INGR": "MEDIUM",
+    "INSM": "MEDIUM",
+    "INVH": "MEDIUM",
+    "IONQ": "MEDIUM",
+    "IONS": "MEDIUM",
+    "IOT": "MEDIUM",
+    "IP": "MEDIUM",
+    "IPG": "WEAK_DELISTED",
+    "IQV": "MEDIUM",
+    "IR": "MEDIUM",
+    "IRDM": "MEDIUM",
+    "IRM": "MEDIUM",
+    "IT": "MEDIUM",
+    "ITT": "MEDIUM",
+    "IVZ": "MEDIUM",
+    "J": "MEDIUM",
+    "JBHT": "MEDIUM",
+    "JBL": "MEDIUM",
+    "JBTM": "MEDIUM",
+    "JEF": "MEDIUM",
+    "JKHY": "MEDIUM",
+    "JOBY": "MEDIUM",
+    "JXN": "MEDIUM",
+    "KDP": "MEDIUM",
+    "KEX": "MEDIUM",
+    "KEY": "MEDIUM",
+    "KEYS": "MEDIUM",
+    "KGS": "MEDIUM",
+    "KHC": "MEDIUM",
+    "KIM": "MEDIUM",
+    "KMB": "MEDIUM",
+    "KMX": "MEDIUM",
+    "KNX": "MEDIUM",
+    "KR": "MEDIUM",
+    "KRG": "MEDIUM",
+    "KRMN": "MEDIUM",
+    "KTOS": "MEDIUM",
+    "KVUE": "MEDIUM",
+    "KYMR": "MEDIUM",
+    "L": "MEDIUM",
+    "LAMR": "MEDIUM",
+    "LAUR": "MEDIUM",
+    "LB": "MEDIUM",
+    "LBRT": "MEDIUM",
+    "LDOS": "MEDIUM",
+    "LEA": "MEDIUM",
+    "LECO": "MEDIUM",
+    "LEGN": "MEDIUM",
+    "LEN": "MEDIUM",
+    "LEVI": "MEDIUM",
+    "LFUS": "MEDIUM",
+    "LGND": "MEDIUM",
+    "LH": "MEDIUM",
+    "LHX": "MEDIUM",
+    "LII": "MEDIUM",
+    "LINE": "MEDIUM",
+    "LKQ": "MEDIUM",
+    "LNC": "MEDIUM",
+    "LNG": "MEDIUM",
+    "LNT": "MEDIUM",
+    "LNTH": "MEDIUM",
+    "LOAR": "MEDIUM",
+    "LPLA": "MEDIUM",
+    "LPX": "MEDIUM",
+    "LQDA": "MEDIUM",
+    "LSTR": "MEDIUM",
+    "LTH": "MEDIUM",
+    "LUMN": "MEDIUM",
+    "LUNR": "MEDIUM",
+    "LUV": "MEDIUM",
+    "LVS": "MEDIUM",
+    "LW": "MEDIUM",
+    "LYB": "MEDIUM",
+    "LYFT": "MEDIUM",
+    "LYV": "MEDIUM",
+    "M": "MEDIUM",
+    "MAA": "MEDIUM",
+    "MAC": "MEDIUM",
+    "MAIN": "MEDIUM",
+    "MANH": "MEDIUM",
+    "MARA": "MEDIUM",
+    "MAS": "MEDIUM",
+    "MASI": "MEDIUM",
+    "MC": "MEDIUM",
+    "MDB": "MEDIUM",
+    "MDU": "MEDIUM",
+    "MET": "MEDIUM",
+    "MGM": "MEDIUM",
+    "MGY": "MEDIUM",
+    "MHK": "MEDIUM",
+    "MIDD": "MEDIUM",
+    "MIR": "MEDIUM",
+    "MIRM": "MEDIUM",
+    "MKC": "MEDIUM",
+    "MKSI": "MEDIUM",
+    "MKTX": "MEDIUM",
+    "MLM": "MEDIUM",
+    "MOD": "MEDIUM",
+    "MOH": "MEDIUM",
+    "MORN": "MEDIUM",
+    "MOS": "MEDIUM",
+    "MP": "MEDIUM",
+    "MPLX": "MEDIUM",
+    "MPT": "MEDIUM",
+    "MRCY": "MEDIUM",
+    "MRNA": "MEDIUM",
+    "MSCI": "MEDIUM",
+    "MSM": "MEDIUM",
+    "MSTR": "MEDIUM",
+    "MTB": "MEDIUM",
+    "MTCH": "MEDIUM",
+    "MTDR": "MEDIUM",
+    "MTG": "MEDIUM",
+    "MTN": "MEDIUM",
+    "MTZ": "MEDIUM",
+    "MUR": "MEDIUM",
+    "NBIX": "MEDIUM",
+    "NCLH": "MEDIUM",
+    "NDAQ": "MEDIUM",
+    "NDSN": "MEDIUM",
+    "NE": "MEDIUM",
+    "NFG": "MEDIUM",
+    "NI": "MEDIUM",
+    "NJR": "MEDIUM",
+    "NLY": "MEDIUM",
+    "NNN": "MEDIUM",
+    "NOV": "MEDIUM",
+    "NOVT": "MEDIUM",
+    "NRG": "MEDIUM",
+    "NTAP": "MEDIUM",
+    "NTNX": "MEDIUM",
+    "NTRA": "MEDIUM",
+    "NUE": "MEDIUM",
+    "NUVL": "MEDIUM",
+    "NWS": "MEDIUM",
+    "NWSA": "MEDIUM",
+    "NXT": "MEDIUM",
+    "NYT": "MEDIUM",
+    "O": "MEDIUM",
+    "OBDC": "MEDIUM",
+    "OC": "MEDIUM",
+    "ODFL": "MEDIUM",
+    "OGE": "MEDIUM",
+    "OGS": "MEDIUM",
+    "OHI": "MEDIUM",
+    "OKE": "MEDIUM",
+    "OKLO": "MEDIUM",
+    "OKTA": "MEDIUM",
+    "OLLI": "MEDIUM",
+    "OMC": "MEDIUM",
+    "OMF": "MEDIUM",
+    "ONB": "MEDIUM",
+    "ORA": "MEDIUM",
+    "ORI": "MEDIUM",
+    "OSCR": "MEDIUM",
+    "OSK": "MEDIUM",
+    "OTF": "MEDIUM",
+    "OTIS": "MEDIUM",
+    "OUT": "MEDIUM",
+    "OVV": "MEDIUM",
+    "OWL": "MEDIUM",
+    "OXY": "MEDIUM",
+    "OZK": "MEDIUM",
+    "P": "MEDIUM",
+    "PAA": "MEDIUM",
+    "PACS": "MEDIUM",
+    "PAGP": "MEDIUM",
+    "PATH": "MEDIUM",
+    "PAYX": "MEDIUM",
+    "PB": "MEDIUM",
+    "PBF": "MEDIUM",
+    "PCAR": "MEDIUM",
+    "PCG": "MEDIUM",
+    "PCOR": "MEDIUM",
+    "PCTY": "MEDIUM",
+    "PCVX": "MEDIUM",
+    "PECO": "MEDIUM",
+    "PEG": "MEDIUM",
+    "PEGA": "MEDIUM",
+    "PEN": "MEDIUM",
+    "PFG": "MEDIUM",
+    "PFGC": "MEDIUM",
+    "PHM": "MEDIUM",
+    "PINS": "MEDIUM",
+    "PIPR": "MEDIUM",
+    "PKG": "MEDIUM",
+    "PL": "MEDIUM",
+    "PNFP": "MEDIUM",
+    "PNW": "MEDIUM",
+    "PODD": "MEDIUM",
+    "POOL": "MEDIUM",
+    "POR": "MEDIUM",
+    "POWL": "MEDIUM",
+    "PPC": "MEDIUM",
+    "PPG": "MEDIUM",
+    "PPL": "MEDIUM",
+    "PR": "MEDIUM",
+    "PRIM": "MEDIUM",
+    "PRM": "MEDIUM",
+    "PRMB": "MEDIUM",
+    "PRU": "MEDIUM",
+    "PSA": "MEDIUM",
+    "PSKY": "MEDIUM",
+    "PSN": "MEDIUM",
+    "PTC": "MEDIUM",
+    "PTCT": "MEDIUM",
+    "PTEN": "MEDIUM",
+    "PTGX": "MEDIUM",
+    "PYPL": "MEDIUM",
+    "QS": "MEDIUM",
+    "R": "MEDIUM",
+    "RAL": "MEDIUM",
+    "RBA": "MEDIUM",
+    "RBRK": "MEDIUM",
+    "RDDT": "MEDIUM",
+    "RDN": "MEDIUM",
+    "REG": "MEDIUM",
+    "RELY": "MEDIUM",
+    "REXR": "MEDIUM",
+    "REYN": "MEDIUM",
+    "RF": "MEDIUM",
+    "RGEN": "MEDIUM",
+    "RGLD": "MEDIUM",
+    "RGTI": "MEDIUM",
+    "RHP": "MEDIUM",
+    "RIOT": "MEDIUM",
+    "RITM": "MEDIUM",
+    "RIVN": "MEDIUM",
+    "RJF": "MEDIUM",
+    "RKT": "MEDIUM",
+    "RL": "MEDIUM",
+    "RLI": "MEDIUM",
+    "RMD": "MEDIUM",
+    "ROAD": "MEDIUM",
+    "ROK": "MEDIUM",
+    "ROKU": "MEDIUM",
+    "ROL": "MEDIUM",
+    "ROP": "MEDIUM",
+    "RPM": "MEDIUM",
+    "RPRX": "MEDIUM",
+    "RRC": "MEDIUM",
+    "RRX": "MEDIUM",
+    "RSI": "MEDIUM",
+    "RUSHA": "MEDIUM",
+    "RVMD": "MEDIUM",
+    "RVTY": "MEDIUM",
+    "RYTM": "MEDIUM",
+    "S": "MEDIUM",
+    "SAIA": "MEDIUM",
+    "SAIL": "MEDIUM",
+    "SANM": "MEDIUM",
+    "SARO": "MEDIUM",
+    "SATS": "MEDIUM",
+    "SBAC": "MEDIUM",
+    "SBRA": "MEDIUM",
+    "SCI": "MEDIUM",
+    "SEIC": "MEDIUM",
+    "SF": "MEDIUM",
+    "SFD": "MEDIUM",
+    "SFM": "MEDIUM",
+    "SGI": "MEDIUM",
+    "SIGI": "MEDIUM",
+    "SIRI": "MEDIUM",
+    "SITE": "MEDIUM",
+    "SJM": "MEDIUM",
+    "SMMT": "MEDIUM",
+    "SN": "MEDIUM",
+    "SNDR": "MEDIUM",
+    "SNEX": "MEDIUM",
+    "SNOW": "MEDIUM",
+    "SNX": "MEDIUM",
+    "SOFI": "MEDIUM",
+    "SOLV": "MEDIUM",
+    "SON": "MEDIUM",
+    "SPHR": "MEDIUM",
+    "SPXC": "MEDIUM",
+    "SR": "MEDIUM",
+    "SRRK": "MEDIUM",
+    "SSB": "MEDIUM",
+    "SSNC": "MEDIUM",
+    "SSRM": "MEDIUM",
+    "ST": "MEDIUM",
+    "STAG": "MEDIUM",
+    "STEP": "MEDIUM",
+    "STLD": "MEDIUM",
+    "STRL": "MEDIUM",
+    "STT": "MEDIUM",
+    "STWD": "MEDIUM",
+    "STZ": "MEDIUM",
+    "SUI": "MEDIUM",
+    "SUN": "MEDIUM",
+    "SWK": "MEDIUM",
+    "SWX": "MEDIUM",
+    "SYF": "MEDIUM",
+    "SYM": "MEDIUM",
+    "SYRE": "MEDIUM",
+    "SYY": "MEDIUM",
+    "TAP": "MEDIUM",
+    "TECH": "MEDIUM",
+    "TEM": "MEDIUM",
+    "TFX": "MEDIUM",
+    "TGT": "MEDIUM",
+    "TGTX": "MEDIUM",
+    "THC": "MEDIUM",
+    "TKO": "MEDIUM",
+    "TKR": "MEDIUM",
+    "TLN": "MEDIUM",
+    "TMHC": "MEDIUM",
+    "TOL": "MEDIUM",
+    "TOST": "MEDIUM",
+    "TPG": "MEDIUM",
+    "TPR": "MEDIUM",
+    "TRGP": "MEDIUM",
+    "TRMB": "MEDIUM",
+    "TRNO": "MEDIUM",
+    "TROW": "MEDIUM",
+    "TRU": "MEDIUM",
+    "TSCO": "MEDIUM",
+    "TSN": "MEDIUM",
+    "TTAN": "MEDIUM",
+    "TTC": "MEDIUM",
+    "TTD": "MEDIUM",
+    "TTEK": "MEDIUM",
+    "TTMI": "MEDIUM",
+    "TTWO": "MEDIUM",
+    "TW": "MEDIUM",
+    "TWLO": "MEDIUM",
+    "TXNM": "MEDIUM",
+    "TXRH": "MEDIUM",
+    "TXT": "MEDIUM",
+    "TYL": "MEDIUM",
+    "U": "MEDIUM",
+    "UAL": "MEDIUM",
+    "UBSI": "MEDIUM",
+    "UDR": "MEDIUM",
+    "UEC": "MEDIUM",
+    "UFPI": "MEDIUM",
+    "UGI": "MEDIUM",
+    "UHS": "MEDIUM",
+    "ULS": "MEDIUM",
+    "ULTA": "MEDIUM",
+    "UMBF": "MEDIUM",
+    "UNM": "MEDIUM",
+    "URBN": "MEDIUM",
+    "URI": "MEDIUM",
+    "USFD": "MEDIUM",
+    "UTHR": "MEDIUM",
+    "UUUU": "MEDIUM",
+    "VCTR": "MEDIUM",
+    "VEEV": "MEDIUM",
+    "VFC": "MEDIUM",
+    "VG": "MEDIUM",
+    "VIAV": "MEDIUM",
+    "VICI": "MEDIUM",
+    "VICR": "MEDIUM",
+    "VIRT": "MEDIUM",
+    "VLTO": "MEDIUM",
+    "VLY": "MEDIUM",
+    "VMC": "MEDIUM",
+    "VNO": "MEDIUM",
+    "VNOM": "MEDIUM",
+    "VOYA": "MEDIUM",
+    "VRSK": "MEDIUM",
+    "VRSN": "MEDIUM",
+    "VSAT": "MEDIUM",
+    "VST": "MEDIUM",
+    "VTRS": "MEDIUM",
+    "W": "MEDIUM",
+    "WAB": "MEDIUM",
+    "WAL": "MEDIUM",
+    "WAT": "MEDIUM",
+    "WBS": "MEDIUM",
+    "WCC": "MEDIUM",
+    "WDAY": "MEDIUM",
+    "WEC": "MEDIUM",
+    "WES": "MEDIUM",
+    "WEX": "MEDIUM",
+    "WFRD": "MEDIUM",
+    "WH": "MEDIUM",
+    "WLK": "MEDIUM",
+    "WMG": "MEDIUM",
+    "WMS": "MEDIUM",
+    "WPC": "MEDIUM",
+    "WRB": "MEDIUM",
+    "WSC": "MEDIUM",
+    "WSM": "MEDIUM",
+    "WSO": "MEDIUM",
+    "WST": "MEDIUM",
+    "WTFC": "MEDIUM",
+    "WTRG": "MEDIUM",
+    "WULF": "MEDIUM",
+    "WWD": "MEDIUM",
+    "WY": "MEDIUM",
+    "WYNN": "MEDIUM",
+    "XEL": "MEDIUM",
+    "XMTR": "MEDIUM",
+    "XPO": "MEDIUM",
+    "XYL": "MEDIUM",
+    "YOU": "MEDIUM",
+    "YUM": "MEDIUM",
+    "Z": "MEDIUM",
+    "ZBH": "MEDIUM",
+    "ZBRA": "MEDIUM",
+    "ZETA": "MEDIUM",
+    "ZG": "MEDIUM",
+    "ZION": "MEDIUM",
+    "ZM": "MEDIUM",
+    "ZS": "MEDIUM",
+    "ZTS": "MEDIUM",
+    "ZWS": "MEDIUM"
+}
+SPEC_ALPHA_CRYPTO_TICKERS = set([
+    "BITF",
+    "CIFR",
+    "COIN",
+    "HUT",
+    "MARA",
+    "MSTR",
+    "RIOT",
+    "WULF"
+])
+
+_old_init_db = init_db
+_old_compute_equity_snapshot_data = compute_equity_snapshot_data
+_old_dynamic_portfolio_allocation_targets = dynamic_portfolio_allocation_targets
+_old_format_combined_portfolio_report = format_combined_portfolio_report
+_old_sleeve_performance_summary = sleeve_performance_summary
+_old_realized_performance_all_time = realized_performance_all_time
+_old_maybe_send_wealth_core_signal = maybe_send_wealth_core_signal
+_old_handle_command = handle_command
+
+
+def init_db() -> None:
+    _old_init_db()
+    conn = db_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS spec_positions (
+                ticker TEXT PRIMARY KEY,
+                spec_position_id TEXT NOT NULL UNIQUE,
+                strategy_version TEXT NOT NULL,
+                shares REAL NOT NULL CHECK (shares > 0),
+                avg_entry_price REAL NOT NULL CHECK (avg_entry_price > 0),
+                cost_basis REAL NOT NULL CHECK (cost_basis >= 0),
+                entry_time REAL NOT NULL,
+                last_update_time REAL NOT NULL,
+                highest REAL,
+                sleeve TEXT NOT NULL DEFAULT 'SPEC_ALPHA',
+                target_account_pct REAL,
+                last_plan_id TEXT,
+                notes TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS spec_trades (
+                id TEXT PRIMARY KEY,
+                spec_position_id TEXT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+                shares REAL NOT NULL CHECK (shares > 0),
+                price REAL NOT NULL CHECK (price > 0),
+                amount REAL NOT NULL,
+                realized_profit REAL,
+                time REAL NOT NULL,
+                strategy_version TEXT NOT NULL,
+                plan_id TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_spec_trades_ticker ON spec_trades(ticker);
+            CREATE INDEX IF NOT EXISTS idx_spec_trades_time ON spec_trades(time);
+
+            CREATE TABLE IF NOT EXISTS spec_signals (
+                id TEXT PRIMARY KEY,
+                time REAL NOT NULL,
+                plan_date TEXT NOT NULL,
+                market_regime TEXT NOT NULL,
+                account_equity REAL NOT NULL,
+                spec_target_pct REAL NOT NULL,
+                plan_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_spec_signals_time ON spec_signals(time);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def row_to_spec_position(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "ticker": row["ticker"],
+        "spec_position_id": row["spec_position_id"],
+        "strategy_version": row["strategy_version"],
+        "shares": float(row["shares"]),
+        "avg_entry_price": float(row["avg_entry_price"]),
+        "cost_basis": float(row["cost_basis"]),
+        "entry_time": float(row["entry_time"]),
+        "last_update_time": float(row["last_update_time"]),
+        "highest": None if row["highest"] is None else float(row["highest"]),
+        "sleeve": row["sleeve"],
+        "target_account_pct": None if row["target_account_pct"] is None else float(row["target_account_pct"]),
+        "last_plan_id": row["last_plan_id"],
+        "notes": row["notes"],
+    }
+
+
+def load_spec_positions() -> Dict[str, Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM spec_positions ORDER BY ticker").fetchall()
+        return {row["ticker"]: row_to_spec_position(row) for row in rows}
+    finally:
+        conn.close()
+
+
+def load_spec_trades() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM spec_trades ORDER BY time ASC, created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def load_latest_spec_plan() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM spec_signals WHERE status = 'ACTIVE' ORDER BY time DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["plan"] = json_loads_dict(data.get("plan_json"))
+        return data
+    finally:
+        conn.close()
+
+
+def save_spec_plan_signal(plan: Dict[str, Any]) -> str:
+    plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
+    plan = dict(plan)
+    plan["plan_id"] = plan_id
+    with db_tx() as conn:
+        conn.execute("UPDATE spec_signals SET status = 'SUPERSEDED' WHERE status = 'ACTIVE'")
+        conn.execute(
+            """
+            INSERT INTO spec_signals(
+                id, time, plan_date, market_regime, account_equity,
+                spec_target_pct, plan_json, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """,
+            (
+                plan_id,
+                now_ts(),
+                ny_date_str(),
+                str(plan.get("market", "UNKNOWN")),
+                float(plan.get("account_equity", 0) or 0),
+                float(plan.get("target_spec_account_pct", 0) or 0),
+                json_dumps(plan),
+            ),
+        )
+    return plan_id
+
+
+def spec_alpha_market_filter_ok() -> bool:
+    if not SPEC_ALPHA_REQUIRE_SPY_ABOVE_MA200:
+        return True
+    try:
+        df = get_historical("SPY", limit=240)
+        if df is None or df.empty or len(df) < 210:
+            return False
+        price = float(df["Close"].iloc[-1])
+        ma200 = float(df["Close"].rolling(200).mean().iloc[-1])
+        return price > ma200
+    except Exception as exc:
+        print(f"[SPEC MARKET FILTER ERROR] {exc}")
+        return False
+
+
+def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
+    try:
+        df = get_historical(ticker, limit=280)
+        if df is None or df.empty or len(df) < 210:
+            return None
+        close = df["Close"]
+        volume = df["Volume"]
+        price = float(close.iloc[-1])
+        if price < SPEC_ALPHA_MIN_PRICE:
+            return None
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        if SPEC_ALPHA_REQUIRE_STOCK_ABOVE_MA200 and price <= ma200:
+            return None
+        roc21 = pct_change_last(df, 21)
+        roc63 = pct_change_last(df, 63)
+        roc126 = pct_change_last(df, 126)
+        vol63 = realized_vol_last(df, 63)
+        avg_dv = float((close * volume).rolling(20).mean().iloc[-1])
+        if roc21 is None or roc63 is None or roc126 is None or vol63 is None:
+            return None
+        if avg_dv < SPEC_ALPHA_MIN_AVG_DOLLAR_VOLUME:
+            return None
+        if SPEC_ALPHA_SCORE_MODE == "mom20":
+            score = (0.58 * roc21) + (0.30 * roc63) + (0.12 * roc126) - (0.18 * vol63)
+        else:
+            score = (0.58 * roc63) + (0.27 * roc21) + (0.15 * roc126) - (0.20 * vol63)
+        sector = SPEC_ALPHA_SECTOR_MAP.get(ticker, "Unknown")
+        bucket = SPEC_ALPHA_BUCKET_MAP.get(ticker, "UNKNOWN")
+        inv_vol = 1.0 / max(float(vol63), 0.04)
+        weight_score = inv_vol * max(0.0001, score + 0.20)
+        return {
+            "ticker": ticker,
+            "sector": sector,
+            "bucket": bucket,
+            "price": round(price, 2),
+            "ma200": round(ma200, 2),
+            "roc_1m_pct": round(roc21 * 100, 2),
+            "roc_3m_pct": round(roc63 * 100, 2),
+            "roc_6m_pct": round(roc126 * 100, 2),
+            "vol_3m_pct": round(vol63 * 100, 2),
+            "avg_dollar_volume": round(avg_dv, 2),
+            "score": round(float(score), 6),
+            "weight_score": round(float(weight_score), 6),
+            "is_crypto": ticker in SPEC_ALPHA_CRYPTO_TICKERS,
+        }
+    except Exception as exc:
+        print(f"[SPEC SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def select_spec_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    selected: List[Dict[str, Any]] = []
+    sector_counts: Dict[str, int] = {}
+    crypto_count = 0
+    for item in scored:
+        sector = str(item.get("sector", "Unknown"))
+        is_crypto = bool(item.get("is_crypto"))
+        if is_crypto and crypto_count >= SPEC_ALPHA_MAX_CRYPTO_NAMES:
+            continue
+        if sector_counts.get(sector, 0) >= SPEC_ALPHA_MAX_PER_SECTOR:
+            continue
+        selected.append(item)
+        sector_counts[sector] = sector_counts.get(sector, 0) + 1
+        if is_crypto:
+            crypto_count += 1
+        if len(selected) >= SPEC_ALPHA_TOP_N:
+            break
+    return selected
+
+
+def assign_spec_alpha_weights(top: List[Dict[str, Any]], spec_account_pct: float) -> List[Dict[str, Any]]:
+    if not top:
+        return []
+    raw = [max(0.0001, float(x.get("weight_score", 0.0001) or 0.0001)) for x in top]
+    total = sum(raw)
+    weights = [x / total for x in raw] if total > 0 else [1.0 / len(top)] * len(top)
+    cap = clamp_float(SPEC_ALPHA_MAX_SINGLE_ASSET_PCT, 0.05, 0.80)
+    floor = clamp_float(SPEC_ALPHA_MIN_SINGLE_ASSET_PCT, 0.00, cap)
+    weights = [min(cap, max(0.0, w)) for w in weights]
+    total = sum(weights)
+    if total > 0:
+        weights = [w / total for w in weights]
+    if floor > 0 and floor * len(weights) <= 0.90:
+        weights = [max(floor, w) for w in weights]
+        total = sum(weights)
+        if total > 0:
+            weights = [w / total for w in weights]
+    enriched = []
+    for item, sleeve_weight in zip(top, weights):
+        row = dict(item)
+        row["target_spec_pct"] = round(sleeve_weight * 100, 2)
+        row["target_account_pct"] = round(sleeve_weight * spec_account_pct * 100, 2)
+        enriched.append(row)
+    return enriched
+
+
+def spec_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    positions = load_spec_positions()
+    tickers = list(positions.keys())
+    prices = prices or get_prices_batch(tickers)
+    rows: List[Dict[str, Any]] = []
+    total_value = 0.0
+    total_cost = 0.0
+    total_unrealized = 0.0
+    for ticker, pos in positions.items():
+        mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or pos.get("avg_entry_price", 0))
+        shares = float(pos.get("shares", 0) or 0)
+        value = shares * mark
+        cost = float(pos.get("cost_basis", 0) or 0)
+        unrealized = value - cost
+        total_value += value
+        total_cost += cost
+        total_unrealized += unrealized
+        rows.append({
+            **pos,
+            "mark_price": round(mark, 4),
+            "market_value": round(value, 2),
+            "unrealized_profit": round(unrealized, 2),
+            "unrealized_pct": None if cost <= 0 else round((unrealized / cost) * 100, 2),
+        })
+    realized = sum(float(t.get("realized_profit") or 0.0) for t in load_spec_trades() if str(t.get("side")).upper() == "SELL")
+    return {"positions": positions, "rows": rows, "value": round(total_value, 2), "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2), "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
+
+
+def compute_spec_alpha_plan() -> Dict[str, Any]:
+    refresh_portfolio()
+    allocation = dynamic_portfolio_allocation_targets()
+    current_regime = str(allocation.get("market", market_condition()))
+    risk = allocation.get("risk_guard", {}) or {}
+    market_ok = spec_alpha_market_filter_ok()
+    snapshot = compute_equity_snapshot_data()
+    account_equity = float(snapshot.get("equity", 0) or 0)
+    spec_account_pct = 0.0
+    if SPEC_ALPHA_ENABLED and market_ok and not risk.get("hard_active"):
+        spec_account_pct = float(allocation.get("spec_alpha_pct", SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
+    scored: List[Dict[str, Any]] = []
+    if spec_account_pct > 0:
+        for idx, ticker in enumerate(SPEC_ALPHA_UNIVERSE, start=1):
+            item = spec_alpha_score_ticker(ticker)
+            if item is not None:
+                scored.append(item)
+            if SPEC_ALPHA_SCORE_SLEEP_SEC > 0 and idx % 20 == 0:
+                time.sleep(SPEC_ALPHA_SCORE_SLEEP_SEC)
+    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    selected = select_spec_alpha_assets(scored)
+    top = assign_spec_alpha_weights(selected, spec_account_pct)
+    sleeve_value = account_equity * spec_account_pct
+    spec_details = spec_position_market_value_details() if SPEC_ALPHA_LEDGER_ENABLED else {"rows": [], "value": 0.0}
+    current_rows = {str(row.get("ticker", "")).upper(): row for row in spec_details.get("rows", [])}
+    selected_tickers = {str(item.get("ticker", "")).upper() for item in top}
+    actions: List[Dict[str, Any]] = []
+    for rank, item in enumerate(top, start=1):
+        ticker = str(item["ticker"]).upper()
+        target_value = account_equity * (float(item.get("target_account_pct", 0) or 0) / 100.0)
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        drift = target_value - current_value
+        threshold = max(SPEC_ALPHA_ACTION_DOLLAR_THRESHOLD, account_equity * SPEC_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT)
+        if current_value <= 0 and target_value >= SPEC_ALPHA_ACTION_DOLLAR_THRESHOLD:
+            action = "BUY"
+        elif drift >= threshold:
+            action = "ADD"
+        elif drift <= -threshold:
+            action = "TRIM"
+        else:
+            action = "HOLD"
+        actions.append({"rank": rank, "ticker": ticker, "action": action, "sector": item.get("sector"), "bucket": item.get("bucket"), "score": item.get("score"), "price": item.get("price"), "target_account_pct": item.get("target_account_pct"), "target_spec_pct": item.get("target_spec_pct"), "target_value": round(target_value, 2), "current_value": round(current_value, 2), "suggested_dollars": round(abs(drift), 2), "drift_dollars": round(drift, 2), "drift_pct_account": 0.0 if account_equity <= 0 else round((drift / account_equity) * 100, 2), "roc_1m_pct": item.get("roc_1m_pct"), "roc_3m_pct": item.get("roc_3m_pct"), "roc_6m_pct": item.get("roc_6m_pct"), "vol_3m_pct": item.get("vol_3m_pct"), "is_crypto": item.get("is_crypto")})
+    scored_map = {str(item.get("ticker", "")).upper(): item for item in scored}
+    for ticker, row in current_rows.items():
+        if ticker in selected_tickers:
+            continue
+        score_item = scored_map.get(ticker)
+        if not market_ok:
+            reason = "SPY/market filter failed; monthly SPEC_ALPHA rotation should move to cash."
+        elif spec_account_pct <= 0:
+            reason = "SPEC_ALPHA allocation is currently zero by risk/allocation guard."
+        elif score_item is None:
+            reason = "Lost MA200/trend/liquidity qualification."
+        else:
+            reason = "Dropped out of selected monthly SPEC_ALPHA top list."
+        current_value = float(row.get("market_value", 0.0) or 0.0)
+        actions.append({"rank": None, "ticker": ticker, "action": "SELL", "sector": SPEC_ALPHA_SECTOR_MAP.get(ticker, "Unknown"), "bucket": SPEC_ALPHA_BUCKET_MAP.get(ticker, "UNKNOWN"), "score": None if score_item is None else score_item.get("score"), "price": row.get("mark_price"), "target_account_pct": 0.0, "target_spec_pct": 0.0, "target_value": 0.0, "current_value": round(current_value, 2), "suggested_dollars": round(current_value, 2), "drift_dollars": round(-current_value, 2), "drift_pct_account": None if account_equity <= 0 else round((-current_value / account_equity) * 100, 2), "reason": reason})
+    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
+    return {"plan_id": uuid.uuid4().hex, "strategy_version": "spec_alpha_v3_7_monthly_momentum", "private_only": False, "public_allowed": True, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "market": current_regime, "market_ok": market_ok, "score_mode": SPEC_ALPHA_SCORE_MODE, "top_n": SPEC_ALPHA_TOP_N, "universe_size": len(SPEC_ALPHA_UNIVERSE), "scored_count": len(scored), "target_spec_account_pct": round(spec_account_pct * 100, 2), "target_spec_value": round(sleeve_value, 2), "current_spec_value": round(float(spec_details.get("value", 0.0) or 0.0), 2), "current_spec_cost_basis": round(float(spec_details.get("cost_basis", 0.0) or 0.0), 2), "current_spec_unrealized_profit": round(float(spec_details.get("unrealized_profit", 0.0) or 0.0), 2), "account_equity": round(account_equity, 2), "allocation": allocation, "risk_guard": risk, "top": top, "actions": actions, "actionable": actionable, "all_scored": scored[:100]}
+
+
+def current_spec_plan_for_validation() -> Dict[str, Any]:
+    latest = load_latest_spec_plan()
+    if latest is not None:
+        try:
+            age_days = (now_ts() - float(latest.get("time", 0))) / 86400
+            plan = latest.get("plan") or {}
+            if age_days <= SPEC_ALPHA_PLAN_VALID_DAYS and plan:
+                return plan
+        except Exception:
+            pass
+    plan = compute_spec_alpha_plan()
+    save_spec_plan_signal(plan)
+    return plan
+
+
+def latest_spec_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {str(item.get("ticker", "")).upper(): item for item in plan.get("actions", []) if item.get("ticker")}
+
+
+def spec_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker = ticker.upper()
+    for item in plan.get("top", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def validate_spec_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
+    if not SPEC_ALPHA_REQUIRE_LIVE_QUOTE:
+        return True, "Quote check disabled", None
+    quotes = get_prices_batch([ticker])
+    quote = quotes.get(ticker)
+    if quote is None or quote <= 0:
+        return False, "Live quote unavailable for SPEC_ALPHA trade.", None
+    deviation = abs(price - quote) / quote
+    if deviation > SPEC_ALPHA_QUOTE_DEVIATION_LIMIT:
+        return False, f"SPEC_ALPHA trade rejected: price too far from live quote.\nLive quote: {round(quote, 2)}\nYour price: {round(price, 2)}\nMax deviation: {round(SPEC_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%", quote
+    return True, "OK", quote
+
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not SPEC_ALPHA_LEDGER_ENABLED:
+        return False, "SPEC_ALPHA ledger is disabled."
+    if ticker not in SPEC_ALPHA_UNIVERSE:
+        return False, f"{ticker} is not in the SPEC_ALPHA universe."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "SPEC_ALPHA shares must be positive and finite."
+    if (not SPEC_ALPHA_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
+        return False, "Fractional SPEC_ALPHA shares are disabled."
+    if not is_finite_positive(price):
+        return False, "SPEC_ALPHA price must be positive and finite."
+    amount = shares * price
+    if amount < SPEC_ALPHA_MIN_TRADE_DOLLARS:
+        return False, f"SPEC_ALPHA trade amount is below minimum {format_money(SPEC_ALPHA_MIN_TRADE_DOLLARS)}."
+    plan = current_spec_plan_for_validation()
+    target = spec_target_for_ticker(plan, ticker)
+    action = latest_spec_plan_action_map(plan).get(ticker)
+    if SPEC_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY:
+        if target is None:
+            allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", [])[:SPEC_ALPHA_TOP_N])
+            return False, f"SPEC_ALPHA buy rejected: {ticker} is not in active spec plan. Current top: {allowed or 'none'}"
+        if action and str(action.get("action", "")).upper() in {"TRIM", "SELL", "AVOID"}:
+            return False, f"SPEC_ALPHA buy rejected: current plan action for {ticker} is {action.get('action')}."
+    ok, msg, quote = validate_spec_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash:
+            mark_update_processed_tx(conn, update_id, "rejected_spec_insufficient_cash")
+            return False, "Not enough cash for SPEC_ALPHA buy."
+        row = conn.execute("SELECT * FROM spec_positions WHERE ticker = ?", (ticker,)).fetchone()
+        now = now_ts()
+        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+        plan_id = str(plan.get("plan_id"))
+        if row is None:
+            spec_position_id = f"SPEC_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
+            conn.execute("""
+                INSERT INTO spec_positions(ticker, spec_position_id, strategy_version, shares, avg_entry_price, cost_basis, entry_time, last_update_time, highest, sleeve, target_account_pct, last_plan_id, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'SPEC_ALPHA', ?, ?, '')
+            """, (ticker, spec_position_id, "spec_alpha_v3_7_monthly_momentum", round(shares, 8), round(price, 6), round(amount, 6), now, now, round(price, 6), target_pct, plan_id))
+        else:
+            pos = row_to_spec_position(row)
+            spec_position_id = pos["spec_position_id"]
+            old_shares = float(pos["shares"])
+            old_cost = float(pos["cost_basis"])
+            new_shares = old_shares + shares
+            new_cost = old_cost + amount
+            avg_price = new_cost / new_shares
+            highest = max(float(pos.get("highest") or price), price)
+            conn.execute("""
+                UPDATE spec_positions SET shares = ?, avg_entry_price = ?, cost_basis = ?, last_update_time = ?, highest = ?, target_account_pct = ?, last_plan_id = ?, strategy_version = ? WHERE ticker = ?
+            """, (round(new_shares, 8), round(avg_price, 6), round(new_cost, 6), now, round(highest, 6), target_pct, plan_id, "spec_alpha_v3_7_monthly_momentum", ticker))
+        conn.execute("""
+            INSERT INTO spec_trades(id, spec_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+        """, (uuid.uuid4().hex, spec_position_id, ticker, round(shares, 8), round(price, 6), round(amount, 6), now, "spec_alpha_v3_7_monthly_momentum", plan_id, "spec_plan_buy", now))
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "processed_spec_buy")
+    refresh_portfolio()
+    audit("SPEC_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
+    return True, f"⚡ SPEC_ALPHA BUY RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if action is None else action.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(portfolio['cash'])}"
+
+
+def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not SPEC_ALPHA_LEDGER_ENABLED:
+        return False, "SPEC_ALPHA ledger is disabled."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "SPEC_ALPHA shares must be positive and finite."
+    if not is_finite_positive(price):
+        return False, "SPEC_ALPHA price must be positive and finite."
+    ok, msg, quote = validate_spec_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    plan = current_spec_plan_for_validation()
+    action = latest_spec_plan_action_map(plan).get(ticker)
+    with db_tx() as conn:
+        row = conn.execute("SELECT * FROM spec_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            mark_update_processed_tx(conn, update_id, "rejected_spec_no_position")
+            return False, "No SPEC_ALPHA position to sell."
+        pos = row_to_spec_position(row)
+        current_shares = float(pos["shares"])
+        if shares - current_shares > CORE_POSITION_EPSILON:
+            mark_update_processed_tx(conn, update_id, "rejected_spec_too_many_shares")
+            return False, f"You only have {format_core_shares(current_shares)} SPEC_ALPHA shares of {ticker}."
+        shares = min(shares, current_shares)
+        avg = float(pos["avg_entry_price"])
+        proceeds = shares * price
+        realized_profit = (price - avg) * shares
+        remaining = current_shares - shares
+        now = now_ts()
+        plan_id = str(plan.get("plan_id"))
+        conn.execute("""
+            INSERT INTO spec_trades(id, spec_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (uuid.uuid4().hex, pos["spec_position_id"], ticker, round(shares, 8), round(price, 6), round(proceeds, 6), round(realized_profit, 6), now, "spec_alpha_v3_7_monthly_momentum", plan_id, "spec_plan_sell", now))
+        if remaining <= CORE_POSITION_EPSILON:
+            conn.execute("DELETE FROM spec_positions WHERE ticker = ?", (ticker,))
+        else:
+            new_cost = avg * remaining
+            target = spec_target_for_ticker(plan, ticker)
+            target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+            conn.execute("UPDATE spec_positions SET shares = ?, cost_basis = ?, last_update_time = ?, target_account_pct = ?, last_plan_id = ? WHERE ticker = ?", (round(remaining, 8), round(new_cost, 6), now, target_pct, plan_id, ticker))
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + proceeds)
+        mark_update_processed_tx(conn, update_id, "processed_spec_sell")
+    refresh_portfolio()
+    audit("SPEC_SELL", f"{ticker} shares={shares} price={price} proceeds={proceeds} profit={realized_profit}")
+    return True, f"⚡ SPEC_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized SPEC_ALPHA P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}"
+
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
+    """
+    V3.7 aggressive 45/15/40 allocation map.
+
+    User-selected normal target mix:
+      - 45% core wealth rotation
+      - 15% tactical VCP/bear sleeve
+      - 40% SPEC_ALPHA medium/weak monthly momentum rotation
+
+    This is the final aggressive-growth allocation: SPEC_ALPHA is the main
+    return engine, core wealth remains the stabilizer, and VCP/bear remains
+    the tactical signal sleeve. Hard drawdown mode still pauses new
+    tactical/spec exposure and moves the difference to cash.
+    """
+    base = _old_dynamic_portfolio_allocation_targets()
+    risk = base.get("risk_guard", {}) or {}
+    market = str(base.get("market", "UNCERTAIN"))
+    bear_score = int(base.get("bear_score", 0) or 0)
+
+    core_pct = round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2)
+    spec_full_pct = round(SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100, 2) if SPEC_ALPHA_ENABLED else 0.0
+    tactical_total_pct = 15.0
+
+    if risk.get("hard_active"):
+        spec_pct = 0.0
+        long_vcp = 0.0
+        bear = 0.0
+        cash = max(0.0, 100.0 - core_pct)
+    elif market == "BEAR":
+        # SPEC_ALPHA uses a SPY/MA200 risk-on filter, so in bear regimes its
+        # target moves to cash while the tactical bucket becomes bear sleeve.
+        spec_pct = 0.0
+        long_vcp = 0.0
+        bear = tactical_total_pct if BEAR_SLEEVE_ENABLED else 0.0
+        cash = max(0.0, 100.0 - core_pct - bear)
+    elif market == "UNCERTAIN":
+        spec_pct = spec_full_pct
+        if BEAR_SLEEVE_ENABLED and bear_score >= BEAR_EXIT_SCORE:
+            long_vcp = 10.0
+            bear = 5.0
+        else:
+            long_vcp = 15.0
+            bear = 0.0
+        cash = max(0.0, 100.0 - core_pct - spec_pct - long_vcp - bear)
+    else:
+        spec_pct = spec_full_pct
+        long_vcp = tactical_total_pct
+        bear = 0.0
+        cash = max(0.0, 100.0 - core_pct - spec_pct - long_vcp - bear)
+
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        # Soft drawdown mode keeps core intact but halves aggressive sleeves.
+        reduced_spec = spec_pct * 0.5
+        reduced_long = long_vcp * 0.5
+        reduced_bear = bear * 0.75
+        cash += (spec_pct - reduced_spec) + (long_vcp - reduced_long) + (bear - reduced_bear)
+        spec_pct, long_vcp, bear = reduced_spec, reduced_long, reduced_bear
+
+    base["strategy_version"] = "v3_7_aggressive_45_15_40_dynamic_allocation"
+    base["core_wealth_pct"] = round(core_pct, 2)
+    base["spec_alpha_pct"] = round(spec_pct, 2)
+    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
+    base["bear_inverse_tactical_pct"] = round(bear, 2)
+    base["cash_reserve_pct"] = round(cash, 2)
+    return base
+
+
+def compute_equity_snapshot_data() -> Dict[str, float]:
+    refresh_portfolio()
+    swing_positions = portfolio["positions"]
+    core_positions = load_core_positions() if CORE_LEDGER_ENABLED else {}
+    spec_positions = load_spec_positions() if SPEC_ALPHA_LEDGER_ENABLED else {}
+    all_tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys())))
+    prices = get_prices_batch(all_tickers)
+    swing_value = 0.0
+    for ticker, pos in swing_positions.items():
+        price = prices.get(ticker, pos["price"])
+        swing_value += float(price) * int(pos["shares"])
+    core_value = 0.0; core_cost = 0.0
+    for ticker, pos in core_positions.items():
+        price = prices.get(ticker, pos.get("avg_entry_price", 0))
+        core_value += float(price) * float(pos["shares"])
+        core_cost += float(pos.get("cost_basis", 0) or 0)
+    spec_value = 0.0; spec_cost = 0.0
+    for ticker, pos in spec_positions.items():
+        price = prices.get(ticker, pos.get("avg_entry_price", 0))
+        spec_value += float(price) * float(pos["shares"])
+        spec_cost += float(pos.get("cost_basis", 0) or 0)
+    positions_value = swing_value + core_value + spec_value
+    equity = float(portfolio["cash"]) + positions_value
+    return {"cash": round(float(portfolio["cash"]), 2), "positions_value": round(positions_value, 2), "swing_positions_value": round(swing_value, 2), "core_positions_value": round(core_value, 2), "core_cost_basis": round(core_cost, 2), "core_unrealized_profit": round(core_value - core_cost, 2), "spec_positions_value": round(spec_value, 2), "spec_cost_basis": round(spec_cost, 2), "spec_unrealized_profit": round(spec_value - spec_cost, 2), "equity": round(equity, 2)}
+
+
+def realized_performance_all_time() -> Dict[str, Any]:
+    trades = load_trades()
+    swing_profit = round(sum(float(t.get("profit", 0)) for t in trades), 2)
+    core_trades = load_core_trades() if CORE_LEDGER_ENABLED else []
+    core_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in core_trades if str(t.get("side")).upper() == "SELL"), 2)
+    spec_trades = load_spec_trades() if SPEC_ALPHA_LEDGER_ENABLED else []
+    spec_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in spec_trades if str(t.get("side")).upper() == "SELL"), 2)
+    total_profit = round(swing_profit + core_profit + spec_profit, 2)
+    base_capital = get_performance_base_capital()
+    pct_val = None if base_capital <= 0 else (total_profit / base_capital) * 100
+    return {"profit": total_profit, "pct": pct_val, "base_capital": round(base_capital, 2), "swing_realized_profit": swing_profit, "core_realized_profit": core_profit, "spec_realized_profit": spec_profit, "trade_records": len(trades) + len(core_trades) + len(spec_trades), "swing_trade_records": len(trades), "core_trade_records": len(core_trades), "spec_trade_records": len(spec_trades)}
+
+
+def sleeve_performance_summary() -> Dict[str, Any]:
+    summary = _old_sleeve_performance_summary()
+    rows = summary.get("rows", []) or []
+    spec_trades = load_spec_trades() if SPEC_ALPHA_LEDGER_ENABLED else []
+    spec_sells = [t for t in spec_trades if str(t.get("side")).upper() == "SELL"]
+    spec_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in spec_sells), 2)
+    if spec_trades:
+        rows.append({"sleeve": "SPEC_ALPHA_REALIZED", "trade_records": len(spec_trades), "profit": spec_profit, "win_rate_pct": None, "profit_factor": None, "avg_profit": round(spec_profit / len(spec_sells), 2) if spec_sells else 0.0})
+    summary["rows"] = rows
+    summary["spec_realized_profit"] = spec_profit
+    summary["total_profit"] = round(float(summary.get("total_profit", 0) or 0) + spec_profit, 2)
+    summary["trade_records"] = int(summary.get("trade_records", 0) or 0) + len(spec_trades)
+    return summary
+
+
+def format_portfolio_allocation_plan() -> str:
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.7 AGGRESSIVE 45/15/40\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core wealth rotation: {plan.get('core_wealth_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🐻 Bear inverse tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core sleeve is long-term allocation.\n"
+        "• SPEC_ALPHA is monthly medium/weak momentum rotation.\n"
+        "• VCP/bear sleeves remain signal-driven tactical systems.\n"
+        "• In hard drawdown mode, new entries pause and exits/management continue."
+    )
+
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
+    actions = plan.get("actions", []) or []
+    risk = plan.get("risk_guard", {}) or {}
+    msg = (
+        "⚡ SPEC_ALPHA MONTHLY ROTATION PLAN v3.7 AGGRESSIVE 45/15/40\n\n"
+        "Private execution plan. Medium/weak momentum rotation. Execute in broker first, then record with specbuy/specsell.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} | Market filter OK: {yes_no(bool(plan.get('market_ok')))}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"⚡ Target SPEC_ALPHA sleeve: {plan.get('target_spec_account_pct')}% = {format_money(float(plan.get('target_spec_value', 0) or 0))}\n"
+        f"📦 Current SPEC value: {format_money(float(plan.get('current_spec_value', 0) or 0))}\n"
+        f"📈 SPEC unrealized P/L: {format_money(float(plan.get('current_spec_unrealized_profit', 0) or 0))}\n"
+        f"🧪 Universe/scored: {plan.get('universe_size')} / {plan.get('scored_count')}\n"
+        f"🎚️ Mode: {plan.get('score_mode')} | Top N: {plan.get('top_n')}\n\n"
+    )
+    ranked = [a for a in actions if a.get("rank") is not None]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    if ranked:
+        msg += "🎯 Ranked SPEC_ALPHA candidates — best to least attractive\n"
+        for item in ranked[:SPEC_ALPHA_TOP_N]:
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+            msg += (
+                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('sector', 'Unknown')})\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
+                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
+                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')} | Bucket: {item.get('bucket')}\n"
+            )
+        msg += "\n"
+    if exits:
+        msg += "🔴 SPEC_ALPHA exit / rotation candidates\n"
+        for item in exits:
+            msg += f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'No longer selected')}\n"
+        msg += "\n"
+    msg += "How to execute after broker fill:\n• specbuy TICKER SHARES at PRICE\n• specsell TICKER SHARES at PRICE\n"
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_public_core_plan(plan: Dict[str, Any]) -> str:
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if a.get("rank") is not None]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    msg = "🏛️ CORE WEALTH PLAN\n\nLong-term allocation model. No share counts. Use your own account size.\n\n"
+    msg += f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n🎯 Target core sleeve: {plan.get('target_core_account_pct')}% of account\n\n"
+    for item in ranked[:WEALTH_CORE_TOP_N]:
+        action = str(item.get("action", "HOLD")).upper()
+        verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+        msg += f"{item.get('rank')}) {verb} {item['ticker']}\nTarget: {item.get('target_account_pct')}% of account | Price: {item.get('price')}\n1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n\n"
+    if exits:
+        msg += "🔴 Rotation exits:\n"
+        for item in exits[:10]:
+            msg += f"SELL/REMOVE {item['ticker']} — {item.get('reason', 'No longer selected')}\n"
+        msg += "\n"
+    msg += public_signal_footer()
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_public_spec_plan(plan: Dict[str, Any]) -> str:
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if a.get("rank") is not None]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    msg = "⚡ SPEC_ALPHA ROTATION PLAN\n\nMedium/weak monthly momentum sleeve. No share counts. Use your own account size.\n\n"
+    msg += f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} | Market filter: {yes_no(bool(plan.get('market_ok')))}\n🎯 Target SPEC sleeve: {plan.get('target_spec_account_pct')}% of account\n🎚️ Mode: {plan.get('score_mode')} | Top {plan.get('top_n')}\n\n"
+    for item in ranked[:SPEC_ALPHA_TOP_N]:
+        action = str(item.get("action", "HOLD")).upper()
+        verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+        msg += f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('sector', 'Unknown')})\nTarget: {item.get('target_account_pct')}% of account | Price: {item.get('price')}\n1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\nScore: {item.get('score')}\n\n"
+    if exits:
+        msg += "🔴 Rotation exits:\n"
+        for item in exits[:10]:
+            msg += f"SELL/REMOVE {item['ticker']} — {item.get('reason', 'No longer selected')}\n"
+        msg += "\n"
+    msg += public_signal_footer()
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def maybe_send_spec_alpha_signal() -> None:
+    if not SPEC_ALPHA_ENABLED:
+        return
+    current_ny = ny_now()
+    minutes = current_ny.hour * 60 + current_ny.minute
+    if is_market_weekday(current_ny) and minutes < SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE:
+        return
+    month_key = current_ny.strftime("%Y-%m")
+    if get_meta("last_spec_alpha_month") == month_key:
+        return
+    last_raw = get_meta("last_spec_alpha_alert_ts")
+    if last_raw:
+        try:
+            days_since = (now_ts() - float(last_raw)) / 86400
+            if days_since < SPEC_ALPHA_ALERT_REPEAT_DAYS:
+                return
+        except ValueError:
+            pass
+    try:
+        plan = compute_spec_alpha_plan()
+        save_spec_plan_signal(plan)
+        set_meta("last_spec_alpha_month", month_key)
+        set_meta("last_spec_alpha_alert_ts", str(now_ts()))
+        send(format_spec_alpha_plan(plan))
+        if PUBLIC_SIGNAL_ENABLED and SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED:
+            send_public_signal(format_public_spec_plan(plan))
+        audit("SPEC_ALPHA_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
+    except Exception as exc:
+        logger.exception(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
+        print(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
+
+
+def maybe_send_wealth_core_signal() -> None:
+    _old_maybe_send_wealth_core_signal()
+    maybe_send_spec_alpha_signal()
+
+
+def format_spec_portfolio_report() -> str:
+    details = spec_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = f"⚡ SPEC_ALPHA PORTFOLIO\n\n💵 Shared cash: {format_money(snapshot['cash'])}\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n✅ Realized SPEC P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n💼 Total equity: {format_money(snapshot['equity'])}\n\n"
+    if not rows:
+        return msg + "No SPEC_ALPHA positions recorded yet. Use specplan, then specbuy after broker execution."
+    for row in rows:
+        msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\nTarget account weight: {row.get('target_account_pct')}%\n\n"
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_spec_pnl_report() -> str:
+    details = spec_position_market_value_details()
+    trades = load_spec_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return f"⚡ SPEC_ALPHA P/L\n\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n💰 Total SPEC P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\nBuy records: {len(buys)}\nSell records: {len(sells)}"
+
+
+def format_spec_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    plan = compute_spec_alpha_plan()
+    details = spec_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    target_pct = float(plan.get("target_spec_account_pct", 0) or 0)
+    return f"⚡ SPEC_ALPHA EXPOSURE\n\n💼 Total equity: {format_money(equity)}\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n🎯 Target SPEC: {round(target_pct, 2)}% of account\n📊 Actual SPEC: {round(actual_pct, 2)}% of account\n📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\nUse specplan for ranked BUY/ADD/HOLD/TRIM/SELL actions."
+
+
+def format_combined_portfolio_report() -> str:
+    refresh_portfolio()
+    cash = float(portfolio["cash"])
+    swing_positions = portfolio["positions"]
+    core_rows = core_position_market_value_details().get("rows", []) if CORE_LEDGER_ENABLED else []
+    spec_rows = spec_position_market_value_details().get("rows", []) if SPEC_ALPHA_LEDGER_ENABLED else []
+    snapshot = compute_equity_snapshot_data()
+    if not swing_positions and not core_rows and not spec_rows:
+        return f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\n🏦 Total Equity: {format_money(snapshot['equity'])}\nNo open swing, core, or SPEC positions"
+    prices = get_prices_batch(list(swing_positions.keys()))
+    msg = f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\n⚡ Swing value: {format_money(snapshot.get('swing_positions_value', 0))}\n🏛️ Core value: {format_money(snapshot.get('core_positions_value', 0))}\n⚡ SPEC value: {format_money(snapshot.get('spec_positions_value', 0))}\n🏦 Total equity: {format_money(snapshot['equity'])}\n\n"
+    if swing_positions:
+        msg += "⚡ SWING / TACTICAL POSITIONS\n\n"
+        for ticker, pos in swing_positions.items():
+            current_price = prices.get(ticker, pos["price"])
+            entry = pos["price"]; shares = pos["shares"]
+            pnl = (current_price - entry) * shares
+            risk_per_share = pos.get("risk_per_share")
+            r_now = None
+            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
+                r_now = (current_price - entry) / risk_per_share
+            msg += f"📦 {ticker}\nShares: {shares}\nEntry: {round(entry, 2)}\nNow: {round(current_price, 2)}\n🛡️ Stop: {round(pos['stop'], 2)}\n📈 High: {round(pos['highest'], 2)}\n🎯 R now: {None if r_now is None else round(r_now, 2)}\n💰 P/L: {format_money(pnl)}\n\n"
+    if core_rows:
+        msg += "🏛️ CORE WEALTH POSITIONS\n\n"
+        for row in core_rows:
+            msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)}\nNow: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
+    if spec_rows:
+        msg += "⚡ SPEC_ALPHA POSITIONS\n\n"
+        for row in spec_rows:
+            msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)}\nNow: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"help", "/help"}:
+        send(
+            "Commands:\n"
+            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | allocationplan | riskstatus | sleevestatus\n"
+            "wealthplan | wealthstatus | corestatus | coreportfolio | corepnl | coreexposure\n"
+            "specplan | specstatus | specportfolio | specpnl | specexposure\n"
+            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
+            "testchannel | postchannelterms\n"
+            "download_state | download_portfolio | download_signals | download_withdrawals\n"
+            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
+            "resetall  (then resetall CONFIRM-LIVE)\n"
+            "setcash AMOUNT\n"
+            "voidbuy TICKER\n"
+            "corebuy TICKER SHARES at PRICE | coresell TICKER SHARES at PRICE\n"
+            "specbuy TICKER SHARES at PRICE | specsell TICKER SHARES at PRICE\n"
+            "editbuy TICKER PRICE | editsell TICKER PRICE\n"
+            "bought TICKER SHARES at PRICE | sold TICKER SHARES at PRICE"
+        )
+        return
+    if text_lower == "equity":
+        snapshot = compute_equity_snapshot_data()
+        send(f"💼 ACCOUNT EQUITY\n\n💵 Cash: {format_money(snapshot['cash'])}\n⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n📦 Total positions: {format_money(snapshot['positions_value'])}\n🏦 Total Equity: {format_money(snapshot['equity'])}")
+        return
+    if text_lower == "allocationplan":
+        send(format_portfolio_allocation_plan())
+        return
+    if text_lower == "wealthplan":
+        plan = compute_wealth_core_plan()
+        save_core_plan_signal(plan)
+        send(format_wealth_core_plan(plan))
+        if PUBLIC_SIGNAL_ENABLED and CORE_PUBLIC_SIGNAL_ENABLED:
+            ok, info = send_public_signal(format_public_core_plan(plan))
+            if not ok:
+                send(f"⚠️ Core public plan failed:\n{info}")
+        return
+    if text_lower == "specplan":
+        send("⚡ SPEC_ALPHA plan started. This can take several minutes because it scores the broad medium/weak universe.")
+        plan = compute_spec_alpha_plan()
+        save_spec_plan_signal(plan)
+        send(format_spec_alpha_plan(plan))
+        if PUBLIC_SIGNAL_ENABLED and SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED:
+            ok, info = send_public_signal(format_public_spec_plan(plan))
+            if not ok:
+                send(f"⚠️ SPEC_ALPHA public plan failed:\n{info}")
+        return
+    if text_lower in {"specstatus", "specledger"}:
+        latest = load_latest_spec_plan()
+        send(f"⚡ SPEC_ALPHA STATUS v3.7\n\nEnabled: {yes_no(SPEC_ALPHA_ENABLED)}\nLedger enabled: {yes_no(SPEC_ALPHA_LEDGER_ENABLED)}\nPublic enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\nTarget allocation: {round(SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100, 2)}%\nMode: {SPEC_ALPHA_SCORE_MODE} | Top N: {SPEC_ALPHA_TOP_N}\nUniverse size: {len(SPEC_ALPHA_UNIVERSE)}\nOpen SPEC positions: {len(load_spec_positions()) if SPEC_ALPHA_LEDGER_ENABLED else 0}\nLatest active plan: {None if latest is None else latest.get('plan_date')}\n\nCommands:\nspecplan\nspecbuy TICKER SHARES at PRICE\nspecsell TICKER SHARES at PRICE\nspecportfolio | specpnl | specexposure")
+        return
+    if text_lower == "specportfolio":
+        send(format_spec_portfolio_report())
+        return
+    if text_lower == "specpnl":
+        send(format_spec_pnl_report())
+        return
+    if text_lower == "specexposure":
+        send(format_spec_exposure_report())
+        return
+    spec_trade_cmd = re.fullmatch(r"(?i)\s*(specbuy|specsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*", text_clean)
+    if spec_trade_cmd:
+        action = spec_trade_cmd.group(1).lower()
+        ticker = normalize_ticker(spec_trade_cmd.group(2))
+        shares = float(spec_trade_cmd.group(3))
+        price = float(spec_trade_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "specbuy":
+            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "specsell":
+            ok, msg = record_spec_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+    return _old_handle_command(text, update_id=update_id)
+
+
+
+# -----------------------------------------------------------------------------
+# V3.7 EXPORT / RESET HARDENING
+# -----------------------------------------------------------------------------
+# These overrides make the SPEC_ALPHA ledger first-class for backups, downloads,
+# and resetall. They intentionally wrap the existing v3.6 export/reset behavior
+# instead of changing trading logic.
+
+_V37_TABLE_EXPORT_ALLOWED = {
+    "positions",
+    "trades",
+    "signals",
+    "equity_snapshots",
+    "withdrawals",
+    "cooldowns",
+    "breakout_memory",
+    "core_positions",
+    "core_trades",
+    "core_signals",
+    "spec_positions",
+    "spec_trades",
+    "spec_signals",
+}
+
+
+def table_rows(table: str) -> List[Dict[str, Any]]:
+    if table not in _V37_TABLE_EXPORT_ALLOWED:
+        raise ValueError("Table export not allowed")
+
+    conn = db_connect()
+    try:
+        try:
+            rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+        except sqlite3.OperationalError:
+            return []
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    """
+    V3.7 state export.
+
+    Includes swing positions/trades, core positions/trades, SPEC_ALPHA
+    positions/trades/signals, allocation snapshots, and key diagnostics.
+    It intentionally excludes API keys, Telegram token, and environment variables.
+    """
+    refresh_portfolio()
+
+    ts = ny_now().strftime("%Y%m%d_%H%M%S")
+    export_root = os.path.join(DATA_DIR, "exports")
+    export_dir = os.path.join(export_root, f"{prefix}_{ts}")
+    os.makedirs(export_dir, exist_ok=True)
+
+    try:
+        risk = open_risk_details()
+    except Exception as exc:
+        risk = {"error": str(exc)}
+
+    try:
+        withdrawal_plan = compute_withdrawal_plan()
+    except Exception as exc:
+        withdrawal_plan = {"error": str(exc)}
+
+    try:
+        allocation = dynamic_portfolio_allocation_targets()
+    except Exception as exc:
+        allocation = {"error": str(exc)}
+
+    try:
+        snapshot = compute_equity_snapshot_data()
+    except Exception as exc:
+        snapshot = {"error": str(exc)}
+
+    write_json_file(os.path.join(export_dir, "portfolio.json"), portfolio)
+    write_json_file(os.path.join(export_dir, "trades.json"), load_trades())
+    write_json_file(os.path.join(export_dir, "signals.json"), load_signals())
+    write_json_file(os.path.join(export_dir, "withdrawals.json"), load_withdrawals())
+    write_json_file(os.path.join(export_dir, "open_risk.json"), risk)
+    write_json_file(os.path.join(export_dir, "withdrawal_plan.json"), withdrawal_plan)
+    write_json_file(os.path.join(export_dir, "allocation_plan.json"), allocation)
+    write_json_file(os.path.join(export_dir, "equity_snapshot_live.json"), snapshot)
+
+    # Core ledger, if present.
+    try:
+        write_json_file(os.path.join(export_dir, "core_positions.json"), load_core_positions())
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "core_positions_error.json"), {"error": str(exc)})
+    try:
+        write_json_file(os.path.join(export_dir, "core_trades.json"), load_core_trades())
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "core_trades_error.json"), {"error": str(exc)})
+    try:
+        write_json_file(os.path.join(export_dir, "core_signals.json"), table_rows("core_signals"))
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "core_signals_error.json"), {"error": str(exc)})
+
+    # SPEC_ALPHA ledger.
+    try:
+        write_json_file(os.path.join(export_dir, "spec_positions.json"), load_spec_positions())
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "spec_positions_error.json"), {"error": str(exc)})
+    try:
+        write_json_file(os.path.join(export_dir, "spec_trades.json"), load_spec_trades())
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "spec_trades_error.json"), {"error": str(exc)})
+    try:
+        write_json_file(os.path.join(export_dir, "spec_signals.json"), table_rows("spec_signals"))
+    except Exception as exc:
+        write_json_file(os.path.join(export_dir, "spec_signals_error.json"), {"error": str(exc)})
+
+    write_json_file(
+        os.path.join(export_dir, "meta_snapshot.json"),
+        {
+            "strategy_version": STRATEGY_VERSION,
+            "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "last_scan_day": get_meta("last_scan_day"),
+            "last_scan_bar_date": get_meta("last_scan_bar_date"),
+            "last_equity_snapshot_date": get_meta("last_equity_snapshot_date"),
+            "withdrawal_high_water_mark": get_meta("withdrawal_high_water_mark"),
+            "withdrawal_hwm_initialized_at": get_meta("withdrawal_hwm_initialized_at"),
+            "positions_count": len(portfolio.get("positions", {})),
+            "cash": portfolio.get("cash"),
+            "panic_mode": PANIC_MODE,
+            "core_enabled": globals().get("WEALTH_CORE_ENABLED", None),
+            "spec_alpha_enabled": SPEC_ALPHA_ENABLED,
+            "spec_alpha_ledger_enabled": SPEC_ALPHA_LEDGER_ENABLED,
+            "spec_alpha_public_signal_enabled": SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED,
+            "spec_alpha_target_pct": SPEC_ALPHA_ACCOUNT_ALLOC_PCT,
+        },
+    )
+
+    for table in sorted(_V37_TABLE_EXPORT_ALLOWED):
+        write_json_file(os.path.join(export_dir, f"{table}.table.json"), table_rows(table))
+
+    # CSV versions are useful for analysis.
+    try:
+        trades = load_trades()
+        if trades:
+            pd.DataFrame(safe_convert(trades)).to_csv(os.path.join(export_dir, "trades.csv"), index=False)
+
+        core_trades = load_core_trades()
+        if core_trades:
+            pd.DataFrame(safe_convert(core_trades)).to_csv(os.path.join(export_dir, "core_trades.csv"), index=False)
+
+        spec_trades = load_spec_trades()
+        if spec_trades:
+            pd.DataFrame(safe_convert(spec_trades)).to_csv(os.path.join(export_dir, "spec_trades.csv"), index=False)
+
+        positions_rows = []
+        for ticker, pos in portfolio.get("positions", {}).items():
+            row = {"ticker": ticker, "sleeve": "TACTICAL"}
+            row.update(safe_convert(pos))
+            positions_rows.append(row)
+        if positions_rows:
+            pd.DataFrame(positions_rows).to_csv(os.path.join(export_dir, "positions.csv"), index=False)
+
+        core_positions = load_core_positions()
+        if core_positions:
+            pd.DataFrame(safe_convert(core_positions)).to_csv(os.path.join(export_dir, "core_positions.csv"), index=False)
+
+        spec_positions = load_spec_positions()
+        if spec_positions:
+            pd.DataFrame(safe_convert(spec_positions)).to_csv(os.path.join(export_dir, "spec_positions.csv"), index=False)
+    except Exception as exc:
+        print(f"[CSV EXPORT WARNING] {exc}")
+
+    zip_path = f"{export_dir}.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(export_dir):
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                arcname = os.path.relpath(full_path, export_dir)
+                z.write(full_path, arcname)
+
+    return zip_path
+
+
+_V37_OLD_RESET_ALL_PAPER_STATE = reset_all_paper_state
+
+
+def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+    """V3.7 reset: includes SPEC_ALPHA ledger cleanup after backup export."""
+    ok, msg, backup_path = _V37_OLD_RESET_ALL_PAPER_STATE(update_id=update_id)
+
+    with db_tx() as conn:
+        conn.execute("DELETE FROM spec_positions")
+        conn.execute("DELETE FROM spec_trades")
+        conn.execute("DELETE FROM spec_signals")
+        conn.execute(
+            """
+            DELETE FROM meta
+            WHERE key IN (
+                'last_spec_alpha_check_month',
+                'last_spec_alpha_signal_ts'
+            )
+            """
+        )
+
+    audit("RESET_ALL_SPEC_ALPHA", "SPEC_ALPHA state cleared")
+
+    msg += (
+        "\n\n"
+        "V3.7 extra cleanup:\n"
+        "✅ SPEC_ALPHA positions cleared\n"
+        "✅ SPEC_ALPHA trades cleared\n"
+        "✅ SPEC_ALPHA signals cleared"
+    )
+
+    return ok, msg, backup_path
 
 if __name__ == "__main__":
 
