@@ -335,7 +335,7 @@ V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.03"))
 # - The more robust bear candidate was broad 3x inverse VCP, not aggressive 2x
 #   reclaim. It made less money in backtests but survived slippage/execution stress
 #   better and had materially lower drawdown.
-BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "1") != "0"
+BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "0") != "0"
 BEAR_BLOCK_LONG_SIGNALS_IN_BEAR = os.getenv("BEAR_BLOCK_LONG_SIGNALS_IN_BEAR", "1") != "0"
 BEAR_STRATEGY_VERSION = os.getenv("BEAR_STRATEGY_VERSION", "bear_v1_robust_3x_vcp")
 
@@ -19595,10 +19595,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 # SPEC_ALPHA, long VCP, and all existing ledgers intact.
 # It adds a separate monthly Growth Alpha sleeve with its own ledger.
 # Target research allocation:
-#   Core UCITS: 25%
+#   Core UCITS: 20%
 #   Expanded Growth Alpha: 45%
 #   SPEC_ALPHA: 20%
-#   Tactical VCP/Bear-stock: 10%
+#   Tactical VCP/Bear-stock: 5%
+#   Crypto tactical swing: 10%
 # Options remain research-only and are not included here.
 # V4 only expands the Growth Alpha universe from the current concentrated 70-name set
 # to the offline-tested A-to-Z future-growth universe. Core, SPEC, tactical,
@@ -19610,12 +19611,12 @@ STRATEGY_VERSION = os.getenv(
 )
 
 # Override v3.9/v3.8 allocation defaults.
-WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.25"))
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.20"))
 SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.20"))
-WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.25"))
-WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.25"))
-WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.25"))
-WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.25"))
+WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.20"))
+WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.20"))
+WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.20"))
+WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.20"))
 WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.10"))
 WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.05"))
 WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
@@ -20654,7 +20655,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
         send(
             "V4 Expanded Growth Alpha notes:\n"
-            "• Allocation target: Core 25% / Expanded Growth Alpha 45% / SPEC 20% / Tactical 10%.\n"
+            "• Allocation target in final v4.1.1 override: Core 20% / Growth 45% / SPEC 20% / Long VCP 5% / Crypto 10%.\n"
             "• Expanded Growth Alpha is a separate monthly ledger. Use growthbuy/growthsell only.\n"
             "• Do not record Growth Alpha with bought/sold, corebuy, or specbuy.\n"
             "• Options remain research-only."
@@ -20663,9 +20664,977 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     return _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
+
+
+# =============================================================================
+# V4.1.1 FREEZE: AGGRESSIVE GROWTH + ALT-CRYPTO TACTICAL SWING EXTENSION
+# Freeze candidate from offline A-to-Z test: Core 20 / Growth 45 / SPEC 20 / Long VCP 5 / Crypto 10.
+# Crypto entry uses 20-day breakout, top-1, gate 2 of BTC/ETH/SOL above MA200.
+# =============================================================================
+# Offline-researched candidate. This keeps v4 expanded Growth, Core, SPEC, and
+# Long VCP intact, disables the weak bear-stock tactical allocation, and adds a
+# separate crypto tactical swing sleeve.
+# Target research allocation:
+#   Core UCITS/USD: 20%
+#   Expanded Growth Alpha: 45%
+#   SPEC_ALPHA: 20%
+#   Long VCP tactical: 5%
+#   Crypto tactical swing: 10%
+#   Bear-stock tactical: 0%
+# Options remain research-only and are not included here.
+#
+# Crypto design:
+# - BTC/ETH/SOL are used as regime indicators.
+# - The live default tradable universe avoids BTC/ETH/SOL and buys cheaper major
+#   crypto names only: AVAX/LINK/ADA/XRP/DOGE/LTC.
+# - SUI/BCH and other names can be researched later but are not default here.
+# - Do not record crypto through bought/sold, corebuy, growthbuy, or specbuy.
+#   Use cryptobuy/cryptosell only.
+
+STRATEGY_VERSION = os.getenv(
+    "STRATEGY_VERSION",
+    "v4.1.1-freeze-growth-crypto-swing-20-45-20-5-10-monitor"
+)
+
+# v4.1.1 freeze allocation defaults.
+# Bear-stock / inverse bear sleeve is intentionally disabled in v4.1.1; crypto tactical replaces it.
+GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("GROWTH_ALPHA_ACCOUNT_ALLOC_PCT", "0.45"))
+SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.20"))
+WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.05"))
+WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.03"))
+WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
+WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
+WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.00"))
+WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.00"))
+
+CRYPTO_ALPHA_ENABLED = os.getenv("CRYPTO_ALPHA_ENABLED", "1") != "0"
+CRYPTO_ALPHA_LEDGER_ENABLED = os.getenv("CRYPTO_ALPHA_LEDGER_ENABLED", "1") != "0"
+CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT", "0.10"))
+CRYPTO_ALPHA_MAX_OPEN_POSITIONS = int(os.getenv("CRYPTO_ALPHA_MAX_OPEN_POSITIONS", "1"))
+CRYPTO_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("CRYPTO_ALPHA_MIN_TRADE_DOLLARS", "25"))
+CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT", "0.08"))
+CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
+CRYPTO_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("CRYPTO_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
+CRYPTO_ALPHA_PLAN_VALID_DAYS = int(os.getenv("CRYPTO_ALPHA_PLAN_VALID_DAYS", "3"))
+CRYPTO_ALPHA_REVIEW_MINUTE = int(os.getenv("CRYPTO_ALPHA_REVIEW_MINUTE", str(21 * 60 + 30)))
+CRYPTO_ALPHA_SIGNAL_COOLDOWN_HOURS = int(os.getenv("CRYPTO_ALPHA_SIGNAL_COOLDOWN_HOURS", "20"))
+
+CRYPTO_ALPHA_INDICATORS = ["BTCUSD", "ETHUSD", "SOLUSD"]
+CRYPTO_ALPHA_UNIVERSE = [
+    "AVAXUSD", "LINKUSD", "ADAUSD", "XRPUSD", "DOGEUSD", "LTCUSD"
+]
+if os.getenv("CRYPTO_ALPHA_INCLUDE_SUI", "0") != "0":
+    CRYPTO_ALPHA_UNIVERSE.append("SUIUSD")
+CRYPTO_ALPHA_UNIVERSE = list(dict.fromkeys(CRYPTO_ALPHA_UNIVERSE))
+CRYPTO_ALPHA_ALL_SYMBOLS = list(dict.fromkeys(CRYPTO_ALPHA_INDICATORS + CRYPTO_ALPHA_UNIVERSE))
+
+CRYPTO_ALPHA_BREAKOUT_DAYS = int(os.getenv("CRYPTO_ALPHA_BREAKOUT_DAYS", "20"))
+CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200 = int(os.getenv("CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200", "2"))
+CRYPTO_ALPHA_MIN_PRICE = float(os.getenv("CRYPTO_ALPHA_MIN_PRICE", "0.01"))
+CRYPTO_ALPHA_MAX_PRICE = float(os.getenv("CRYPTO_ALPHA_MAX_PRICE", "500"))
+CRYPTO_ALPHA_MIN_ATR_PCT = float(os.getenv("CRYPTO_ALPHA_MIN_ATR_PCT", "0.02"))
+CRYPTO_ALPHA_MAX_ATR_PCT = float(os.getenv("CRYPTO_ALPHA_MAX_ATR_PCT", "0.35"))
+CRYPTO_ALPHA_MAX_RSI = float(os.getenv("CRYPTO_ALPHA_MAX_RSI", "88"))
+CRYPTO_ALPHA_MAX_EXTENSION_MA20 = float(os.getenv("CRYPTO_ALPHA_MAX_EXTENSION_MA20", "0.50"))
+CRYPTO_ALPHA_ATR_STOP_MULT = float(os.getenv("CRYPTO_ALPHA_ATR_STOP_MULT", "2.5"))
+CRYPTO_ALPHA_TRAIL_ATR_MULT = float(os.getenv("CRYPTO_ALPHA_TRAIL_ATR_MULT", "3.5"))
+CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT = float(os.getenv("CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT", "1.00"))
+CRYPTO_ALPHA_STRATEGY_VERSION = "crypto_swing_alt_majors_v4_1_1_breakout20"
+
+
+def get_crypto_quote(ticker: str) -> Optional[float]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return None
+    quote = get_prices_batch([ticker]).get(ticker)
+    if quote is not None and quote > 0:
+        return float(quote)
+    try:
+        url = f"{FMP_BASE}/quote?symbol={ticker}&apikey={FMP_API_KEY}"
+        data = request_json(url, timeout=5, context=f"crypto quote {ticker}", retries=1)
+        if isinstance(data, list) and data:
+            raw = data[0].get("price")
+            price = float(raw)
+            if is_finite_positive(price):
+                return price
+    except Exception as exc:
+        print(f"[CRYPTO QUOTE ERROR] {ticker}: {exc}")
+    return None
+
+
+def get_crypto_prices_batch(tickers: List[str]) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    for ticker in tickers:
+        nticker = normalize_ticker(str(ticker))
+        if not nticker:
+            continue
+        price = get_crypto_quote(nticker)
+        if price is not None and price > 0:
+            out[nticker] = float(price)
+    return out
+
+
+_V41_OLD_INIT_DB = init_db
+
+def init_db() -> None:
+    _V41_OLD_INIT_DB()
+    conn = db_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS crypto_positions (
+                ticker TEXT PRIMARY KEY,
+                crypto_position_id TEXT NOT NULL UNIQUE,
+                strategy_version TEXT NOT NULL,
+                units REAL NOT NULL CHECK (units > 0),
+                avg_entry_price REAL NOT NULL CHECK (avg_entry_price > 0),
+                cost_basis REAL NOT NULL CHECK (cost_basis >= 0),
+                initial_stop REAL,
+                stop REAL,
+                highest REAL,
+                entry_time REAL NOT NULL,
+                last_update_time REAL NOT NULL,
+                sleeve TEXT NOT NULL DEFAULT 'CRYPTO_ALPHA',
+                target_account_pct REAL,
+                last_plan_id TEXT,
+                notes TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS crypto_trades (
+                id TEXT PRIMARY KEY,
+                crypto_position_id TEXT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+                units REAL NOT NULL CHECK (units > 0),
+                price REAL NOT NULL CHECK (price > 0),
+                amount REAL NOT NULL,
+                realized_profit REAL,
+                time REAL NOT NULL,
+                strategy_version TEXT NOT NULL,
+                plan_id TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_crypto_trades_ticker ON crypto_trades(ticker);
+            CREATE INDEX IF NOT EXISTS idx_crypto_trades_time ON crypto_trades(time);
+            CREATE TABLE IF NOT EXISTS crypto_signals (
+                id TEXT PRIMARY KEY,
+                time REAL NOT NULL,
+                plan_date TEXT NOT NULL,
+                account_equity REAL NOT NULL,
+                crypto_target_pct REAL NOT NULL,
+                plan_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+            );
+            CREATE INDEX IF NOT EXISTS idx_crypto_signals_time ON crypto_signals(time);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def row_to_crypto_position(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "ticker": row["ticker"],
+        "crypto_position_id": row["crypto_position_id"],
+        "strategy_version": row["strategy_version"],
+        "units": float(row["units"]),
+        "avg_entry_price": float(row["avg_entry_price"]),
+        "cost_basis": float(row["cost_basis"]),
+        "initial_stop": None if row["initial_stop"] is None else float(row["initial_stop"]),
+        "stop": None if row["stop"] is None else float(row["stop"]),
+        "highest": None if row["highest"] is None else float(row["highest"]),
+        "entry_time": float(row["entry_time"]),
+        "last_update_time": float(row["last_update_time"]),
+        "sleeve": row["sleeve"],
+        "target_account_pct": None if row["target_account_pct"] is None else float(row["target_account_pct"]),
+        "last_plan_id": row["last_plan_id"],
+        "notes": row["notes"],
+    }
+
+
+def load_crypto_positions() -> Dict[str, Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM crypto_positions ORDER BY ticker").fetchall()
+        return {row["ticker"]: row_to_crypto_position(row) for row in rows}
+    finally:
+        conn.close()
+
+
+def load_crypto_trades() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM crypto_trades ORDER BY time ASC, created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def load_latest_crypto_signal() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute("SELECT * FROM crypto_signals WHERE status = 'ACTIVE' ORDER BY time DESC LIMIT 1").fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["plan"] = json_loads_dict(data.get("plan_json"))
+        return data
+    finally:
+        conn.close()
+
+
+def save_crypto_plan_signal(plan: Dict[str, Any]) -> str:
+    plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
+    plan = dict(plan)
+    plan["plan_id"] = plan_id
+    with db_tx() as conn:
+        conn.execute("UPDATE crypto_signals SET status = 'SUPERSEDED' WHERE status = 'ACTIVE'")
+        conn.execute(
+            """
+            INSERT INTO crypto_signals(id, time, plan_date, account_equity, crypto_target_pct, plan_json, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """,
+            (
+                plan_id,
+                now_ts(),
+                ny_date_str(),
+                float(plan.get("account_equity", 0) or 0),
+                float(plan.get("target_crypto_account_pct", 0) or 0),
+                json_dumps(plan),
+            ),
+        )
+    return plan_id
+
+
+def crypto_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    positions = load_crypto_positions()
+    tickers = list(positions.keys())
+    prices = prices or get_crypto_prices_batch(tickers)
+    rows: List[Dict[str, Any]] = []
+    total_value = 0.0
+    total_cost = 0.0
+    for ticker, pos in positions.items():
+        mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or pos.get("avg_entry_price", 0))
+        units = float(pos.get("units", 0) or 0)
+        value = units * mark
+        cost = float(pos.get("cost_basis", 0) or 0)
+        total_value += value
+        total_cost += cost
+        rows.append({
+            **pos,
+            "mark_price": round(mark, 8),
+            "market_value": round(value, 2),
+            "unrealized_profit": round(value - cost, 2),
+            "unrealized_pct": None if cost <= 0 else round(((value - cost) / cost) * 100, 2),
+        })
+    realized = sum(float(t.get("realized_profit") or 0.0) for t in load_crypto_trades() if str(t.get("side")).upper() == "SELL")
+    return {
+        "positions": positions,
+        "rows": rows,
+        "value": round(total_value, 2),
+        "cost_basis": round(total_cost, 2),
+        "unrealized_profit": round(total_value - total_cost, 2),
+        "realized_profit": round(realized, 2),
+        "total_profit": round(realized + (total_value - total_cost), 2),
+    }
+
+
+def crypto_indicator_gate() -> Dict[str, Any]:
+    rows = []
+    ok_count = 0
+    for sym in CRYPTO_ALPHA_INDICATORS:
+        df = get_historical(sym, limit=260)
+        if df is None or len(df) < 220:
+            rows.append({"ticker": sym, "ok": False, "reason": "no_data"})
+            continue
+        close = df["Close"]
+        price = float(close.iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        ma50 = float(close.rolling(50).mean().iloc[-1])
+        ok = price > ma200
+        ok_count += 1 if ok else 0
+        rows.append({"ticker": sym, "price": round(price, 6), "ma50": round(ma50, 6), "ma200": round(ma200, 6), "ok": ok})
+    gate_ok = ok_count >= CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200
+    return {"ok": gate_ok, "ok_count": ok_count, "required": CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200, "rows": rows}
+
+
+def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    try:
+        df = get_historical(ticker, limit=280)
+        if df is None or len(df) < 220:
+            return None
+        close = df["Close"]
+        price = float(close.iloc[-1])
+        high = df["High"]
+        low = df["Low"]
+        ma20 = float(close.rolling(20).mean().iloc[-1])
+        ma50 = float(close.rolling(50).mean().iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        roc21 = pct_change_last(df, 21)
+        roc63 = pct_change_last(df, 63)
+        roc126 = pct_change_last(df, 126) or 0.0
+        atr_series = atr(df, 14)
+        atr_val = float(atr_series.iloc[-1])
+        atr_pct = atr_val / price if price > 0 else 0.0
+        rsi_val = float(rsi(close, 14).iloc[-1])
+        prior_high = float(close.shift(1).rolling(CRYPTO_ALPHA_BREAKOUT_DAYS).max().iloc[-1])
+        if price < CRYPTO_ALPHA_MIN_PRICE or price > CRYPTO_ALPHA_MAX_PRICE:
+            return None
+        if not (price > ma50 and price > ma200):
+            return None
+        if roc21 is None or roc63 is None or roc21 <= 0 or roc63 <= 0:
+            return None
+        if not (CRYPTO_ALPHA_MIN_ATR_PCT <= atr_pct <= CRYPTO_ALPHA_MAX_ATR_PCT):
+            return None
+        if rsi_val > CRYPTO_ALPHA_MAX_RSI:
+            return None
+        if price > ma20 * (1 + CRYPTO_ALPHA_MAX_EXTENSION_MA20):
+            return None
+        if price <= prior_high:
+            return None
+        rel = roc63 - float(gate_ref_ret or 0.0)
+        score = (0.35 * roc126) + (0.35 * roc63) + (0.20 * roc21) + (0.10 * rel) - (0.10 * atr_pct)
+        stop = max(0.000001, price - (CRYPTO_ALPHA_ATR_STOP_MULT * atr_val))
+        trail = max(0.000001, price - (CRYPTO_ALPHA_TRAIL_ATR_MULT * atr_val))
+        return {
+            "ticker": ticker,
+            "price": round(price, 8),
+            "ma20": round(ma20, 8),
+            "ma50": round(ma50, 8),
+            "ma200": round(ma200, 8),
+            "prior_high": round(prior_high, 8),
+            "roc_1m_pct": round(roc21 * 100, 2),
+            "roc_3m_pct": round(roc63 * 100, 2),
+            "roc_6m_pct": round(roc126 * 100, 2),
+            "atr": round(atr_val, 8),
+            "atr_pct": round(atr_pct * 100, 2),
+            "rsi": round(rsi_val, 2),
+            "score": round(score, 6),
+            "stop": round(stop, 8),
+            "trail_reference": round(trail, 8),
+            "max_valid_entry": round(price * (1 + MAX_ENTRY_EXTENSION_PCT), 8),
+        }
+    except Exception as exc:
+        print(f"[CRYPTO SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def compute_crypto_alpha_plan() -> Dict[str, Any]:
+    refresh_portfolio()
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0.0) or 0.0)
+    allocation = dynamic_portfolio_allocation_targets()
+    risk = allocation.get("risk_guard", {}) or {}
+    target_pct = float(allocation.get("crypto_alpha_pct", CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
+    target_value = equity * target_pct
+    gate = crypto_indicator_gate()
+    gate_ref_rets = []
+    for row in gate.get("rows", []):
+        sym = row.get("ticker")
+        df = get_historical(str(sym), limit=100)
+        ret = pct_change_last(df, 63) if df is not None else None
+        if ret is not None:
+            gate_ref_rets.append(ret)
+    gate_ref_ret = sum(gate_ref_rets) / len(gate_ref_rets) if gate_ref_rets else 0.0
+
+    positions = load_crypto_positions() if CRYPTO_ALPHA_LEDGER_ENABLED else {}
+    details = crypto_position_market_value_details() if CRYPTO_ALPHA_LEDGER_ENABLED else {"rows": [], "value": 0.0}
+    current_rows = {str(row.get("ticker", "")).upper(): row for row in details.get("rows", [])}
+    actions: List[Dict[str, Any]] = []
+    scored: List[Dict[str, Any]] = []
+
+    if CRYPTO_ALPHA_ENABLED and target_pct > 0 and not risk.get("hard_active") and gate.get("ok"):
+        for ticker in CRYPTO_ALPHA_UNIVERSE:
+            item = crypto_score_ticker(ticker, gate_ref_ret=gate_ref_ret)
+            if item is not None:
+                scored.append(item)
+    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    selected = scored[:CRYPTO_ALPHA_MAX_OPEN_POSITIONS]
+    selected_tickers = {str(x.get("ticker", "")).upper() for x in selected}
+
+    for item in selected:
+        ticker = str(item["ticker"]).upper()
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        target_dollars = target_value * min(CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT, 1.0)
+        drift = target_dollars - current_value
+        action = "HOLD"
+        if current_value <= 0 and target_dollars >= CRYPTO_ALPHA_MIN_TRADE_DOLLARS:
+            action = "BUY"
+        elif drift > max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
+            action = "ADD"
+        elif drift < -max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
+            action = "TRIM"
+        actions.append({
+            **item,
+            "action": action,
+            "target_account_pct": round(target_pct * 100, 2),
+            "target_value": round(target_dollars, 2),
+            "current_value": round(current_value, 2),
+            "suggested_dollars": round(abs(drift), 2),
+            "drift_dollars": round(drift, 2),
+        })
+
+    # Exit/rotation candidates for current crypto holdings.
+    for ticker, row in current_rows.items():
+        if ticker in selected_tickers:
+            # Still selected; also check live exit conditions.
+            continue
+        exit_reason = "Crypto regime gate is off or ticker is no longer selected."
+        df = get_historical(ticker, limit=80)
+        mark = float(row.get("mark_price", row.get("avg_entry_price", 0)) or 0)
+        if df is not None and len(df) >= 30:
+            ma20 = float(df["Close"].rolling(20).mean().iloc[-1])
+            atr_val = float(atr(df, 14).iloc[-1])
+            highest = max(float(row.get("highest") or mark), mark)
+            trail = highest - (CRYPTO_ALPHA_TRAIL_ATR_MULT * atr_val)
+            stop = float(row.get("stop") or 0.0)
+            if mark < ma20:
+                exit_reason = "Close/mark is below MA20."
+            elif stop > 0 and mark <= stop:
+                exit_reason = "Initial stop hit."
+            elif mark <= trail:
+                exit_reason = "ATR trailing stop hit."
+        actions.append({
+            "ticker": ticker,
+            "action": "SELL",
+            "price": mark,
+            "target_account_pct": 0.0,
+            "target_value": 0.0,
+            "current_value": round(float(row.get("market_value", 0) or 0), 2),
+            "suggested_dollars": round(float(row.get("market_value", 0) or 0), 2),
+            "reason": exit_reason,
+        })
+
+    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
+    return {
+        "plan_id": uuid.uuid4().hex,
+        "strategy_version": CRYPTO_ALPHA_STRATEGY_VERSION,
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "account_equity": round(equity, 2),
+        "target_crypto_account_pct": round(target_pct * 100, 2),
+        "target_crypto_value": round(target_value, 2),
+        "current_crypto_value": round(float(details.get("value", 0.0) or 0.0), 2),
+        "current_crypto_unrealized_profit": round(float(details.get("unrealized_profit", 0.0) or 0.0), 2),
+        "allocation": allocation,
+        "risk_guard": risk,
+        "gate": gate,
+        "universe": CRYPTO_ALPHA_UNIVERSE,
+        "indicator_symbols": CRYPTO_ALPHA_INDICATORS,
+        "top": selected,
+        "actions": actions,
+        "actionable": actionable,
+        "all_scored": scored,
+    }
+
+
+def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:
+    gate = plan.get("gate", {}) or {}
+    risk = plan.get("risk_guard", {}) or {}
+    msg = (
+        "🪙 CRYPTO TACTICAL SWING PLAN v4.1.1\n\n"
+        "Private bot only. Execute in broker/exchange first, then record with cryptobuy/cryptosell.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🪙 Target crypto sleeve: {plan.get('target_crypto_account_pct')}% = {format_money(float(plan.get('target_crypto_value', 0) or 0))}\n"
+        f"📦 Current crypto value: {format_money(float(plan.get('current_crypto_value', 0) or 0))}\n"
+        f"📈 Crypto unrealized P/L: {format_money(float(plan.get('current_crypto_unrealized_profit', 0) or 0))}\n\n"
+        f"🚦 Regime gate: {yes_no(bool(gate.get('ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} indicators above MA200; required {gate.get('required')})\n"
+    )
+    for row in gate.get("rows", []):
+        msg += f"• {row.get('ticker')}: price {row.get('price')} | MA200 {row.get('ma200')} | OK {yes_no(bool(row.get('ok')))}\n"
+    msg += "\n"
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "HOLD", "TRIM"}]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    if not actions:
+        msg += "No crypto action. If the gate is off, crypto sleeve stays cash.\n"
+    if ranked:
+        msg += "🎯 Crypto candidates\n"
+        for i, item in enumerate(ranked, start=1):
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+            msg += (
+                f"{i}) {verb} {item.get('ticker')}\n"
+                f"   Price: {item.get('price')} | Max entry: {item.get('max_valid_entry')} | Stop: {item.get('stop')}\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
+                f"   1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))} | ATR {item.get('atr_pct')}% | Score {item.get('score')}\n"
+            )
+        msg += "\n"
+    if exits:
+        msg += "🔴 Crypto exit / rotation candidates\n"
+        for item in exits:
+            msg += f"SELL {item.get('ticker')} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'Exit condition')}\n"
+        msg += "\n"
+    msg += (
+        "How to execute after broker/exchange fill:\n"
+        "• cryptobuy TICKER UNITS at PRICE\n"
+        "• cryptosell TICKER UNITS at PRICE\n\n"
+        "Crypto rules:\n"
+        "• BTC/ETH/SOL are indicators; default buys use cheaper major crypto names.\n"
+        "• Crypto has its own ledger and shares account cash.\n"
+        "• Do not use bought/sold, corebuy, growthbuy, or specbuy for crypto."
+    )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker = ticker.upper()
+    for item in plan.get("top", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def validate_crypto_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
+    if not CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE:
+        return True, "Quote check disabled", None
+    quote = get_crypto_quote(ticker)
+    if quote is None or quote <= 0:
+        return False, "Live crypto quote unavailable.", None
+    deviation = abs(price - quote) / quote
+    if deviation > CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT:
+        return False, (f"Crypto trade rejected: price too far from live quote.\n"
+                       f"Live quote: {round(quote, 8)}\nYour price: {round(price, 8)}\n"
+                       f"Max deviation: {round(CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%"), quote
+    return True, "OK", quote
+
+
+def record_crypto_buy(ticker: str, units: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not CRYPTO_ALPHA_LEDGER_ENABLED:
+        return False, "Crypto ledger is disabled."
+    if ticker not in CRYPTO_ALPHA_UNIVERSE:
+        return False, f"{ticker} is not in the v4.1.1 crypto universe."
+    if units <= 0 or not math.isfinite(units):
+        return False, "Crypto units must be positive and finite."
+    if not is_finite_positive(price):
+        return False, "Crypto price must be positive and finite."
+    amount = units * price
+    if amount < CRYPTO_ALPHA_MIN_TRADE_DOLLARS:
+        return False, f"Crypto trade amount is below minimum {format_money(CRYPTO_ALPHA_MIN_TRADE_DOLLARS)}."
+    plan = compute_crypto_alpha_plan()
+    target = crypto_target_for_ticker(plan, ticker)
+    if CRYPTO_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY and target is None:
+        allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", []))
+        return False, f"Crypto buy rejected: {ticker} is not in the active crypto plan. Current top: {allowed or 'none'}"
+    if target is not None:
+        max_entry = float(target.get("max_valid_entry") or 0)
+        if max_entry > 0 and price > max_entry:
+            return False, f"Crypto buy rejected: price {price} is above max entry {max_entry}."
+    ok, msg, quote = validate_crypto_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    stop = None if target is None else float(target.get("stop") or 0)
+    highest = price
+    now = now_ts()
+    plan_id = str(plan.get("plan_id"))
+    target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash:
+            mark_update_processed_tx(conn, update_id, "rejected_crypto_insufficient_cash")
+            return False, "Not enough cash for crypto buy."
+        row = conn.execute("SELECT * FROM crypto_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            crypto_position_id = f"CRYPTO_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
+            conn.execute(
+                """
+                INSERT INTO crypto_positions(
+                    ticker, crypto_position_id, strategy_version, units, avg_entry_price, cost_basis,
+                    initial_stop, stop, highest, entry_time, last_update_time, sleeve, target_account_pct, last_plan_id, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CRYPTO_ALPHA', ?, ?, '')
+                """,
+                (ticker, crypto_position_id, CRYPTO_ALPHA_STRATEGY_VERSION, round(units, 10), round(price, 10), round(amount, 6),
+                 None if stop is None or stop <= 0 else round(stop, 10), None if stop is None or stop <= 0 else round(stop, 10),
+                 round(highest, 10), now, now, target_pct, plan_id),
+            )
+        else:
+            pos = row_to_crypto_position(row)
+            crypto_position_id = pos["crypto_position_id"]
+            old_units = float(pos["units"])
+            old_cost = float(pos["cost_basis"])
+            new_units = old_units + units
+            new_cost = old_cost + amount
+            avg_price = new_cost / new_units
+            highest = max(float(pos.get("highest") or price), price)
+            conn.execute(
+                """
+                UPDATE crypto_positions
+                SET units = ?, avg_entry_price = ?, cost_basis = ?, stop = ?, highest = ?, last_update_time = ?,
+                    target_account_pct = ?, last_plan_id = ?, strategy_version = ?
+                WHERE ticker = ?
+                """,
+                (round(new_units, 10), round(avg_price, 10), round(new_cost, 6), None if stop is None or stop <= 0 else round(stop, 10),
+                 round(highest, 10), now, target_pct, plan_id, CRYPTO_ALPHA_STRATEGY_VERSION, ticker),
+            )
+        conn.execute(
+            """
+            INSERT INTO crypto_trades(id, crypto_position_id, ticker, side, units, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (uuid.uuid4().hex, crypto_position_id, ticker, round(units, 10), round(price, 10), round(amount, 6), now,
+             CRYPTO_ALPHA_STRATEGY_VERSION, plan_id, "crypto_plan_buy", now),
+        )
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "processed_crypto_buy")
+    refresh_portfolio()
+    audit("CRYPTO_BUY", f"{ticker} units={units} price={price} amount={amount}")
+    return True, (f"🪙 CRYPTO BUY RECORDED {ticker}\n\n"
+                  f"📦 Units: {format_core_shares(units)}\n"
+                  f"💵 Price: {round(price, 8)}\n"
+                  f"💰 Amount: {format_money(amount)}\n"
+                  f"💵 Cash left: {format_money(portfolio['cash'])}")
+
+
+def record_crypto_sell(ticker: str, units: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not CRYPTO_ALPHA_LEDGER_ENABLED:
+        return False, "Crypto ledger is disabled."
+    if units <= 0 or not math.isfinite(units):
+        return False, "Crypto units must be positive and finite."
+    if not is_finite_positive(price):
+        return False, "Crypto price must be positive and finite."
+    ok, msg, quote = validate_crypto_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    with db_tx() as conn:
+        row = conn.execute("SELECT * FROM crypto_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            mark_update_processed_tx(conn, update_id, "rejected_crypto_no_position")
+            return False, "No crypto position to sell."
+        pos = row_to_crypto_position(row)
+        current_units = float(pos["units"])
+        if units - current_units > 1e-10:
+            mark_update_processed_tx(conn, update_id, "rejected_crypto_too_many_units")
+            return False, f"You only have {format_core_shares(current_units)} units of {ticker}."
+        units = min(units, current_units)
+        avg = float(pos["avg_entry_price"])
+        proceeds = units * price
+        realized_profit = (price - avg) * units
+        remaining = current_units - units
+        now = now_ts()
+        plan = compute_crypto_alpha_plan()
+        plan_id = str(plan.get("plan_id"))
+        conn.execute(
+            """
+            INSERT INTO crypto_trades(id, crypto_position_id, ticker, side, units, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (uuid.uuid4().hex, pos["crypto_position_id"], ticker, round(units, 10), round(price, 10), round(proceeds, 6),
+             round(realized_profit, 6), now, CRYPTO_ALPHA_STRATEGY_VERSION, plan_id, "crypto_plan_sell", now),
+        )
+        if remaining <= 1e-10:
+            conn.execute("DELETE FROM crypto_positions WHERE ticker = ?", (ticker,))
+        else:
+            new_cost = avg * remaining
+            conn.execute("UPDATE crypto_positions SET units = ?, cost_basis = ?, last_update_time = ? WHERE ticker = ?",
+                         (round(remaining, 10), round(new_cost, 6), now, ticker))
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + proceeds)
+        mark_update_processed_tx(conn, update_id, "processed_crypto_sell")
+    refresh_portfolio()
+    audit("CRYPTO_SELL", f"{ticker} units={units} price={price} proceeds={proceeds} profit={realized_profit}")
+    return True, (f"🪙 CRYPTO SELL RECORDED {ticker}\n\n"
+                  f"📦 Units: {format_core_shares(units)}\n"
+                  f"💵 Price: {round(price, 8)}\n"
+                  f"💰 Proceeds: {format_money(proceeds)}\n"
+                  f"📊 Realized crypto P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
+                  f"💵 Cash now: {format_money(portfolio['cash'])}")
+
+
+_V41_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
+    base = _V41_OLD_DYNAMIC()
+    market = str(base.get("market", "UNCERTAIN"))
+    risk = base.get("risk_guard", {}) or {}
+    if risk.get("hard_active"):
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    elif market == "BULL":
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 45.0, 20.0, 5.0, 0.0, 10.0
+    elif market == "BEAR":
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    else:
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 20.0, 10.0, 3.0, 0.0, 5.0
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        growth *= 0.50
+        spec *= 0.50
+        long_vcp *= 0.50
+        crypto *= 0.50
+    if not GROWTH_ALPHA_ENABLED:
+        growth = 0.0
+    if not SPEC_ALPHA_ENABLED:
+        spec = 0.0
+    if not CRYPTO_ALPHA_ENABLED:
+        crypto = 0.0
+    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear - crypto)
+    base["strategy_version"] = "v4_1_1_freeze_growth_crypto_swing_20_45_20_5_10_dynamic_allocation"
+    base["core_wealth_pct"] = round(core, 2)
+    base["growth_alpha_pct"] = round(growth, 2)
+    base["spec_alpha_pct"] = round(spec, 2)
+    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
+    base["bear_inverse_tactical_pct"] = round(bear, 2)
+    base["crypto_alpha_pct"] = round(crypto, 2)
+    base["cash_reserve_pct"] = round(cash, 2)
+    return base
+
+
+_V41_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
+
+def compute_equity_snapshot_data() -> Dict[str, float]:
+    snapshot = _V41_OLD_COMPUTE_EQUITY()
+    crypto_positions = load_crypto_positions() if CRYPTO_ALPHA_LEDGER_ENABLED else {}
+    prices = get_crypto_prices_batch(list(crypto_positions.keys()))
+    crypto_value = 0.0
+    crypto_cost = 0.0
+    for ticker, pos in crypto_positions.items():
+        price = prices.get(ticker, pos.get("avg_entry_price", 0))
+        crypto_value += float(price) * float(pos["units"])
+        crypto_cost += float(pos.get("cost_basis", 0) or 0)
+    snapshot["crypto_alpha_positions_value"] = round(crypto_value, 2)
+    snapshot["crypto_alpha_cost_basis"] = round(crypto_cost, 2)
+    snapshot["crypto_alpha_unrealized_profit"] = round(crypto_value - crypto_cost, 2)
+    snapshot["positions_value"] = round(float(snapshot.get("positions_value", 0) or 0) + crypto_value, 2)
+    snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + crypto_value, 2)
+    return snapshot
+
+
+_V41_OLD_REALIZED = realized_performance_all_time
+
+def realized_performance_all_time() -> Dict[str, Any]:
+    perf = _V41_OLD_REALIZED()
+    crypto_trades = load_crypto_trades() if CRYPTO_ALPHA_LEDGER_ENABLED else []
+    crypto_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in crypto_trades if str(t.get("side")).upper() == "SELL"), 2)
+    perf["crypto_realized_profit"] = crypto_profit
+    perf["profit"] = round(float(perf.get("profit", 0) or 0) + crypto_profit, 2)
+    base_cap = float(perf.get("base_capital", 0) or 0)
+    perf["pct"] = None if base_cap <= 0 else (perf["profit"] / base_cap) * 100
+    perf["crypto_trade_records"] = len(crypto_trades)
+    perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(crypto_trades)
+    return perf
+
+
+_V41_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
+
+def format_combined_portfolio_report() -> str:
+    base_msg = _V41_OLD_PORTFOLIO_REPORT()
+    rows = crypto_position_market_value_details().get("rows", []) if CRYPTO_ALPHA_LEDGER_ENABLED else []
+    if not rows:
+        return base_msg.replace("No open swing, core, SPEC, or Growth Alpha positions", "No open swing, core, SPEC, Growth Alpha, or Crypto positions")
+    msg = base_msg + "\n\n🪙 CRYPTO_ALPHA POSITIONS\n\n"
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Units: {format_core_shares(row['units'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 8)} | Now: {round(float(row['mark_price']), 8)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_crypto_portfolio_report() -> str:
+    details = crypto_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = (f"🪙 CRYPTO_ALPHA PORTFOLIO\n\n"
+           f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
+           f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+           f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+           f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+           f"✅ Realized Crypto P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+           f"💼 Total equity: {format_money(snapshot['equity'])}\n\n")
+    if not rows:
+        return msg + "No crypto positions recorded yet. Use cryptoplan, then cryptobuy after broker/exchange execution."
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Units: {format_core_shares(row['units'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 8)} | Now: {round(float(row['mark_price']), 8)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
+                f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_crypto_pnl_report() -> str:
+    details = crypto_position_market_value_details()
+    trades = load_crypto_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return (f"🪙 CRYPTO_ALPHA P/L\n\n"
+            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+            f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+            f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+            f"💰 Total Crypto P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
+            f"Buy records: {len(buys)}\nSell records: {len(sells)}")
+
+
+def format_crypto_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    details = crypto_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    alloc = dynamic_portfolio_allocation_targets()
+    target_pct = float(alloc.get("crypto_alpha_pct", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    return (f"🪙 CRYPTO EXPOSURE\n\n"
+            f"💼 Total equity: {format_money(equity)}\n"
+            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"🎯 Target Crypto: {round(target_pct, 2)}% of account\n"
+            f"📊 Actual Crypto: {round(actual_pct, 2)}% of account\n"
+            f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
+            "Use cryptoplan for BUY/HOLD/SELL actions.")
+
+
+def format_portfolio_allocation_plan() -> str:
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.1.1 FREEZE 20/45/20/5/10\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🪙 Crypto tactical swing: {plan.get('crypto_alpha_pct')}%\n"
+        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
+        "• Long VCP and Crypto are tactical/swing-style sleeves.\n"
+        "• Crypto uses BTC/ETH/SOL as indicators and buys cheaper major crypto candidates.\n"
+        "• Bear-stock tactical is disabled in this candidate.\n"
+        "• Options remain research-only."
+    )
+
+
+_V41_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    zip_path = _V41_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("crypto_positions.table.json", json.dumps(safe_convert(list(load_crypto_positions().values())), indent=2))
+            z.writestr("crypto_trades.table.json", json.dumps(safe_convert(load_crypto_trades()), indent=2))
+            latest = load_latest_crypto_signal()
+            z.writestr("crypto_latest_plan.json", json.dumps(safe_convert(latest or {}), indent=2))
+    except Exception as exc:
+        print(f"[CRYPTO EXPORT WARNING] {exc}")
+    return zip_path
+
+
+_V41_OLD_RESET_ALL = reset_all_paper_state
+
+def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+    ok, msg, backup_path = _V41_OLD_RESET_ALL(update_id=update_id)
+    with db_tx() as conn:
+        conn.execute("DELETE FROM crypto_positions")
+        conn.execute("DELETE FROM crypto_trades")
+        conn.execute("DELETE FROM crypto_signals")
+    return ok, msg + "\n✅ Crypto Alpha positions/trades/signals cleared", backup_path
+
+
+_V41_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower == "cryptoplan":
+        send("🪙 Crypto tactical plan started. This scores BTC/ETH/SOL indicators and cheaper major crypto candidates.")
+        plan = compute_crypto_alpha_plan()
+        save_crypto_plan_signal(plan)
+        send(format_crypto_alpha_plan(plan))
+        return
+    if text_lower == "cryptostatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_crypto_signal()
+        details = crypto_position_market_value_details()
+        gate = crypto_indicator_gate()
+        send(
+            "🪙 CRYPTO_ALPHA STATUS v4.1.1\n\n"
+            f"Enabled: {yes_no(CRYPTO_ALPHA_ENABLED)}\n"
+            f"Ledger enabled: {yes_no(CRYPTO_ALPHA_LEDGER_ENABLED)}\n"
+            f"Target now: {alloc.get('crypto_alpha_pct')}% of account\n"
+            f"Indicators: {', '.join(CRYPTO_ALPHA_INDICATORS)}\n"
+            f"Universe: {', '.join(CRYPTO_ALPHA_UNIVERSE)}\n"
+            f"Regime gate: {yes_no(bool(gate.get('ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200)\n"
+            f"Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\ncryptoplan\ncryptobuy TICKER UNITS at PRICE\ncryptosell TICKER UNITS at PRICE\ncryptoportfolio | cryptopnl | cryptoexposure"
+        )
+        return
+    if text_lower == "cryptoportfolio":
+        send(format_crypto_portfolio_report())
+        return
+    if text_lower == "cryptopnl":
+        send(format_crypto_pnl_report())
+        return
+    if text_lower == "cryptoexposure":
+        send(format_crypto_exposure_report())
+        return
+    if text_lower == "equity":
+        snapshot = compute_equity_snapshot_data()
+        send(
+            "💼 ACCOUNT EQUITY\n\n"
+            f"💵 Cash: {format_money(snapshot['cash'])}\n"
+            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
+            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
+            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
+            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
+            f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}\n"
+            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
+            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
+        )
+        return
+
+    crypto_cmd = re.fullmatch(
+        r"(?i)\s*(cryptobuy|cryptosell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if crypto_cmd:
+        action = crypto_cmd.group(1).lower()
+        ticker = normalize_ticker(crypto_cmd.group(2))
+        units = float(crypto_cmd.group(3))
+        price = float(crypto_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "cryptobuy":
+            ok, msg = record_crypto_buy(ticker, units, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "cryptosell":
+            ok, msg = record_crypto_sell(ticker, units, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+    if text_lower in {"help", "/help"}:
+        _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+        send(
+            "V4.1.1 Freeze notes:\n"
+            "• Allocation target: Core 20% / Growth 45% / SPEC 20% / Long VCP 5% / Crypto 10%.\n"
+            "• Crypto uses BTC/ETH/SOL as regime indicators and buys cheaper major crypto candidates.\n"
+            "• Use cryptobuy/cryptosell only. Do not mix crypto with bought/sold, corebuy, growthbuy, or specbuy."
+        )
+        return
+
+    return _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
 if __name__ == "__main__":
 
 
 
     main()
-
