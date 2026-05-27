@@ -21633,6 +21633,585 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     return _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+# =============================================================================
+# V4.1.1 LIVE HOTFIX 2026-05-27
+# =============================================================================
+# Scope:
+# - Fix Growth Alpha market-filter DataFrame truth-value crash.
+# - Remove stale/untradeable SPEC_ALPHA corporate-action tickers from planning and buys.
+# - Disable legacy inverse/bear sleeve by default in the v4.1.1 crypto-tactical freeze.
+# - Keep public Core/SPEC plans off by default unless explicitly re-enabled by env.
+# No strategy research changes: allocation and indicators remain the v4.1.1 freeze.
+
+STRATEGY_VERSION = os.getenv(
+    "STRATEGY_VERSION",
+    "v4.1.1-hotfix-growth-spec-clean-20-45-20-5-10-monitor"
+)
+
+# Safety: v4.1.1 replaced the weak/blocked bear sleeve with crypto tactical. Keep the
+# legacy bear sleeve disabled unless intentionally re-enabled by environment variable.
+BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "0") != "0"
+if not BEAR_SLEEVE_ENABLED:
+    BEAR_WATCHLIST = []
+ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
+
+# Public plan posting should be explicitly enabled after outputs are verified.
+CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "0") == "1"
+SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED", "0") == "1"
+
+# Corporate-action / stale-universe blocks. Do not substitute replacement tickers automatically.
+# HOUS: Anywhere/HOUS corporate-action issue. AMRK: A-Mark renamed to GOLD. Both polluted plans.
+SPEC_ALPHA_EXCLUDED_TICKERS = {
+    x.strip().upper()
+    for x in os.getenv("SPEC_ALPHA_EXCLUDED_TICKERS", "HOUS,AMRK").split(",")
+    if x.strip()
+}
+SPEC_ALPHA_UNIVERSE = [
+    t for t in SPEC_ALPHA_UNIVERSE
+    if str(t).upper() not in SPEC_ALPHA_EXCLUDED_TICKERS
+]
+
+_V411_HOTFIX_OLD_GROWTH_MARKET_FILTER_OK = growth_alpha_market_filter_ok
+
+def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+    """v4.1.1 hotfix: avoid evaluating pandas DataFrames as booleans."""
+    try:
+        details = market_details if isinstance(market_details, dict) else market_regime_details()
+        if int(details.get("score", 0) or 0) < GROWTH_ALPHA_REQUIRE_MARKET_SCORE:
+            return False, "market score below threshold"
+        if GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200:
+            frames = details.get("frames", {}) if isinstance(details.get("frames"), dict) else {}
+            for symbol in ["SPY", "QQQ"]:
+                df = frames.get(symbol)
+                if not isinstance(df, pd.DataFrame) or df.empty:
+                    df = get_signal_dataframe(symbol, limit=260)
+                last, ma = frame_last_close_ma(df, 200)
+                if last is None or ma is None:
+                    return False, f"{symbol} MA200 data unavailable"
+                if last <= ma:
+                    return False, f"{symbol} below MA200"
+        return True, "OK"
+    except Exception as exc:
+        return False, f"market filter error: {exc}"
+
+_V411_HOTFIX_OLD_SPEC_SCORE_TICKER = spec_alpha_score_ticker
+
+def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
+    nticker = normalize_ticker(str(ticker)) or ""
+    if nticker in SPEC_ALPHA_EXCLUDED_TICKERS:
+        return None
+    return _V411_HOTFIX_OLD_SPEC_SCORE_TICKER(nticker)
+
+_V411_HOTFIX_OLD_RECORD_SPEC_BUY = record_spec_buy
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    nticker = normalize_ticker(str(ticker)) or ""
+    if nticker in SPEC_ALPHA_EXCLUDED_TICKERS:
+        return False, (
+            f"SPEC_ALPHA buy rejected: {nticker} is blocked by v4.1.1 hotfix corporate-action cleanup. "
+            "Do not substitute another ticker manually; rerun specplan."
+        )
+    return _V411_HOTFIX_OLD_RECORD_SPEC_BUY(nticker, shares, price, update_id=update_id)
+
+_V411_HOTFIX_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
+
+def compute_spec_alpha_plan() -> Dict[str, Any]:
+    plan = _V411_HOTFIX_OLD_COMPUTE_SPEC_PLAN()
+    plan["excluded_tickers"] = sorted(SPEC_ALPHA_EXCLUDED_TICKERS)
+    plan["universe_size"] = len(SPEC_ALPHA_UNIVERSE)
+    # Defensive scrub in case a cached/scored object somehow leaks through.
+    for key in ["top", "actions", "actionable", "all_scored"]:
+        rows = plan.get(key)
+        if isinstance(rows, list):
+            plan[key] = [r for r in rows if str(r.get("ticker", "")).upper() not in SPEC_ALPHA_EXCLUDED_TICKERS]
+    return plan
+
+
+_V411_HOTFIX_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
+
+def _v411_hotfix_plan_contains_excluded(plan: Dict[str, Any]) -> bool:
+    for key in ["top", "actions", "actionable", "all_scored"]:
+        rows = plan.get(key)
+        if isinstance(rows, list):
+            for row in rows:
+                if str(row.get("ticker", "")).upper() in SPEC_ALPHA_EXCLUDED_TICKERS:
+                    return True
+    return False
+
+def current_spec_plan_for_validation() -> Dict[str, Any]:
+    latest = load_latest_spec_plan()
+    if latest is not None:
+        try:
+            age_days = (now_ts() - float(latest.get("time", 0))) / 86400
+            plan = latest.get("plan") or {}
+            if age_days <= SPEC_ALPHA_PLAN_VALID_DAYS and plan and not _v411_hotfix_plan_contains_excluded(plan):
+                return plan
+        except Exception:
+            pass
+    plan = compute_spec_alpha_plan()
+    save_spec_plan_signal(plan)
+    return plan
+
+_V411_HOTFIX_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
+    msg = _V411_HOTFIX_OLD_FORMAT_SPEC_PLAN(plan)
+    excluded = plan.get("excluded_tickers") or []
+    if excluded:
+        note = (
+            "\n\n🧹 v4.1.1 hotfix cleanup:\n"
+            f"Blocked stale SPEC tickers: {', '.join(excluded)}.\n"
+            "No replacement ticker is used automatically."
+        )
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+_V411_HOTFIX_OLD_FORMAT_PUBLIC_SPEC_PLAN = format_public_spec_plan
+
+def format_public_spec_plan(plan: Dict[str, Any]) -> str:
+    msg = _V411_HOTFIX_OLD_FORMAT_PUBLIC_SPEC_PLAN(plan)
+    excluded = plan.get("excluded_tickers") or []
+    if excluded:
+        note = f"\n\nOperational cleanup: excluded stale tickers {', '.join(excluded)}."
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+_V411_HOTFIX_OLD_GROWTH_STATUS_REPORT = format_growth_alpha_plan
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
+    msg = _V411_HOTFIX_OLD_GROWTH_STATUS_REPORT(plan)
+    if plan.get("market_ok") and int(plan.get("scored_count", 0) or 0) == 0 and float(plan.get("target_growth_account_pct", 0) or 0) > 0:
+        note = "\n\n⚠️ Growth market filter passed but no tickers scored. Check FMP data/quotes before trading."
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+_V411_HOTFIX_OLD_BEAR_STATUS_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower == "bearstatus":
+        send(
+            "🐻 BEAR SLEEVE STATUS v4.1.1\n\n"
+            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
+            "Bear-stock / inverse bear tactical is disabled in v4.1.1.\n"
+            "Crypto tactical swing is the researched replacement sleeve.\n\n"
+            "Use cryptostatus / cryptoplan for the active crypto tactical sleeve."
+        )
+        return
+    return _V411_HOTFIX_OLD_BEAR_STATUS_COMMAND(text_clean, update_id=update_id)
+
+
+# -----------------------------------------------------------------------------
+# V4.1.1 HOTFIX 2026-05-27
+# -----------------------------------------------------------------------------
+# Operational bug fixes only. No strategy research changes.
+# 1) Fix Growth Alpha market-filter DataFrame truth-value bug.
+# 2) Block stale SPEC corporate-action tickers HOUS/AMRK from plans and buys.
+# 3) Extend institutional diagnostics to Growth Alpha and Crypto Alpha ledgers.
+# 4) Default Core/SPEC public monthly plan forwarding to OFF unless explicitly enabled.
+
+V411_HOTFIX_VERSION = "v4.1.1-hotfix-20260527"
+
+# Public monthly plan forwarding should be explicitly enabled, not default-on.
+# This does not affect private Telegram commands. If Railway variables explicitly set
+# CORE_PUBLIC_SIGNAL_ENABLED=1 or SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED=1, they still win.
+CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "0").strip() == "1"
+SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED", "0").strip() == "1"
+
+# Remove known stale corporate-action names from SPEC_ALPHA. These names should not
+# be planned, publicly shown, or accepted for manual specbuy. Do not substitute a
+# different ticker without separate offline research.
+SPEC_ALPHA_BLOCKLIST = {
+    x.strip().upper()
+    for x in os.getenv("SPEC_ALPHA_BLOCKLIST", "HOUS,AMRK").split(",")
+    if x.strip()
+}
+SPEC_ALPHA_UNIVERSE = [
+    t for t in SPEC_ALPHA_UNIVERSE
+    if str(t).upper() not in SPEC_ALPHA_BLOCKLIST
+]
+
+
+def _v411_plan_has_blocked_spec_ticker(plan: Dict[str, Any]) -> bool:
+    try:
+        for key in ("top", "actions", "actionable", "all_scored"):
+            for item in plan.get(key, []) or []:
+                ticker = str(item.get("ticker", "")).upper()
+                if ticker in SPEC_ALPHA_BLOCKLIST:
+                    return True
+    except Exception:
+        return True
+    return False
+
+
+# Override the Growth Alpha market filter to avoid evaluating a pandas DataFrame
+# as a boolean. The old code used `frames.get(symbol) or get_signal_dataframe(...)`,
+# which raises: "The truth value of a DataFrame is ambiguous".
+def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+    try:
+        details = market_details if market_details is not None else market_regime_details()
+        if int(details.get("score", 0) or 0) < GROWTH_ALPHA_REQUIRE_MARKET_SCORE:
+            return False, "market score below threshold"
+
+        if GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200:
+            raw_frames = details.get("frames", {})
+            frames = raw_frames if isinstance(raw_frames, dict) else {}
+            for symbol in ["SPY", "QQQ"]:
+                df = frames.get(symbol)
+                if df is None or (hasattr(df, "empty") and bool(df.empty)):
+                    df = get_signal_dataframe(symbol, limit=260)
+                last, ma = frame_last_close_ma(df, 200)
+                if last is None or ma is None or last <= ma:
+                    return False, f"{symbol} below MA200"
+        return True, "OK"
+    except Exception as exc:
+        logger.exception(f"[GROWTH MARKET FILTER HOTFIX ERROR] {exc}")
+        return False, f"market filter error: {exc}"
+
+
+# Ignore old active SPEC plans if they contain blocked corporate-action tickers.
+def current_spec_plan_for_validation() -> Dict[str, Any]:
+    latest = load_latest_spec_plan()
+    if latest is not None:
+        try:
+            age_days = (now_ts() - float(latest.get("time", 0))) / 86400
+            plan = latest.get("plan") or {}
+            if age_days <= SPEC_ALPHA_PLAN_VALID_DAYS and plan and not _v411_plan_has_blocked_spec_ticker(plan):
+                return plan
+        except Exception:
+            pass
+    plan = compute_spec_alpha_plan()
+    save_spec_plan_signal(plan)
+    return plan
+
+
+_V411_OLD_RECORD_SPEC_BUY = record_spec_buy
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker_norm = normalize_ticker(ticker) or ""
+    if ticker_norm in SPEC_ALPHA_BLOCKLIST:
+        return False, (
+            f"SPEC_ALPHA buy rejected: {ticker_norm} is blocked by the v4.1.1 corporate-action/stale-ticker list.\n"
+            "No substitute ticker is allowed without offline research."
+        )
+    return _V411_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
+
+
+# Make public SPEC output robust even if an old cached plan is accidentally used.
+def format_public_spec_plan(plan: Dict[str, Any]) -> str:
+    actions = plan.get("actions", []) or []
+    ranked = [
+        a for a in actions
+        if a.get("rank") is not None and str(a.get("ticker", "")).upper() not in SPEC_ALPHA_BLOCKLIST
+    ]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    msg = "⚡ SPEC_ALPHA ROTATION PLAN\n\nMedium/weak monthly momentum sleeve. No share counts. Use your own account size.\n\n"
+    msg += (
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} | "
+        f"Market filter: {yes_no(bool(plan.get('market_ok')))}\n"
+        f"🎯 Target SPEC sleeve: {plan.get('target_spec_account_pct')}% of account\n"
+        f"🎚️ Mode: {plan.get('score_mode')} | Top {plan.get('top_n')}\n"
+        f"🚫 Excluded stale tickers: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n\n"
+    )
+    for item in ranked[:SPEC_ALPHA_TOP_N]:
+        action = str(item.get("action", "HOLD")).upper()
+        verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+        msg += (
+            f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('sector', 'Unknown')})\n"
+            f"Target: {item.get('target_account_pct')}% of account | Price: {item.get('price')}\n"
+            f"1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | "
+            f"6m {format_pct(item.get('roc_6m_pct'))}\n"
+            f"Score: {item.get('score')}\n\n"
+        )
+    if exits:
+        msg += "🔴 Rotation exits:\n"
+        for item in exits[:10]:
+            msg += f"SELL/REMOVE {item['ticker']} — {item.get('reason', 'No longer selected')}\n"
+        msg += "\n"
+    msg += public_signal_footer()
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+# Diagnostics helpers including Growth Alpha and Crypto Alpha ledgers.
+def _v411_hotfix_cluster_for_ticker(ticker: str) -> str:
+    t = str(ticker).upper()
+    if "GROWTH_ALPHA_CLUSTER_MAP" in globals() and t in GROWTH_ALPHA_CLUSTER_MAP:
+        return GROWTH_ALPHA_CLUSTER_MAP.get(t, "growth_other")
+    if "CRYPTO_ALPHA_UNIVERSE" in globals() and t in set(CRYPTO_ALPHA_UNIVERSE) | set(CRYPTO_ALPHA_INDICATORS):
+        return "crypto_alpha"
+    return _v38_cluster_for_ticker(t)
+
+
+def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
+    refresh_portfolio()
+    swing_positions = portfolio.get("positions", {}) or {}
+    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
+    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
+    growth_positions = load_growth_positions() if globals().get("GROWTH_ALPHA_LEDGER_ENABLED", False) else {}
+    crypto_positions = load_crypto_positions() if globals().get("CRYPTO_ALPHA_LEDGER_ENABLED", False) else {}
+
+    tickers = list(dict.fromkeys(
+        list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys()) +
+        list(growth_positions.keys()) + list(crypto_positions.keys())
+    ))
+    if prices is None:
+        prices = get_prices_batch(tickers) if tickers else {}
+
+    holdings: List[Dict[str, Any]] = []
+
+    for ticker, pos in swing_positions.items():
+        shares = _v38_float(pos.get("shares"), 0.0)
+        entry = _v38_float(pos.get("price"), 0.0)
+        price = _v38_float(prices.get(ticker, entry), entry)
+        value = shares * price
+        holdings.append({
+            "ticker": ticker, "ledger": "swing", "sleeve": _v38_entry_sleeve_from_pos(ticker, pos),
+            "cluster": _v411_hotfix_cluster_for_ticker(ticker), "shares": shares,
+            "entry_price": entry, "mark_price": price, "market_value": round(value, 2),
+            "cost_basis": round(entry * shares, 2), "unrealized_profit": round((price - entry) * shares, 2),
+            "stop": pos.get("stop"), "highest": pos.get("highest"),
+        })
+
+    for ledger_name, sleeve_name, positions in [
+        ("core", "CORE_WEALTH", core_positions),
+        ("spec", "SPEC_ALPHA", spec_positions),
+        ("growth", "GROWTH_ALPHA", growth_positions),
+    ]:
+        for ticker, pos in positions.items():
+            shares = _v38_float(pos.get("shares"), 0.0)
+            entry = _v38_float(pos.get("avg_entry_price"), 0.0)
+            cost_basis = _v38_float(pos.get("cost_basis"), entry * shares)
+            price = _v38_float(prices.get(ticker, entry), entry)
+            value = shares * price
+            holdings.append({
+                "ticker": ticker, "ledger": ledger_name, "sleeve": sleeve_name,
+                "cluster": _v411_hotfix_cluster_for_ticker(ticker), "shares": shares,
+                "entry_price": entry, "mark_price": price, "market_value": round(value, 2),
+                "cost_basis": round(cost_basis, 2), "unrealized_profit": round(value - cost_basis, 2),
+                "target_account_pct": pos.get("target_account_pct"),
+            })
+
+    for ticker, pos in crypto_positions.items():
+        units = _v38_float(pos.get("units"), 0.0)
+        entry = _v38_float(pos.get("avg_entry_price"), 0.0)
+        cost_basis = _v38_float(pos.get("cost_basis"), entry * units)
+        price = _v38_float(prices.get(ticker, entry), entry)
+        value = units * price
+        holdings.append({
+            "ticker": ticker, "ledger": "crypto", "sleeve": "CRYPTO_ALPHA",
+            "cluster": "crypto_alpha", "shares": units, "entry_price": entry,
+            "mark_price": price, "market_value": round(value, 2),
+            "cost_basis": round(cost_basis, 2), "unrealized_profit": round(value - cost_basis, 2),
+            "target_account_pct": pos.get("target_account_pct"), "stop": pos.get("stop"), "highest": pos.get("highest"),
+        })
+
+    return holdings
+
+
+def institutional_datahealth_snapshot() -> Dict[str, Any]:
+    refresh_portfolio()
+    swing_positions = portfolio.get("positions", {}) or {}
+    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
+    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
+    growth_positions = load_growth_positions() if globals().get("GROWTH_ALPHA_LEDGER_ENABLED", False) else {}
+    crypto_positions = load_crypto_positions() if globals().get("CRYPTO_ALPHA_LEDGER_ENABLED", False) else {}
+    tickers = list(dict.fromkeys(
+        list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys()) +
+        list(growth_positions.keys()) + list(crypto_positions.keys())
+    ))
+    prices = get_prices_batch(tickers) if tickers else {}
+    holdings = _v38_collect_holdings(prices)
+
+    missing_quotes = [t for t in tickers if t not in prices]
+    bad_values = []
+    stop_warnings = []
+    for h in holdings:
+        if h["shares"] <= 0 or h["entry_price"] <= 0 or h["mark_price"] <= 0:
+            bad_values.append(h["ticker"])
+        if h["ledger"] == "swing":
+            stop = _v38_float(h.get("stop"), 0.0)
+            if stop <= 0:
+                stop_warnings.append({"ticker": h["ticker"], "issue": "missing_or_invalid_stop"})
+        if h["ledger"] == "crypto":
+            stop = _v38_float(h.get("stop"), 0.0)
+            if stop <= 0:
+                stop_warnings.append({"ticker": h["ticker"], "issue": "missing_crypto_stop"})
+
+    status = "OK"
+    if missing_quotes or bad_values or len(stop_warnings) >= 3:
+        status = "WARNING"
+    if _v38_float(portfolio.get("cash"), 0.0) < 0:
+        status = "CRITICAL"
+
+    return {
+        "status": status,
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
+        "expected_daily_bar_date": expected_daily_bar_date(),
+        "last_scan_day": get_meta("last_scan_day"),
+        "last_scan_bar_date": get_meta("last_scan_bar_date"),
+        "panic_mode": PANIC_MODE,
+        "cash_negative": _v38_float(portfolio.get("cash"), 0.0) < 0,
+        "holdings_count": len(holdings),
+        "quote_tickers_requested": len(tickers),
+        "quote_tickers_received": len(prices),
+        "missing_quotes": missing_quotes,
+        "bad_value_tickers": bad_values,
+        "stop_warnings": stop_warnings,
+        "notes": [
+            "On-demand diagnostic only; does not block trades.",
+            "Includes swing, core, SPEC, Growth Alpha, and Crypto Alpha ledgers after v4.1.1 hotfix.",
+        ],
+    }
+
+
+def institutional_stress_snapshot() -> Dict[str, Any]:
+    risk = institutional_riskmatrix_snapshot()
+    holdings = _v38_collect_holdings()
+    equity = _v38_float(risk.get("equity"), 0.0)
+
+    scenarios = {
+        "broad_risk_off": {
+            "description": "Broad risk-off: core -8%, growth -18%, SPEC -18%, VCP -10%, crypto -25%.",
+            "default": -0.08,
+            "CORE_WEALTH": -0.08,
+            "GROWTH_ALPHA": -0.18,
+            "SPEC_ALPHA": -0.18,
+            "LONG_VCP_OR_TACTICAL": -0.10,
+            "CRYPTO_ALPHA": -0.25,
+        },
+        "growth_spec_unwind": {
+            "description": "Growth/SPEC momentum unwind: growth -22%, SPEC -25%, crypto -20%, core -4%.",
+            "default": -0.04,
+            "GROWTH_ALPHA": -0.22,
+            "SPEC_ALPHA": -0.25,
+            "CRYPTO_ALPHA": -0.20,
+            "LONG_VCP_OR_TACTICAL": -0.08,
+        },
+        "growth_semis_ai_shock": {
+            "description": "AI/semis/growth shock: mapped growth clusters -22%, SPEC -12%, crypto -15%.",
+            "default": -0.05,
+            "GROWTH_ALPHA": -0.12,
+            "SPEC_ALPHA": -0.12,
+            "CRYPTO_ALPHA": -0.15,
+            "LONG_VCP_OR_TACTICAL": -0.10,
+            "cluster_overrides": {
+                "semis_ai": -0.22,
+                "software_ai": -0.20,
+                "ai_infrastructure": -0.20,
+                "ai_power": -0.18,
+                "mega_platforms": -0.16,
+            },
+        },
+        "crypto_flush": {
+            "description": "Crypto flush: crypto -35%, Growth -8%, SPEC -8%, Core -2%.",
+            "default": -0.02,
+            "CRYPTO_ALPHA": -0.35,
+            "GROWTH_ALPHA": -0.08,
+            "SPEC_ALPHA": -0.08,
+            "LONG_VCP_OR_TACTICAL": -0.05,
+        },
+    }
+
+    results = []
+    for name, cfg in scenarios.items():
+        pnl = 0.0
+        for h in holdings:
+            value = _v38_float(h.get("market_value"), 0.0)
+            sleeve = h.get("sleeve")
+            shock = cfg.get(sleeve, cfg.get("default", 0.0))
+            cluster_overrides = cfg.get("cluster_overrides", {}) or {}
+            if h.get("cluster") in cluster_overrides:
+                shock = cluster_overrides[h.get("cluster")]
+            pnl += value * float(shock)
+        results.append({
+            "scenario": name,
+            "description": cfg.get("description"),
+            "pnl": round(pnl, 2),
+            "pct_equity": round(_v38_pct(pnl, equity), 2),
+        })
+
+    worst = min(results, key=lambda x: x.get("pnl", 0.0), default={"scenario": "none", "pnl": 0.0, "pct_equity": 0.0})
+    return {
+        "status": "WARNING" if worst.get("pct_equity", 0.0) <= -10 else "OK",
+        "equity": round(equity, 2),
+        "worst_scenario": worst,
+        "scenarios": results,
+        "notes": ["Approximate monitoring only; does not block trades.", "v4.1.1 hotfix scenarios include Growth and Crypto sleeves."],
+    }
+
+
+def format_riskmatrix_status() -> str:
+    r = institutional_riskmatrix_snapshot()
+    equity = float(r.get("equity", 0) or 0)
+    ledgers = "\n".join(
+        f"• {x['ledger']}: {format_money(float(x['value']))} ({x['account_pct']}%)"
+        for x in r.get("ledger_exposure", [])
+    )
+    clusters = "\n".join(
+        f"• {x['cluster']}: {format_money(float(x['value']))} ({x['account_pct']}%)"
+        for x in r.get("cluster_exposure", [])[:10]
+    )
+    positions = "\n".join(
+        f"• {x['ticker']} [{x.get('ledger')}]: {format_money(float(x['market_value']))} ({x.get('account_pct')}%)"
+        for x in r.get("top_positions", [])[:10]
+    )
+    warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
+    return (
+        "🧮 RISK MATRIX v4.1.1 HOTFIX\n\n"
+        f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
+        f"Total equity: {format_money(equity)}\n\n"
+        "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
+        "Top clusters:\n" + (clusters or "No holdings.") + "\n\n"
+        "Top positions:\n" + (positions or "No holdings.") + "\n\n"
+        f"{warnings}"
+    )
+
+
+def format_stress_status() -> str:
+    s = institutional_stress_snapshot()
+    worst = s.get("worst_scenario", {}) or {}
+    rows = "\n".join(
+        f"• {x['scenario']}: {format_money(float(x['pnl']))} ({x['pct_equity']}%)"
+        for x in s.get("scenarios", [])
+    )
+    return (
+        "🔥 STRESS STATUS v4.1.1 HOTFIX\n\n"
+        f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
+        f"Equity: {format_money(float(s.get('equity', 0) or 0))}\n"
+        f"Worst scenario: {worst.get('scenario')} {format_money(float(worst.get('pnl', 0) or 0))} "
+        f"({worst.get('pct_equity')}%)\n\n"
+        f"{rows}\n\n"
+        "Approximate monitoring only. It does not block trades."
+    )
+
+
+# Add a small hotfix status command without replacing existing command handling.
+_V411_HOTFIX_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"hotfixstatus", "v411hotfix"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.1.1 HOTFIX STATUS\n\n"
+            f"Version: {V411_HOTFIX_VERSION}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
+            f"SPEC universe size: {len(SPEC_ALPHA_UNIVERSE)}\n"
+            f"Core public enabled: {yes_no(CORE_PUBLIC_SIGNAL_ENABLED)}\n"
+            f"SPEC public enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+            "Diagnostics now include Growth and Crypto holdings."
+        )
+        return
+    return _V411_HOTFIX_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
 if __name__ == "__main__":
 
 
