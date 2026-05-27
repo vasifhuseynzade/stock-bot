@@ -13534,7 +13534,7 @@ def manage_positions() -> None:
 
         entry_data_for_exit = pos.get("entry_data", {}) or {}
 
-        if entry_data_for_exit.get("strategy_sleeve") == "BEAR_INVERSE":
+        if entry_data_for_exit.get("strategy_sleeve") in {"BEAR_INVERSE", "BEAR_STOCK"}:
             try:
                 bear_now = bear_regime_details(market_details=market_regime_details())
                 if int(bear_now.get("score", 0) or 0) <= BEAR_EXIT_SCORE:
@@ -14379,9 +14379,13 @@ def scan_market() -> bool:
                         "atr": round(float(metrics.get("atr", 0)), 4),
                         "atr_pct": round(float(metrics.get("atr_pct", 0)) * 100, 2),
                         "stop": round(stop, 2),
-                        "breakout": True,
-                        "setup_type": "bear_vcp_inverse",
-                        "strategy_sleeve": "BEAR_INVERSE",
+                        "breakout": bool(metrics.get("breakout", False)),
+                        "setup_type": metrics.get("setup_type", "bear_stock_rs"),
+                        "strategy_sleeve": metrics.get("strategy_sleeve", "BEAR_STOCK"),
+                        "bear_stock_bucket": metrics.get("bear_stock_bucket") or metrics.get("bucket"),
+                        "rel_21_spy": None if metrics.get("rel21_spy") is None else round(float(metrics.get("rel21_spy")) * 100, 2),
+                        "rel_63_spy": None if metrics.get("rel63_spy") is None else round(float(metrics.get("rel63_spy")) * 100, 2),
+                        "rel_21_qqq": None if metrics.get("rel21_qqq") is None else round(float(metrics.get("rel21_qqq")) * 100, 2),
                         "volume_ratio": None if metrics.get("volume_ratio") is None else round(float(metrics.get("volume_ratio")), 2),
                         "daily_move_pct": round(float(metrics.get("daily_move_pct", 0)), 2),
                         "min_score_required": int(metrics.get("min_score_required", 0) or 0),
@@ -14501,14 +14505,16 @@ def scan_market() -> bool:
 
         entry_data["projected_total_risk_pct"] = round(projected_risk_pct * 100, 2)
 
-        score_label = "🐻 Bear VCP score" if is_bear_candidate else "⭐ V2.8 VCP score"
+        score_label = "🐻 Bear RS score" if is_bear_candidate else "⭐ V2.8 VCP score"
         extra_context = ""
 
         if is_bear_candidate:
             extra_context = (
                 f"🐻 Bear regime score: {entry_data.get('bear_score')}/60\n"
-                f"⏱️ Time stop: {entry_data.get('time_stop_days')} days if below {entry_data.get('time_stop_min_r')}R\n"
-                f"📅 Max hold: {entry_data.get('max_holding_days')} days\n"
+                f"🧺 Bear stock bucket: {entry_data.get('bear_stock_bucket') or 'n/a'}\n"
+                f"💪 RS vs SPY: 21d {entry_data.get('rel_21_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
+                f"💪 RS vs QQQ: 21d {entry_data.get('rel_21_qqq')}%\n"
+                f"🚪 Primary exit: bear pressure <= {BEAR_EXIT_SCORE}\n"
             )
         else:
             extra_context = (
@@ -19181,6 +19187,1481 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     return _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
 
+
+
+
+# -----------------------------------------------------------------------------
+# V3.9 EU-RETAIL DEPLOYMENT CANDIDATE
+# -----------------------------------------------------------------------------
+# Offline-researched patch. It keeps v3.8 accounting, exports, Telegram commands,
+# SPEC_ALPHA, long VCP, withdrawal, and institutional monitor logic intact.
+# It changes only two broker-blocked live universes:
+# 1) Core: U.S. ETFs -> USD-priced UCITS/ETP lines.
+# 2) Bear: inverse ETFs -> long-only health/defense bear-stock relative strength.
+
+STRATEGY_VERSION = os.getenv(
+    "STRATEGY_VERSION",
+    "v3.9-ucits-core-bear-stock-45-15-40-monitor"
+)
+WEALTH_STRATEGY_VERSION = os.getenv(
+    "WEALTH_STRATEGY_VERSION",
+    "wealth_core_ucits_usd_clean_v3_9_core_ledger"
+)
+BEAR_STRATEGY_VERSION = os.getenv(
+    "BEAR_STRATEGY_VERSION",
+    "bear_stock_rs_health_defense_v3_9"
+)
+
+# USD-priced UCITS/ETP core universe selected from the offline UCITS cache.
+WEALTH_CORE_UNIVERSE = [
+    "VUAA.L", "VUSD.L", "CSUS.L",
+    "CNDX.L", "IUIT.L", "SMH.L",
+    "IUHC.L", "IUFS.L", "IUES.L",
+    "EGLN.L", "PHAG.L", "CMOD.L", "COPA.L",
+    "IB01.L", "IBTA.L", "IDBT.L", "DTLA.L",
+]
+WEALTH_ASSET_CLUSTERS = {
+    "VUAA.L": "broad_equity", "VUSD.L": "broad_equity", "CSUS.L": "broad_equity",
+    "CNDX.L": "growth_tech", "IUIT.L": "growth_tech", "SMH.L": "semis",
+    "IUHC.L": "defensive_equity", "IUFS.L": "financials", "IUES.L": "energy",
+    "EGLN.L": "gold", "PHAG.L": "silver", "CMOD.L": "commodities", "COPA.L": "copper",
+    "IB01.L": "cash_like", "IBTA.L": "short_bonds", "IDBT.L": "intermediate_bonds", "DTLA.L": "long_bonds",
+}
+WEALTH_CASH_LIKE = {"IB01.L"}
+WEALTH_DEFENSIVE_ALLOWED = {"IB01.L", "IBTA.L", "IDBT.L", "DTLA.L", "EGLN.L", "IUHC.L"}
+
+# Bear-stock strategy selected by robust offline backtesting.
+# Only healthcare and defense/aerospace survived the slippage and stress review
+# cleanly enough for a first live candidate. Energy/gold/utilities/broad baskets
+# remain research-only.
+BEAR_STOCK_BUCKETS: Dict[str, str] = {
+    "UNH": "healthcare", "HUM": "healthcare", "ELV": "healthcare", "CI": "healthcare",
+    "CAH": "healthcare", "MCK": "healthcare", "COR": "healthcare", "CVS": "healthcare",
+    "JNJ": "healthcare", "MRK": "healthcare", "LLY": "healthcare", "ABBV": "healthcare",
+    "AMGN": "healthcare", "REGN": "healthcare", "GILD": "healthcare", "VRTX": "healthcare",
+    "BMY": "healthcare", "PFE": "healthcare", "ISRG": "healthcare", "TMO": "healthcare",
+    "SYK": "healthcare", "BSX": "healthcare", "HCA": "healthcare", "THC": "healthcare",
+    "UHS": "healthcare", "RMD": "healthcare", "HOLX": "healthcare", "VTRS": "healthcare",
+    "LMT": "defense_aerospace", "NOC": "defense_aerospace", "RTX": "defense_aerospace",
+    "GD": "defense_aerospace", "LHX": "defense_aerospace", "HII": "defense_aerospace",
+    "BWXT": "defense_aerospace", "LDOS": "defense_aerospace", "BAH": "defense_aerospace",
+    "KTOS": "defense_aerospace", "AVAV": "defense_aerospace", "MRCY": "defense_aerospace",
+    "HWM": "defense_aerospace", "HEI": "defense_aerospace", "SPR": "defense_aerospace",
+}
+BEAR_WATCHLIST = list(dict.fromkeys(BEAR_STOCK_BUCKETS.keys()))
+ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
+
+# v3.9 bear-stock defaults. The sleeve is top-1, cash-first, and USD only.
+BEAR_MAX_SIGNALS_PER_SCAN = int(os.getenv("BEAR_MAX_SIGNALS_PER_SCAN", "1"))
+BEAR_MAX_OPEN_POSITIONS = int(os.getenv("BEAR_MAX_OPEN_POSITIONS", "1"))
+BEAR_MIN_PRICE = float(os.getenv("BEAR_MIN_PRICE", "10"))
+BEAR_STOCK_MAX_PRICE = float(os.getenv("BEAR_STOCK_MAX_PRICE", "500"))
+BEAR_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("BEAR_MIN_AVG_DOLLAR_VOLUME", "50000000"))
+BEAR_MIN_ATR_PCT = float(os.getenv("BEAR_MIN_ATR_PCT", "0.010"))
+BEAR_MAX_ATR_PCT = float(os.getenv("BEAR_MAX_ATR_PCT", "0.085"))
+BEAR_STOCK_MIN_REL_21_SPY = float(os.getenv("BEAR_STOCK_MIN_REL_21_SPY", "0.04"))
+BEAR_STOCK_MIN_REL_63_SPY = float(os.getenv("BEAR_STOCK_MIN_REL_63_SPY", "0.08"))
+BEAR_STOCK_MIN_REL_21_QQQ = float(os.getenv("BEAR_STOCK_MIN_REL_21_QQQ", "0.00"))
+BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT = float(os.getenv("BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT", "0.15"))
+BEAR_STOCK_CATASTROPHE_STOP_PCT = float(os.getenv("BEAR_STOCK_CATASTROPHE_STOP_PCT", "0.20"))
+
+# Match research behavior: exit on bear-score cooldown; no partial/trailing/time churn by default.
+BEAR_RISK_PCT = float(os.getenv("BEAR_RISK_PCT", "0.03"))
+BEAR_BREAKEVEN_R_TRIGGER = float(os.getenv("BEAR_BREAKEVEN_R_TRIGGER", "999"))
+BEAR_PARTIAL_TAKE_PROFIT_R = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_R", "999"))
+BEAR_PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_PCT", "999"))
+BEAR_PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_FRACTION", "0.00"))
+BEAR_TRAIL_MULT_EARLY = float(os.getenv("BEAR_TRAIL_MULT_EARLY", "999"))
+BEAR_TRAIL_MULT_LATE = float(os.getenv("BEAR_TRAIL_MULT_LATE", "999"))
+BEAR_TIME_STOP_DAYS = int(os.getenv("BEAR_TIME_STOP_DAYS", "0"))
+BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "0"))
+
+_V39_OLD_SETUP_LABEL = setup_label
+
+def setup_label(setup_type: str) -> str:
+    setup = str(setup_type).lower()
+    if setup == "bear_stock_rs":
+        return "🐻 Bear Stock Relative Strength"
+    return _V39_OLD_SETUP_LABEL(setup_type)
+
+_V39_OLD_SLEEVE_LABEL = sleeve_label
+
+def sleeve_label(entry_data: Dict[str, Any]) -> str:
+    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
+    if sleeve == "BEAR_STOCK":
+        return "🐻 BEAR STOCK RS SLEEVE"
+    return _V39_OLD_SLEEVE_LABEL(entry_data)
+
+_V39_OLD_SLEEVE_SHORT_LABEL = sleeve_short_label
+
+def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
+    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
+    if sleeve == "BEAR_STOCK":
+        return "BEAR STOCK RS"
+    return _V39_OLD_SLEEVE_SHORT_LABEL(entry_data)
+
+
+def count_open_bear_positions() -> int:
+    refresh_portfolio()
+    count = 0
+    for pos in portfolio["positions"].values():
+        entry_data = pos.get("entry_data", {}) or {}
+        if entry_data.get("strategy_sleeve") in {"BEAR_INVERSE", "BEAR_STOCK"}:
+            count += 1
+    return count
+
+_V39_OLD_SLEEVE_FROM_TRADE = sleeve_from_trade
+
+def sleeve_from_trade(trade: Dict[str, Any]) -> str:
+    entry_data = trade.get("entry_data", {}) or {}
+    sleeve = str(entry_data.get("strategy_sleeve") or "").upper()
+    if sleeve in {"BEAR_STOCK", "BEAR_INVERSE"}:
+        return sleeve
+    family = str(entry_data.get("strategy_family") or "").lower()
+    ticker = str(trade.get("ticker", "")).upper()
+    if "bear_stock" in family or ticker in BEAR_WATCHLIST:
+        return "BEAR_STOCK"
+    return _V39_OLD_SLEEVE_FROM_TRADE(trade)
+
+
+def _v39_ret(series: pd.Series, bars: int) -> Optional[float]:
+    try:
+        clean = series.dropna()
+        if len(clean) <= bars:
+            return None
+        old = float(clean.iloc[-bars - 1])
+        new = float(clean.iloc[-1])
+        if old <= 0:
+            return None
+        return (new / old) - 1.0
+    except Exception:
+        return None
+
+
+def analyze_bear_signal(
+    ticker: str,
+    df: pd.DataFrame,
+    bear_details: Dict[str, Any],
+) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
+    """v3.9 robust health/defense top-1 bear-stock RS sleeve."""
+    if not BEAR_SLEEVE_ENABLED:
+        return None
+    ticker = normalize_ticker(ticker) or ""
+    if ticker not in BEAR_WATCHLIST:
+        return None
+    if not bear_details.get("active"):
+        return None
+    if df is None or df.empty or len(df) < 220:
+        return None
+
+    close = df["Close"].dropna()
+    volume = df["Volume"]
+    price = float(close.iloc[-1])
+    prev_close = float(close.iloc[-2])
+    if price <= 0 or prev_close <= 0:
+        return None
+
+    atr_val = atr(df).iloc[-1]
+    avg_vol = volume.rolling(20).mean().iloc[-1]
+    ma20 = close.rolling(20).mean().iloc[-1]
+    ma50 = close.rolling(50).mean().iloc[-1]
+    ma200 = close.rolling(200).mean().iloc[-1]
+    rsi_val = rsi(close).iloc[-1]
+    if any(pd.isna(x) for x in [atr_val, avg_vol, ma20, ma50, ma200, rsi_val]):
+        return None
+
+    atr_val = float(atr_val)
+    atr_pct = atr_val / price
+    avg_dollar_volume = float(avg_vol) * price
+    volume_ratio = float(volume.iloc[-1]) / float(avg_vol) if float(avg_vol) > 0 else 0.0
+    daily_move_pct = ((price - prev_close) / prev_close) * 100.0
+    close_loc = close_location(df)
+
+    if price < BEAR_MIN_PRICE or price > BEAR_STOCK_MAX_PRICE:
+        return None
+    if avg_dollar_volume < BEAR_MIN_AVG_DOLLAR_VOLUME:
+        return None
+    if atr_pct < BEAR_MIN_ATR_PCT or atr_pct > BEAR_MAX_ATR_PCT:
+        return None
+    if not (price > float(ma20) > float(ma50) and price > float(ma200)):
+        return None
+
+    ret21 = _v39_ret(close, 21)
+    ret63 = _v39_ret(close, 63)
+    if ret21 is None or ret63 is None or ret21 <= 0 or ret63 <= 0:
+        return None
+
+    frames = bear_details.get("frames", {}) if isinstance(bear_details, dict) else {}
+    spy_df = frames.get("SPY")
+    qqq_df = frames.get("QQQ")
+    if spy_df is None or getattr(spy_df, "empty", True) or len(spy_df) < 80:
+        spy_df = get_signal_dataframe("SPY", limit=260)
+    if qqq_df is None or getattr(qqq_df, "empty", True) or len(qqq_df) < 80:
+        qqq_df = get_signal_dataframe("QQQ", limit=260)
+    if spy_df is None or qqq_df is None or spy_df.empty or qqq_df.empty:
+        return None
+
+    spy_ret21 = _v39_ret(spy_df["Close"].dropna(), 21)
+    spy_ret63 = _v39_ret(spy_df["Close"].dropna(), 63)
+    qqq_ret21 = _v39_ret(qqq_df["Close"].dropna(), 21)
+    if spy_ret21 is None or spy_ret63 is None or qqq_ret21 is None:
+        return None
+
+    rel21_spy = ret21 - spy_ret21
+    rel63_spy = ret63 - spy_ret63
+    rel21_qqq = ret21 - qqq_ret21
+    if rel21_spy < BEAR_STOCK_MIN_REL_21_SPY:
+        return None
+    if rel63_spy < BEAR_STOCK_MIN_REL_63_SPY:
+        return None
+    if rel21_qqq < BEAR_STOCK_MIN_REL_21_QQQ:
+        return None
+
+    returns63 = close.pct_change().tail(63).dropna()
+    vol63_ann = float(returns63.std() * math.sqrt(252)) if not returns63.empty else 0.0
+    rank_score = ((0.40 * rel63_spy) + (0.25 * rel21_spy) + (0.15 * ret63) + (0.10 * ret21) - (0.10 * vol63_ann)) * 100.0
+    score = int(round(max(0.0, rank_score) * 10))
+
+    stop = price * (1.0 - BEAR_STOCK_CATASTROPHE_STOP_PCT)
+    risk = price - stop
+    if risk <= 0:
+        return None
+
+    refresh_portfolio()
+    account_equity = approximate_equity_from_portfolio()
+    available_cash = float(portfolio["cash"])
+    shares_by_risk = int((account_equity * BEAR_RISK_PCT) / risk)
+    shares_by_position_cap = int((account_equity * min(MAX_POSITION_EQUITY_PCT, BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT)) / price)
+    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
+    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
+    if shares <= 0:
+        return None
+
+    bucket = BEAR_STOCK_BUCKETS.get(ticker, "bear_stock")
+    metrics = {
+        "setup_type": "bear_stock_rs",
+        "strategy_sleeve": "BEAR_STOCK",
+        "strategy_family": BEAR_STRATEGY_VERSION,
+        "strategy_version": BEAR_STRATEGY_VERSION,
+        "bear_stock_bucket": bucket,
+        "bucket": bucket,
+        "breakout": False,
+        "atr": atr_val,
+        "atr_pct": atr_pct,
+        "volume_ratio": volume_ratio,
+        "daily_move_pct": daily_move_pct,
+        "close_location": close_loc,
+        "avg_dollar_volume": avg_dollar_volume,
+        "ret21": float(ret21),
+        "ret63": float(ret63),
+        "rel21_spy": rel21_spy,
+        "rel63_spy": rel63_spy,
+        "rel21_qqq": rel21_qqq,
+        "vol63": vol63_ann,
+        "bear_score": int(bear_details.get("score", 0) or 0),
+        "rank_score": rank_score,
+        "min_score_required": "RS filters",
+        "stop_model": "bear_stock_health_defense_v3_9_catastrophe_score_exit",
+        "exit_params": {
+            "breakeven_r_trigger": BEAR_BREAKEVEN_R_TRIGGER,
+            "partial_take_profit_r": BEAR_PARTIAL_TAKE_PROFIT_R,
+            "partial_take_profit_pct": BEAR_PARTIAL_TAKE_PROFIT_PCT,
+            "partial_take_profit_fraction": BEAR_PARTIAL_TAKE_PROFIT_FRACTION,
+            "trail_mult_early": BEAR_TRAIL_MULT_EARLY,
+            "trail_mult_late": BEAR_TRAIL_MULT_LATE,
+            "trail_tighten_pct": TRAIL_TIGHTEN_PCT,
+            "time_stop_days": BEAR_TIME_STOP_DAYS,
+            "time_stop_min_r": BEAR_TIME_STOP_MIN_R,
+            "max_holding_days": BEAR_MAX_HOLDING_DAYS,
+        },
+    }
+    return ticker, price, shares, stop, score, metrics
+
+
+def format_portfolio_allocation_plan() -> str:
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.9 UCITS CORE / BEAR STOCK\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
+        f"({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct', SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100)}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core sleeve now uses the researched USD-priced UCITS/ETP universe.\n"
+        "• Bear sleeve now uses long-only USD healthcare/defense relative strength, not inverse ETFs.\n"
+        "• SPEC_ALPHA and Long VCP are unchanged.\n"
+        "• In hard drawdown mode, new entries pause and exits/management continue."
+    )
+
+
+def _v38_cluster_for_ticker(ticker: str) -> str:
+    t = str(ticker).upper()
+    if t in BEAR_STOCK_BUCKETS:
+        return BEAR_STOCK_BUCKETS[t]
+    if t in WEALTH_ASSET_CLUSTERS:
+        return WEALTH_ASSET_CLUSTERS[t]
+    return "other"
+
+
+def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
+    entry_data = pos.get("entry_data", {}) if isinstance(pos, dict) else {}
+    sleeve = str(entry_data.get("strategy_sleeve") or entry_data.get("sleeve") or "").upper()
+    if sleeve:
+        return sleeve
+    if str(ticker).upper() in BEAR_WATCHLIST:
+        return "BEAR_STOCK"
+    return "LONG_VCP_OR_TACTICAL"
+
+_V39_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower == "bearstatus":
+        details = bear_regime_details(market_details=market_regime_details())
+        open_bear = count_open_bear_positions()
+        buckets = sorted(set(BEAR_STOCK_BUCKETS.values()))
+        send(
+            "🐻 BEAR STOCK SLEEVE STATUS v3.9\n\n"
+            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
+            f"Strategy: {BEAR_STRATEGY_VERSION}\n"
+            f"Active now: {yes_no(bool(details.get('active')))}\n"
+            f"Bear score: {details.get('score')}/{details.get('max_score')}\n"
+            f"Entry threshold: {BEAR_ENTRY_SCORE}\n"
+            f"Exit/calm threshold: {BEAR_EXIT_SCORE}\n"
+            f"Open bear-stock positions: {open_bear}/{BEAR_MAX_OPEN_POSITIONS}\n"
+            f"Universe size: {len(BEAR_WATCHLIST)} USD stocks\n"
+            f"Buckets: {', '.join(buckets)}\n\n"
+            "Live candidate: health/defense top-1 relative strength.\n"
+            "No inverse ETFs, no options, no EUR instruments.\n"
+            "Trades still use bought/sold after broker fill."
+        )
+        return
+
+    if text_lower == "wealthstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        send(
+            "🏛️ WEALTH / CORE LEDGER STATUS v3.9\n\n"
+            f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
+            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
+            f"Universe: USD-priced UCITS/ETP core candidates\n"
+            f"Dynamic allocation: {yes_no(WEALTH_DYNAMIC_ALLOCATION_ENABLED)}\n"
+            f"Vol weighting: {yes_no(WEALTH_VOL_WEIGHTING_ENABLED)}\n"
+            f"Cluster control: {yes_no(WEALTH_CLUSTER_CONTROL_ENABLED)}\n"
+            f"Top assets: {WEALTH_CORE_TOP_N}\n"
+            f"Current core target: {alloc.get('core_wealth_pct')}% of account\n"
+            f"Long VCP target: {alloc.get('long_vcp_tactical_pct')}% of account\n"
+            f"Bear stock target: {alloc.get('bear_inverse_tactical_pct')}% of account\n"
+            f"Cash reserve target: {alloc.get('cash_reserve_pct')}% of account\n"
+            f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
+            f"Public channel: ❌ never used for this sleeve\n\n"
+            "Commands:\n"
+            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
+            "corebuy TICKER SHARES at PRICE — record core buy\n"
+            "coresell TICKER SHARES at PRICE — record core sell\n"
+            "coreportfolio | corepnl | coreexposure | corestatus\n"
+            "allocationplan | riskstatus | sleevestatus"
+        )
+        return
+
+    if text_lower in {"help", "/help"}:
+        _V39_OLD_HANDLE_COMMAND(text, update_id=update_id)
+        send(
+            "V3.9 deployment candidate notes:\n"
+            "• Core universe is USD-priced UCITS/ETP. Use corebuy/coresell only after broker fill.\n"
+            "• Bear sleeve is long-only health/defense stock RS, not inverse ETFs. Use bought/sold after signal/fill.\n"
+            "• SPEC_ALPHA and Long VCP remain unchanged."
+        )
+        return
+
+    return _V39_OLD_HANDLE_COMMAND(text, update_id=update_id)
+
+
+# =============================================================================
+# V4 EXPANDED FUTURE-GROWTH ALPHA EXTENSION
+# =============================================================================
+# Offline-researched candidate. This keeps v3.9 UCITS core, bear-stock sleeve,
+# SPEC_ALPHA, long VCP, and all existing ledgers intact.
+# It adds a separate monthly Growth Alpha sleeve with its own ledger.
+# Target research allocation:
+#   Core UCITS: 25%
+#   Expanded Growth Alpha: 45%
+#   SPEC_ALPHA: 20%
+#   Tactical VCP/Bear-stock: 10%
+# Options remain research-only and are not included here.
+# V4 only expands the Growth Alpha universe from the current concentrated 70-name set
+# to the offline-tested A-to-Z future-growth universe. Core, SPEC, tactical,
+# indicators, ledgers, risk guard, and monitor logic remain otherwise unchanged.
+
+STRATEGY_VERSION = os.getenv(
+    "STRATEGY_VERSION",
+    "v4-expanded-growth-25-45-20-10-monitor"
+)
+
+# Override v3.9/v3.8 allocation defaults.
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.25"))
+SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.20"))
+WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.25"))
+WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.25"))
+WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.25"))
+WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.25"))
+WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.10"))
+WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.05"))
+WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
+WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
+WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.05"))
+WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.10"))
+
+GROWTH_ALPHA_ENABLED = os.getenv("GROWTH_ALPHA_ENABLED", "1") != "0"
+GROWTH_ALPHA_LEDGER_ENABLED = os.getenv("GROWTH_ALPHA_LEDGER_ENABLED", "1") != "0"
+GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("GROWTH_ALPHA_ACCOUNT_ALLOC_PCT", "0.45"))
+GROWTH_ALPHA_TOP_N = int(os.getenv("GROWTH_ALPHA_TOP_N", "5"))
+GROWTH_ALPHA_MAX_PER_CLUSTER = int(os.getenv("GROWTH_ALPHA_MAX_PER_CLUSTER", "2"))
+GROWTH_ALPHA_MIN_PRICE = float(os.getenv("GROWTH_ALPHA_MIN_PRICE", "8"))
+GROWTH_ALPHA_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("GROWTH_ALPHA_MIN_AVG_DOLLAR_VOLUME", "25000000"))
+GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200 = os.getenv("GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200", "1") != "0"
+GROWTH_ALPHA_REQUIRE_MARKET_SCORE = int(os.getenv("GROWTH_ALPHA_REQUIRE_MARKET_SCORE", "5"))
+GROWTH_ALPHA_REQUIRE_MA50 = os.getenv("GROWTH_ALPHA_REQUIRE_MA50", "1") != "0"
+GROWTH_ALPHA_REQUIRE_MA200 = os.getenv("GROWTH_ALPHA_REQUIRE_MA200", "1") != "0"
+GROWTH_ALPHA_MAX_SINGLE_ASSET_PCT = float(os.getenv("GROWTH_ALPHA_MAX_SINGLE_ASSET_PCT", "0.24"))
+GROWTH_ALPHA_MIN_SINGLE_ASSET_PCT = float(os.getenv("GROWTH_ALPHA_MIN_SINGLE_ASSET_PCT", "0.00"))
+GROWTH_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT = float(os.getenv("GROWTH_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT", "0.015"))
+GROWTH_ALPHA_ACTION_DOLLAR_THRESHOLD = float(os.getenv("GROWTH_ALPHA_ACTION_DOLLAR_THRESHOLD", "50"))
+GROWTH_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("GROWTH_ALPHA_MIN_TRADE_DOLLARS", "25"))
+GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT", "0.06"))
+GROWTH_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("GROWTH_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
+GROWTH_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("GROWTH_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
+GROWTH_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("GROWTH_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
+GROWTH_ALPHA_PLAN_VALID_DAYS = int(os.getenv("GROWTH_ALPHA_PLAN_VALID_DAYS", "10"))
+GROWTH_ALPHA_ALERT_REPEAT_DAYS = int(os.getenv("GROWTH_ALPHA_ALERT_REPEAT_DAYS", "7"))
+GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 12)))
+GROWTH_ALPHA_SCORE_SLEEP_SEC = float(os.getenv("GROWTH_ALPHA_SCORE_SLEEP_SEC", "0.01"))
+
+GROWTH_ALPHA_CLUSTER_MAP = {
+    # mega_platform
+    "AAPL": "mega_platform", "AMZN": "mega_platform", "GOOGL": "mega_platform", "META": "mega_platform",
+    "MSFT": "mega_platform",
+    # healthcare_defensive
+    "ABBV": "healthcare_defensive", "AMGN": "healthcare_defensive", "GILD": "healthcare_defensive", "JNJ": "healthcare_defensive",
+    "MRK": "healthcare_defensive",
+    # space_growth
+    "ACHR": "space_growth", "ASTS": "space_growth", "JOBY": "space_growth", "LUNR": "space_growth",
+    "RKLB": "space_growth",
+    # enterprise_software
+    "ADBE": "enterprise_software", "CRM": "enterprise_software", "HUBS": "enterprise_software", "INTU": "enterprise_software",
+    "NOW": "enterprise_software", "ORCL": "enterprise_software", "TEAM": "enterprise_software", "WDAY": "enterprise_software",
+    # gold_miners
+    "AEM": "gold_miners", "GOLD": "gold_miners", "KGC": "gold_miners", "NEM": "gold_miners",
+    # fintech_beta
+    "AFRM": "fintech_beta", "HOOD": "fintech_beta", "PYPL": "fintech_beta", "SOFI": "fintech_beta",
+    # insurance_broker
+    "AJG": "insurance_broker", "AON": "insurance_broker", "BRO": "insurance_broker",
+    # semis_ai
+    "AMAT": "semis_ai", "AMD": "semis_ai", "ARM": "semis_ai", "ASML": "semis_ai",
+    "AVGO": "semis_ai", "KLAC": "semis_ai", "LRCX": "semis_ai", "MPWR": "semis_ai",
+    "MRVL": "semis_ai", "MU": "semis_ai", "NVDA": "semis_ai", "NXPI": "semis_ai",
+    "ON": "semis_ai", "QCOM": "semis_ai", "SMCI": "semis_ai", "TSM": "semis_ai",
+    # industrial_quality
+    "AME": "industrial_quality", "DOV": "industrial_quality", "EMR": "industrial_quality", "HON": "industrial_quality",
+    "IR": "industrial_quality", "PH": "industrial_quality",
+    # digital_infrastructure
+    "AMT": "digital_infrastructure", "CCI": "digital_infrastructure",
+    # networking_ai
+    "ANET": "networking_ai",
+    # ai_infrastructure
+    "APLD": "ai_infrastructure", "ETN": "ai_infrastructure", "PWR": "ai_infrastructure", "VRT": "ai_infrastructure",
+    # software_ai
+    "APP": "software_ai", "PLTR": "software_ai",
+    # defense_aero
+    "AVAV": "defense_aero", "BAH": "defense_aero", "BWXT": "defense_aero", "DRS": "defense_aero",
+    "GD": "defense_aero", "HII": "defense_aero", "KTOS": "defense_aero", "LDOS": "defense_aero",
+    "LHX": "defense_aero", "LMT": "defense_aero", "MRCY": "defense_aero", "NOC": "defense_aero",
+    "RTX": "defense_aero",
+    # industrial_tech
+    "AXON": "industrial_tech", "GE": "industrial_tech", "URI": "industrial_tech",
+    # auto_parts_defensive
+    "AZO": "auto_parts_defensive", "ORLY": "auto_parts_defensive",
+    # staples_retail
+    "BJ": "staples_retail", "CASY": "staples_retail", "COST": "staples_retail", "KR": "staples_retail",
+    "SFM": "staples_retail", "WMT": "staples_retail",
+    # quality_financial
+    "BRK-B": "quality_financial",
+    # medtech
+    "BSX": "medtech", "SYK": "medtech",
+    # discount_retail
+    "BURL": "discount_retail", "DG": "discount_retail", "DLTR": "discount_retail", "OLLI": "discount_retail",
+    "ROST": "discount_retail", "TJX": "discount_retail",
+    # healthcare_services
+    "CAH": "healthcare_services", "COR": "healthcare_services", "HCA": "healthcare_services", "MCK": "healthcare_services",
+    "THC": "healthcare_services", "UHS": "healthcare_services",
+    # industrial_cyclical
+    "CAT": "industrial_cyclical", "DE": "industrial_cyclical",
+    # insurance_quality
+    "CB": "insurance_quality", "PGR": "insurance_quality", "RLI": "insurance_quality", "TRV": "insurance_quality",
+    "WRB": "insurance_quality",
+    # eda_ai
+    "CDNS": "eda_ai", "SNPS": "eda_ai",
+    # ai_power
+    "CEG": "ai_power", "GEV": "ai_power", "NRG": "ai_power", "TLN": "ai_power",
+    "VST": "ai_power",
+    # robotics_automation
+    "CGNX": "robotics_automation", "FANUY": "robotics_automation", "ROK": "robotics_automation", "TER": "robotics_automation",
+    "ZBRA": "robotics_automation",
+    # staples
+    "CHD": "staples", "CL": "staples", "CLX": "staples", "CPB": "staples",
+    "GIS": "staples", "HSY": "staples", "KHC": "staples", "KMB": "staples",
+    "KO": "staples", "MDLZ": "staples", "MO": "staples", "PEP": "staples",
+    "PG": "staples", "PM": "staples",
+    # managed_care
+    "CI": "managed_care", "ELV": "managed_care", "HUM": "managed_care", "UNH": "managed_care",
+    # waste_services
+    "CLH": "waste_services", "CWST": "waste_services", "RSG": "waste_services", "WCN": "waste_services",
+    "WM": "waste_services",
+    # energy_eandp
+    "CNQ": "energy_eandp", "COP": "energy_eandp", "EOG": "energy_eandp", "FANG": "energy_eandp",
+    # crypto_beta
+    "COIN": "crypto_beta", "MSTR": "crypto_beta",
+    # cyber_cloud
+    "CRWD": "cyber_cloud", "FTNT": "cyber_cloud", "NET": "cyber_cloud", "PANW": "cyber_cloud",
+    "ZS": "cyber_cloud",
+    # energy_major
+    "CVX": "energy_major", "XOM": "energy_major",
+    # cloud_data
+    "DDOG": "cloud_data", "MDB": "cloud_data", "SNOW": "cloud_data",
+    # life_science_tools
+    "DHR": "life_science_tools", "TMO": "life_science_tools",
+    # data_center_reit
+    "DLR": "data_center_reit", "EQIX": "data_center_reit",
+    # materials_quality
+    "ECL": "materials_quality", "SHW": "materials_quality",
+    # gas
+    "EQT": "gas",
+    # copper_materials
+    "FCX": "copper_materials", "SCCO": "copper_materials",
+    # gold_royalty
+    "FNV": "gold_royalty", "RGLD": "gold_royalty", "WPM": "gold_royalty",
+    # aerospace_quality
+    "HEI": "aerospace_quality", "TDG": "aerospace_quality", "TXT": "aerospace_quality",
+    # satellite_space
+    "IRDM": "satellite_space", "VSAT": "satellite_space",
+    # robotics_medtech
+    "ISRG": "robotics_medtech",
+    # industrial_gas
+    "LIN": "industrial_gas",
+    # healthcare_growth
+    "LLY": "healthcare_growth", "REGN": "healthcare_growth", "VRTX": "healthcare_growth",
+    # lng_infrastructure
+    "LNG": "lng_infrastructure",
+    # commerce_platform
+    "MELI": "commerce_platform", "SHOP": "commerce_platform",
+    # construction_materials
+    "MLM": "construction_materials", "VMC": "construction_materials",
+    # refiners
+    "MPC": "refiners", "PSX": "refiners", "VLO": "refiners",
+    # consumer_platform
+    "NFLX": "consumer_platform",
+    # nuclear_speculative
+    "NNE": "nuclear_speculative", "OKLO": "nuclear_speculative", "SMR": "nuclear_speculative",
+    # steel
+    "NUE": "steel", "STLD": "steel",
+    # midstream
+    "OKE": "midstream", "TRGP": "midstream", "WMB": "midstream",
+    # silver_miners
+    "PAAS": "silver_miners",
+    # automation_software
+    "PATH": "automation_software",
+    # space_speculative
+    "SPCE": "space_speculative",
+    # robotics_speculative
+    "SYM": "robotics_speculative",
+    # consumer_growth
+    "TSLA": "consumer_growth",
+    # adtech_platform
+    "TTD": "adtech_platform",
+    # mobility_platform
+    "UBER": "mobility_platform",
+    # water_infrastructure
+    "XYL": "water_infrastructure",
+}
+GROWTH_ALPHA_UNIVERSE = list(dict.fromkeys(GROWTH_ALPHA_CLUSTER_MAP.keys()))
+
+_V310_OLD_INIT_DB = init_db
+
+def init_db() -> None:
+    _V310_OLD_INIT_DB()
+    conn = db_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS growth_positions (
+                ticker TEXT PRIMARY KEY,
+                growth_position_id TEXT NOT NULL UNIQUE,
+                strategy_version TEXT NOT NULL,
+                shares REAL NOT NULL CHECK (shares > 0),
+                avg_entry_price REAL NOT NULL CHECK (avg_entry_price > 0),
+                cost_basis REAL NOT NULL CHECK (cost_basis >= 0),
+                entry_time REAL NOT NULL,
+                last_update_time REAL NOT NULL,
+                highest REAL,
+                sleeve TEXT NOT NULL DEFAULT 'GROWTH_ALPHA',
+                target_account_pct REAL,
+                last_plan_id TEXT,
+                notes TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS growth_trades (
+                id TEXT PRIMARY KEY,
+                growth_position_id TEXT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+                shares REAL NOT NULL CHECK (shares > 0),
+                price REAL NOT NULL CHECK (price > 0),
+                amount REAL NOT NULL,
+                realized_profit REAL,
+                time REAL NOT NULL,
+                strategy_version TEXT NOT NULL,
+                plan_id TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_growth_trades_ticker ON growth_trades(ticker);
+            CREATE INDEX IF NOT EXISTS idx_growth_trades_time ON growth_trades(time);
+            CREATE TABLE IF NOT EXISTS growth_signals (
+                id TEXT PRIMARY KEY,
+                time REAL NOT NULL,
+                plan_date TEXT NOT NULL,
+                market_regime TEXT NOT NULL,
+                account_equity REAL NOT NULL,
+                growth_target_pct REAL NOT NULL,
+                plan_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+            );
+            CREATE INDEX IF NOT EXISTS idx_growth_signals_time ON growth_signals(time);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def row_to_growth_position(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "ticker": row["ticker"], "growth_position_id": row["growth_position_id"],
+        "strategy_version": row["strategy_version"], "shares": float(row["shares"]),
+        "avg_entry_price": float(row["avg_entry_price"]), "cost_basis": float(row["cost_basis"]),
+        "entry_time": float(row["entry_time"]), "last_update_time": float(row["last_update_time"]),
+        "highest": None if row["highest"] is None else float(row["highest"]),
+        "sleeve": row["sleeve"],
+        "target_account_pct": None if row["target_account_pct"] is None else float(row["target_account_pct"]),
+        "last_plan_id": row["last_plan_id"], "notes": row["notes"],
+    }
+
+
+def load_growth_positions() -> Dict[str, Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM growth_positions ORDER BY ticker").fetchall()
+        return {row["ticker"]: row_to_growth_position(row) for row in rows}
+    finally:
+        conn.close()
+
+
+def load_growth_trades() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM growth_trades ORDER BY time ASC, created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def load_latest_growth_plan() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute("SELECT * FROM growth_signals WHERE status = 'ACTIVE' ORDER BY time DESC LIMIT 1").fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["plan"] = json_loads_dict(data.get("plan_json"))
+        return data
+    finally:
+        conn.close()
+
+
+def save_growth_plan_signal(plan: Dict[str, Any]) -> str:
+    plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
+    plan = dict(plan)
+    plan["plan_id"] = plan_id
+    with db_tx() as conn:
+        conn.execute("UPDATE growth_signals SET status = 'SUPERSEDED' WHERE status = 'ACTIVE'")
+        conn.execute(
+            """
+            INSERT INTO growth_signals(id, time, plan_date, market_regime, account_equity,
+                                       growth_target_pct, plan_json, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+            """,
+            (plan_id, now_ts(), ny_date_str(), str(plan.get("market", "UNKNOWN")),
+             float(plan.get("account_equity", 0) or 0),
+             float(plan.get("target_growth_account_pct", 0) or 0), json_dumps(plan)),
+        )
+    return plan_id
+
+
+def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+    try:
+        details = market_details or market_regime_details()
+        if int(details.get("score", 0) or 0) < GROWTH_ALPHA_REQUIRE_MARKET_SCORE:
+            return False, "market score below threshold"
+        if GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200:
+            frames = details.get("frames", {}) if isinstance(details.get("frames"), dict) else {}
+            for symbol in ["SPY", "QQQ"]:
+                df = frames.get(symbol) or get_signal_dataframe(symbol, limit=260)
+                last, ma = frame_last_close_ma(df, 200)
+                if last is None or ma is None or last <= ma:
+                    return False, f"{symbol} below MA200"
+        return True, "OK"
+    except Exception as exc:
+        return False, f"market filter error: {exc}"
+
+
+def growth_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
+    try:
+        df = get_historical(ticker, limit=280)
+        if df is None or df.empty or len(df) < 210:
+            return None
+        close = df["Close"]
+        volume = df["Volume"]
+        price = float(close.iloc[-1])
+        if price < GROWTH_ALPHA_MIN_PRICE:
+            return None
+        ma50 = float(close.rolling(50).mean().iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        if GROWTH_ALPHA_REQUIRE_MA200 and price <= ma200:
+            return None
+        if GROWTH_ALPHA_REQUIRE_MA50 and price <= ma50:
+            return None
+        roc21 = pct_change_last(df, 21)
+        roc63 = pct_change_last(df, 63)
+        roc126 = pct_change_last(df, 126)
+        vol63v = realized_vol_last(df, 63)
+        avg_dv = float((close * volume).rolling(20).mean().iloc[-1])
+        if roc21 is None or roc63 is None or roc126 is None or vol63v is None:
+            return None
+        if avg_dv < GROWTH_ALPHA_MIN_AVG_DOLLAR_VOLUME:
+            return None
+        if roc21 < -0.08 or roc63 <= 0 or roc126 <= 0:
+            return None
+        score = (0.45 * roc126) + (0.35 * roc63) + (0.20 * roc21) - (0.10 * vol63v)
+        if score <= 0:
+            return None
+        cluster = GROWTH_ALPHA_CLUSTER_MAP.get(ticker, "other")
+        inv_vol = 1.0 / max(float(vol63v), 0.08)
+        weight_score = inv_vol * max(0.0001, score + 0.10)
+        return {
+            "ticker": ticker, "cluster": cluster, "price": round(price, 2),
+            "ma50": round(ma50, 2), "ma200": round(ma200, 2),
+            "roc_1m_pct": round(roc21 * 100, 2), "roc_3m_pct": round(roc63 * 100, 2),
+            "roc_6m_pct": round(roc126 * 100, 2), "vol_3m_pct": round(vol63v * 100, 2),
+            "avg_dollar_volume": round(avg_dv, 2), "score": round(float(score), 6),
+            "weight_score": round(float(weight_score), 6),
+        }
+    except Exception as exc:
+        print(f"[GROWTH SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def select_growth_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    selected: List[Dict[str, Any]] = []
+    cluster_counts: Dict[str, int] = {}
+    for item in scored:
+        cluster = str(item.get("cluster", "other"))
+        if cluster_counts.get(cluster, 0) >= GROWTH_ALPHA_MAX_PER_CLUSTER:
+            continue
+        selected.append(item)
+        cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+        if len(selected) >= GROWTH_ALPHA_TOP_N:
+            break
+    return selected
+
+
+def assign_growth_alpha_weights(top: List[Dict[str, Any]], growth_account_pct: float) -> List[Dict[str, Any]]:
+    if not top:
+        return []
+    raw = [max(0.0001, float(x.get("weight_score", 0.0001) or 0.0001)) for x in top]
+    total = sum(raw)
+    weights = [x / total for x in raw] if total > 0 else [1.0 / len(top)] * len(top)
+    cap = clamp_float(GROWTH_ALPHA_MAX_SINGLE_ASSET_PCT, 0.05, 0.80)
+    floor = clamp_float(GROWTH_ALPHA_MIN_SINGLE_ASSET_PCT, 0.0, cap)
+    weights = [min(cap, max(0.0, w)) for w in weights]
+    total = sum(weights)
+    if total > 0:
+        weights = [w / total for w in weights]
+    if floor > 0 and floor * len(weights) <= 0.90:
+        weights = [max(floor, w) for w in weights]
+        total = sum(weights)
+        if total > 0:
+            weights = [w / total for w in weights]
+    enriched = []
+    for item, sleeve_weight in zip(top, weights):
+        row = dict(item)
+        row["target_growth_pct"] = round(sleeve_weight * 100, 2)
+        row["target_account_pct"] = round(sleeve_weight * growth_account_pct * 100, 2)
+        enriched.append(row)
+    return enriched
+
+
+def growth_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    positions = load_growth_positions() if GROWTH_ALPHA_LEDGER_ENABLED else {}
+    tickers = list(positions.keys())
+    prices = prices or get_prices_batch(tickers)
+    rows: List[Dict[str, Any]] = []
+    total_value = 0.0
+    total_cost = 0.0
+    total_unrealized = 0.0
+    for ticker, pos in positions.items():
+        mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or pos.get("avg_entry_price", 0))
+        shares = float(pos.get("shares", 0) or 0)
+        value = shares * mark
+        cost = float(pos.get("cost_basis", 0) or 0)
+        unrealized = value - cost
+        total_value += value
+        total_cost += cost
+        total_unrealized += unrealized
+        rows.append({**pos, "mark_price": round(mark, 4), "market_value": round(value, 2),
+                     "unrealized_profit": round(unrealized, 2),
+                     "unrealized_pct": None if cost <= 0 else round((unrealized / cost) * 100, 2)})
+    realized = sum(float(t.get("realized_profit") or 0.0) for t in load_growth_trades() if str(t.get("side")).upper() == "SELL")
+    return {"positions": positions, "rows": rows, "value": round(total_value, 2),
+            "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2),
+            "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
+
+
+def compute_growth_alpha_plan() -> Dict[str, Any]:
+    refresh_portfolio()
+    allocation = dynamic_portfolio_allocation_targets()
+    risk = allocation.get("risk_guard", {}) or {}
+    market_details = market_regime_details()
+    market_ok, market_reason = growth_alpha_market_filter_ok(market_details=market_details)
+    growth_pct = float(allocation.get("growth_alpha_pct", GROWTH_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
+    if not GROWTH_ALPHA_ENABLED or risk.get("hard_active") or not market_ok:
+        growth_pct = 0.0
+    account_equity = float(compute_equity_snapshot_data().get("equity", 0.0) or 0.0)
+    sleeve_value = account_equity * growth_pct
+    scored = []
+    if GROWTH_ALPHA_ENABLED and growth_pct > 0:
+        for idx, ticker in enumerate(GROWTH_ALPHA_UNIVERSE, start=1):
+            item = growth_alpha_score_ticker(ticker)
+            if item is not None:
+                scored.append(item)
+            if GROWTH_ALPHA_SCORE_SLEEP_SEC > 0 and idx % 20 == 0:
+                time.sleep(GROWTH_ALPHA_SCORE_SLEEP_SEC)
+    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    selected = select_growth_alpha_assets(scored)
+    top = assign_growth_alpha_weights(selected, growth_pct)
+    details = growth_position_market_value_details()
+    current_rows = {str(r.get("ticker", "")).upper(): r for r in details.get("rows", [])}
+    actions: List[Dict[str, Any]] = []
+    for rank, item in enumerate(top, start=1):
+        ticker = str(item["ticker"]).upper()
+        target_value = account_equity * (float(item.get("target_account_pct", 0) or 0) / 100.0)
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        drift = target_value - current_value
+        threshold = max(GROWTH_ALPHA_ACTION_DOLLAR_THRESHOLD, account_equity * GROWTH_ALPHA_REBALANCE_DRIFT_THRESHOLD_PCT)
+        if current_value <= 0 and target_value >= GROWTH_ALPHA_ACTION_DOLLAR_THRESHOLD:
+            action = "BUY"
+        elif drift >= threshold:
+            action = "ADD"
+        elif drift <= -threshold:
+            action = "TRIM"
+        else:
+            action = "HOLD"
+        actions.append({"rank": rank, "ticker": ticker, "action": action, "cluster": item.get("cluster"),
+                        "score": item.get("score"), "price": item.get("price"),
+                        "target_account_pct": item.get("target_account_pct"), "target_growth_pct": item.get("target_growth_pct"),
+                        "target_value": round(target_value, 2), "current_value": round(current_value, 2),
+                        "suggested_dollars": round(abs(drift), 2), "drift_dollars": round(drift, 2),
+                        "roc_1m_pct": item.get("roc_1m_pct"), "roc_3m_pct": item.get("roc_3m_pct"),
+                        "roc_6m_pct": item.get("roc_6m_pct"), "vol_3m_pct": item.get("vol_3m_pct")})
+    selected_tickers = {str(x.get("ticker", "")).upper() for x in top}
+    scored_map = {str(x.get("ticker", "")).upper(): x for x in scored}
+    for ticker, row in current_rows.items():
+        if ticker in selected_tickers:
+            continue
+        reason = "Dropped out of selected Growth Alpha top list."
+        if not market_ok:
+            reason = f"Growth market filter failed: {market_reason}."
+        actions.append({"rank": None, "ticker": ticker, "action": "SELL", "cluster": None if scored_map.get(ticker) is None else scored_map[ticker].get("cluster"),
+                        "score": None if scored_map.get(ticker) is None else scored_map[ticker].get("score"),
+                        "price": row.get("mark_price"), "target_account_pct": 0.0, "target_growth_pct": 0.0,
+                        "target_value": 0.0, "current_value": round(float(row.get("market_value", 0) or 0), 2),
+                        "suggested_dollars": round(float(row.get("market_value", 0) or 0), 2), "reason": reason})
+    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
+    return {"plan_id": uuid.uuid4().hex, "strategy_version": "growth_alpha_v4_expanded_future_growth",
+            "private_only": True, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+            "market": market_details.get("condition", "UNKNOWN"), "market_score": market_details.get("score"),
+            "market_ok": market_ok, "market_reason": market_reason,
+            "target_growth_account_pct": round(growth_pct * 100, 2), "target_growth_value": round(sleeve_value, 2),
+            "current_growth_value": round(float(details.get("value", 0) or 0), 2),
+            "current_growth_cost_basis": round(float(details.get("cost_basis", 0) or 0), 2),
+            "current_growth_unrealized_profit": round(float(details.get("unrealized_profit", 0) or 0), 2),
+            "account_equity": round(account_equity, 2), "allocation": allocation, "risk_guard": risk,
+            "top": top, "actions": actions, "actionable": actionable, "all_scored": scored[:100],
+            "universe_size": len(GROWTH_ALPHA_UNIVERSE), "scored_count": len(scored), "top_n": GROWTH_ALPHA_TOP_N}
+
+
+def latest_growth_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {str(i.get("ticker", "")).upper(): i for i in plan.get("actions", []) or [] if i.get("ticker")}
+
+
+def growth_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker = ticker.upper()
+    for item in plan.get("top", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def current_growth_plan_for_validation() -> Dict[str, Any]:
+    plan = compute_growth_alpha_plan()
+    save_growth_plan_signal(plan)
+    return plan
+
+
+def validate_growth_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
+    if not GROWTH_ALPHA_REQUIRE_LIVE_QUOTE:
+        return True, "Quote check disabled", None
+    quote = get_prices_batch([ticker]).get(ticker)
+    if quote is None or quote <= 0:
+        return False, "Live quote unavailable for Growth Alpha trade.", None
+    deviation = abs(price - quote) / quote
+    if deviation > GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT:
+        return False, (f"Growth trade rejected: price too far from live quote.\n"
+                       f"Live quote: {round(quote, 2)}\nYour price: {round(price, 2)}\n"
+                       f"Max deviation: {round(GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%"), quote
+    return True, "OK", quote
+
+
+def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not GROWTH_ALPHA_LEDGER_ENABLED:
+        return False, "Growth Alpha ledger is disabled."
+    if ticker not in GROWTH_ALPHA_UNIVERSE:
+        return False, f"{ticker} is not in the Growth Alpha universe."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "Growth Alpha shares must be positive and finite."
+    if (not GROWTH_ALPHA_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
+        return False, "Fractional Growth Alpha shares are disabled."
+    if not is_finite_positive(price):
+        return False, "Growth Alpha price must be positive and finite."
+    amount = shares * price
+    if amount < GROWTH_ALPHA_MIN_TRADE_DOLLARS:
+        return False, f"Growth trade amount is below minimum {format_money(GROWTH_ALPHA_MIN_TRADE_DOLLARS)}."
+    plan = current_growth_plan_for_validation()
+    target = growth_target_for_ticker(plan, ticker)
+    action = latest_growth_plan_action_map(plan).get(ticker)
+    if GROWTH_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY and target is None:
+        allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", [])[:GROWTH_ALPHA_TOP_N])
+        return False, f"Growth buy rejected: {ticker} is not in active Growth Alpha plan. Current top: {allowed or 'none'}"
+    if action and str(action.get("action", "")).upper() in {"TRIM", "SELL", "AVOID"}:
+        return False, f"Growth buy rejected: current plan action for {ticker} is {action.get('action')}."
+    ok, msg, quote = validate_growth_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash:
+            mark_update_processed_tx(conn, update_id, "rejected_growth_insufficient_cash")
+            return False, "Not enough cash for Growth Alpha buy."
+        row = conn.execute("SELECT * FROM growth_positions WHERE ticker = ?", (ticker,)).fetchone()
+        now = now_ts()
+        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+        plan_id = str(plan.get("plan_id"))
+        if row is None:
+            growth_position_id = f"GROWTH_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
+            conn.execute(
+                """
+                INSERT INTO growth_positions(ticker, growth_position_id, strategy_version, shares, avg_entry_price,
+                                             cost_basis, entry_time, last_update_time, highest, sleeve,
+                                             target_account_pct, last_plan_id, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'GROWTH_ALPHA', ?, ?, '')
+                """,
+                (ticker, growth_position_id, "growth_alpha_v4_expanded_future_growth", round(shares, 8),
+                 round(price, 6), round(amount, 6), now, now, round(price, 6), target_pct, plan_id),
+            )
+        else:
+            pos = row_to_growth_position(row)
+            growth_position_id = pos["growth_position_id"]
+            new_shares = float(pos["shares"]) + shares
+            new_cost = float(pos["cost_basis"]) + amount
+            avg_price = new_cost / new_shares
+            highest = max(float(pos.get("highest") or price), price)
+            conn.execute(
+                """
+                UPDATE growth_positions SET shares = ?, avg_entry_price = ?, cost_basis = ?, last_update_time = ?,
+                                            highest = ?, target_account_pct = ?, last_plan_id = ?, strategy_version = ?
+                WHERE ticker = ?
+                """,
+                (round(new_shares, 8), round(avg_price, 6), round(new_cost, 6), now, round(highest, 6),
+                 target_pct, plan_id, "growth_alpha_v4_expanded_future_growth", ticker),
+            )
+        conn.execute(
+            """
+            INSERT INTO growth_trades(id, growth_position_id, ticker, side, shares, price, amount, realized_profit,
+                                      time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (uuid.uuid4().hex, growth_position_id, ticker, round(shares, 8), round(price, 6), round(amount, 6),
+             now, "growth_alpha_v4_expanded_future_growth", plan_id, "growth_plan_buy", now),
+        )
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "processed_growth_buy")
+    refresh_portfolio()
+    audit("GROWTH_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
+    return True, (f"🚀 GROWTH_ALPHA BUY RECORDED {ticker}\n\n"
+                  f"📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n"
+                  f"💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if action is None else action.get('action')}\n"
+                  f"📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
+                  f"💵 Cash left: {format_money(portfolio['cash'])}")
+
+
+def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not GROWTH_ALPHA_LEDGER_ENABLED:
+        return False, "Growth Alpha ledger is disabled."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "Growth Alpha shares must be positive and finite."
+    if not is_finite_positive(price):
+        return False, "Growth Alpha price must be positive and finite."
+    ok, msg, quote = validate_growth_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg
+    plan = current_growth_plan_for_validation()
+    action = latest_growth_plan_action_map(plan).get(ticker)
+    with db_tx() as conn:
+        row = conn.execute("SELECT * FROM growth_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            mark_update_processed_tx(conn, update_id, "rejected_growth_no_position")
+            return False, "No Growth Alpha position to sell."
+        pos = row_to_growth_position(row)
+        current_shares = float(pos["shares"])
+        if shares - current_shares > CORE_POSITION_EPSILON:
+            mark_update_processed_tx(conn, update_id, "rejected_growth_too_many_shares")
+            return False, f"You only have {format_core_shares(current_shares)} Growth Alpha shares of {ticker}."
+        shares = min(shares, current_shares)
+        avg = float(pos["avg_entry_price"])
+        proceeds = shares * price
+        realized_profit = (price - avg) * shares
+        remaining = current_shares - shares
+        now = now_ts()
+        plan_id = str(plan.get("plan_id"))
+        conn.execute(
+            """
+            INSERT INTO growth_trades(id, growth_position_id, ticker, side, shares, price, amount, realized_profit,
+                                      time, strategy_version, plan_id, reason, created_at)
+            VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (uuid.uuid4().hex, pos["growth_position_id"], ticker, round(shares, 8), round(price, 6),
+             round(proceeds, 6), round(realized_profit, 6), now, "growth_alpha_v4_expanded_future_growth",
+             plan_id, "growth_plan_sell", now),
+        )
+        if remaining <= CORE_POSITION_EPSILON:
+            conn.execute("DELETE FROM growth_positions WHERE ticker = ?", (ticker,))
+        else:
+            conn.execute("UPDATE growth_positions SET shares = ?, cost_basis = ?, last_update_time = ?, last_plan_id = ? WHERE ticker = ?",
+                         (round(remaining, 8), round(avg * remaining, 6), now, plan_id, ticker))
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + proceeds)
+        mark_update_processed_tx(conn, update_id, "processed_growth_sell")
+    refresh_portfolio()
+    audit("GROWTH_SELL", f"{ticker} shares={shares} price={price} proceeds={proceeds} profit={realized_profit}")
+    return True, (f"🚀 GROWTH_ALPHA SELL RECORDED {ticker}\n\n"
+                  f"📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n"
+                  f"💰 Proceeds: {format_money(proceeds)}\n📊 Realized Growth P/L: {format_money(realized_profit)} "
+                  f"({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
+                  f"🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}")
+
+
+_V310_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
+    base = _V310_OLD_DYNAMIC()
+    market = str(base.get("market", "UNCERTAIN"))
+    risk = base.get("risk_guard", {}) or {}
+    bear_score = int(base.get("bear_score", 0) or 0)
+    if risk.get("hard_active"):
+        core, growth, spec, long_vcp, bear = 25.0, 0.0, 0.0, 0.0, 0.0
+    elif market == "BULL":
+        core, growth, spec, long_vcp, bear = 25.0, 45.0, 20.0, 10.0, 0.0
+    elif market == "BEAR":
+        core, growth, spec, long_vcp, bear = 25.0, 0.0, 0.0, 0.0, 10.0 if BEAR_SLEEVE_ENABLED else 0.0
+    else:
+        core, growth, spec, long_vcp = 25.0, 20.0, 10.0, 5.0
+        bear = 5.0 if BEAR_SLEEVE_ENABLED and bear_score >= BEAR_EXIT_SCORE else 0.0
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        reduced_growth = growth * 0.50
+        reduced_spec = spec * 0.50
+        reduced_long = long_vcp * 0.50
+        reduced_bear = bear * 0.75
+        growth, spec, long_vcp, bear = reduced_growth, reduced_spec, reduced_long, reduced_bear
+    if not GROWTH_ALPHA_ENABLED:
+        growth = 0.0
+    if not SPEC_ALPHA_ENABLED:
+        spec = 0.0
+    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear)
+    base["strategy_version"] = "v4_expanded_growth_25_45_20_10_dynamic_allocation"
+    base["core_wealth_pct"] = round(core, 2)
+    base["growth_alpha_pct"] = round(growth, 2)
+    base["spec_alpha_pct"] = round(spec, 2)
+    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
+    base["bear_inverse_tactical_pct"] = round(bear, 2)
+    base["cash_reserve_pct"] = round(cash, 2)
+    return base
+
+
+_V310_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
+
+def compute_equity_snapshot_data() -> Dict[str, float]:
+    snapshot = _V310_OLD_COMPUTE_EQUITY()
+    growth_positions = load_growth_positions() if GROWTH_ALPHA_LEDGER_ENABLED else {}
+    prices = get_prices_batch(list(growth_positions.keys()))
+    growth_value = 0.0
+    growth_cost = 0.0
+    for ticker, pos in growth_positions.items():
+        price = prices.get(ticker, pos.get("avg_entry_price", 0))
+        growth_value += float(price) * float(pos["shares"])
+        growth_cost += float(pos.get("cost_basis", 0) or 0)
+    snapshot["growth_alpha_positions_value"] = round(growth_value, 2)
+    snapshot["growth_alpha_cost_basis"] = round(growth_cost, 2)
+    snapshot["growth_alpha_unrealized_profit"] = round(growth_value - growth_cost, 2)
+    snapshot["positions_value"] = round(float(snapshot.get("positions_value", 0) or 0) + growth_value, 2)
+    snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + growth_value, 2)
+    return snapshot
+
+
+_V310_OLD_REALIZED = realized_performance_all_time
+
+def realized_performance_all_time() -> Dict[str, Any]:
+    perf = _V310_OLD_REALIZED()
+    growth_trades = load_growth_trades() if GROWTH_ALPHA_LEDGER_ENABLED else []
+    growth_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in growth_trades if str(t.get("side")).upper() == "SELL"), 2)
+    perf["growth_realized_profit"] = growth_profit
+    perf["profit"] = round(float(perf.get("profit", 0) or 0) + growth_profit, 2)
+    base = float(perf.get("base_capital", 0) or 0)
+    perf["pct"] = None if base <= 0 else (perf["profit"] / base) * 100
+    perf["growth_trade_records"] = len(growth_trades)
+    perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(growth_trades)
+    return perf
+
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
+    msg = (
+        "🚀 EXPANDED GROWTH_ALPHA MONTHLY LEADER ROTATION PLAN v4\n\n"
+        "Private execution plan. Execute in broker first, then record with growthbuy/growthsell.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🚦 Market filter OK: {yes_no(bool(plan.get('market_ok')))} — {plan.get('market_reason')}\n"
+        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🚀 Target Growth sleeve: {plan.get('target_growth_account_pct')}% = {format_money(float(plan.get('target_growth_value', 0) or 0))}\n"
+        f"📦 Current Growth value: {format_money(float(plan.get('current_growth_value', 0) or 0))}\n"
+        f"📈 Growth unrealized P/L: {format_money(float(plan.get('current_growth_unrealized_profit', 0) or 0))}\n"
+        f"🧪 Universe/scored: {plan.get('universe_size')} / {plan.get('scored_count')}\n"
+        f"🎚️ Top N: {plan.get('top_n')} | Max per cluster: {GROWTH_ALPHA_MAX_PER_CLUSTER}\n\n"
+    )
+    ranked = [a for a in plan.get("actions", []) or [] if a.get("rank") is not None]
+    exits = [a for a in plan.get("actions", []) or [] if str(a.get("action")).upper() == "SELL"]
+    if ranked:
+        msg += "🎯 Ranked Growth Alpha candidates — best to least attractive\n"
+        for item in ranked[:GROWTH_ALPHA_TOP_N]:
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+            msg += (
+                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('cluster', 'other')})\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
+                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
+                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')}\n"
+            )
+        msg += "\n"
+    if exits:
+        msg += "🔴 Growth Alpha exit / rotation candidates\n"
+        for item in exits:
+            msg += f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'No longer selected')}\n"
+        msg += "\n"
+    msg += (
+        "How to execute after broker fill:\n"
+        "• growthbuy TICKER SHARES at PRICE\n"
+        "• growthsell TICKER SHARES at PRICE\n\n"
+        "Growth rules:\n"
+        "• Monthly high-growth leader rotation, not a swing stop system.\n"
+        "• Separate Growth ledger; do not use bought/sold, corebuy, or specbuy.\n"
+        "• Cluster caps are active to reduce one-sector dependence."
+    )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_growth_portfolio_report() -> str:
+    details = growth_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = (f"🚀 GROWTH_ALPHA PORTFOLIO\n\n"
+           f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
+           f"🚀 Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
+           f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+           f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+           f"✅ Realized Growth P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+           f"💼 Total equity: {format_money(snapshot['equity'])}\n\n")
+    if not rows:
+        return msg + "No Growth Alpha positions recorded yet. Use growthplan, then growthbuy after broker execution."
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Shares: {format_core_shares(row['shares'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
+                f"Target account weight: {row.get('target_account_pct')}%\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_growth_pnl_report() -> str:
+    details = growth_position_market_value_details()
+    trades = load_growth_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return (f"🚀 GROWTH_ALPHA P/L\n\n"
+            f"🚀 Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+            f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+            f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+            f"💰 Total Growth P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
+            f"Buy records: {len(buys)}\nSell records: {len(sells)}")
+
+
+def format_growth_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    details = growth_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    alloc = dynamic_portfolio_allocation_targets()
+    target_pct = float(alloc.get("growth_alpha_pct", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    return (f"🚀 GROWTH_ALPHA EXPOSURE\n\n"
+            f"💼 Total equity: {format_money(equity)}\n"
+            f"🚀 Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"🎯 Target Growth: {round(target_pct, 2)}% of account\n"
+            f"📊 Actual Growth: {round(actual_pct, 2)}% of account\n"
+            f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
+            "Use growthplan for ranked BUY/ADD/HOLD/TRIM/SELL actions.")
+
+
+_V310_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
+
+def format_combined_portfolio_report() -> str:
+    base_msg = _V310_OLD_PORTFOLIO_REPORT()
+    rows = growth_position_market_value_details().get("rows", []) if GROWTH_ALPHA_LEDGER_ENABLED else []
+    if not rows:
+        return base_msg.replace("No open swing, core, or SPEC positions", "No open swing, core, SPEC, or Growth Alpha positions")
+    msg = base_msg + "\n\n🚀 GROWTH_ALPHA POSITIONS\n\n"
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Shares: {format_core_shares(row['shares'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_portfolio_allocation_plan() -> str:
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4 EXPANDED GROWTH 25/45/20/10\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core uses researched USD-priced UCITS/ETP universe.\n"
+        "• Growth Alpha is monthly high-growth leader rotation with cluster caps.\n"
+        "• SPEC_ALPHA remains monthly medium/weak momentum.\n"
+        "• VCP/Bear-stock remains signal-driven tactical.\n"
+        "• Options remain research-only and are not live-integrated."
+    )
+
+
+def maybe_send_growth_alpha_signal() -> None:
+    if not GROWTH_ALPHA_ENABLED:
+        return
+    current_ny = ny_now()
+    minutes = current_ny.hour * 60 + current_ny.minute
+    if is_market_weekday(current_ny) and minutes < GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE:
+        return
+    month_key = current_ny.strftime("%Y-%m")
+    if get_meta("last_growth_alpha_month") == month_key:
+        return
+    last_raw = get_meta("last_growth_alpha_alert_ts")
+    if last_raw:
+        try:
+            days_since = (now_ts() - float(last_raw)) / 86400
+            if days_since < GROWTH_ALPHA_ALERT_REPEAT_DAYS:
+                return
+        except ValueError:
+            pass
+    try:
+        plan = compute_growth_alpha_plan()
+        save_growth_plan_signal(plan)
+        set_meta("last_growth_alpha_month", month_key)
+        set_meta("last_growth_alpha_alert_ts", str(now_ts()))
+        send(format_growth_alpha_plan(plan))
+        audit("GROWTH_ALPHA_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
+    except Exception as exc:
+        logger.exception(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
+        print(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
+
+
+_V310_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
+
+def maybe_send_wealth_core_signal() -> None:
+    _V310_OLD_MAYBE_SEND_MONTHLY()
+    maybe_send_growth_alpha_signal()
+
+
+_V310_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    zip_path = _V310_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("growth_positions.table.json", json.dumps(safe_convert(list(load_growth_positions().values())), indent=2))
+            z.writestr("growth_trades.table.json", json.dumps(safe_convert(load_growth_trades()), indent=2))
+            latest = load_latest_growth_plan()
+            z.writestr("growth_latest_plan.json", json.dumps(safe_convert(latest or {}), indent=2))
+    except Exception as exc:
+        print(f"[GROWTH EXPORT WARNING] {exc}")
+    return zip_path
+
+
+_V310_OLD_RESET_ALL = reset_all_paper_state
+
+def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+    ok, msg, backup_path = _V310_OLD_RESET_ALL(update_id=update_id)
+    with db_tx() as conn:
+        conn.execute("DELETE FROM growth_positions")
+        conn.execute("DELETE FROM growth_trades")
+        conn.execute("DELETE FROM growth_signals")
+        conn.execute("DELETE FROM meta WHERE key IN ('last_growth_alpha_month', 'last_growth_alpha_alert_ts')")
+    return ok, msg + "\n✅ Growth Alpha positions/trades/signals cleared", backup_path
+
+
+_V310_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower == "growthplan":
+        send("🚀 Growth Alpha plan started. This can take a minute because it scores the high-growth universe.")
+        plan = compute_growth_alpha_plan()
+        save_growth_plan_signal(plan)
+        send(format_growth_alpha_plan(plan))
+        return
+    if text_lower == "growthstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_growth_plan()
+        details = growth_position_market_value_details()
+        send(
+            "🚀 EXPANDED GROWTH_ALPHA STATUS v4\n\n"
+            f"Enabled: {yes_no(GROWTH_ALPHA_ENABLED)}\n"
+            f"Ledger enabled: {yes_no(GROWTH_ALPHA_LEDGER_ENABLED)}\n"
+            f"Target now: {alloc.get('growth_alpha_pct')}% of account\n"
+            f"Universe size: {len(GROWTH_ALPHA_UNIVERSE)}\n"
+            f"Top N: {GROWTH_ALPHA_TOP_N} | Max per cluster: {GROWTH_ALPHA_MAX_PER_CLUSTER}\n"
+            f"Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "growthplan\n"
+            "growthbuy TICKER SHARES at PRICE\n"
+            "growthsell TICKER SHARES at PRICE\n"
+            "growthportfolio | growthpnl | growthexposure"
+        )
+        return
+    if text_lower == "growthportfolio":
+        send(format_growth_portfolio_report())
+        return
+    if text_lower == "growthpnl":
+        send(format_growth_pnl_report())
+        return
+    if text_lower == "growthexposure":
+        send(format_growth_exposure_report())
+        return
+    if text_lower == "equity":
+        snapshot = compute_equity_snapshot_data()
+        send(
+            "💼 ACCOUNT EQUITY\n\n"
+            f"💵 Cash: {format_money(snapshot['cash'])}\n"
+            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
+            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
+            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
+            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
+            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
+            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
+        )
+        return
+
+    growth_cmd = re.fullmatch(
+        r"(?i)\s*(growthbuy|growthsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if growth_cmd:
+        action = growth_cmd.group(1).lower()
+        ticker = normalize_ticker(growth_cmd.group(2))
+        shares = float(growth_cmd.group(3))
+        price = float(growth_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "growthbuy":
+            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "growthsell":
+            ok, msg = record_growth_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+    if text_lower in {"help", "/help"}:
+        _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+        send(
+            "V4 Expanded Growth Alpha notes:\n"
+            "• Allocation target: Core 25% / Expanded Growth Alpha 45% / SPEC 20% / Tactical 10%.\n"
+            "• Expanded Growth Alpha is a separate monthly ledger. Use growthbuy/growthsell only.\n"
+            "• Do not record Growth Alpha with bought/sold, corebuy, or specbuy.\n"
+            "• Options remain research-only."
+        )
+        return
+
+    return _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 if __name__ == "__main__":
 
