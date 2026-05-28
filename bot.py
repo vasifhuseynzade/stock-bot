@@ -22161,7 +22161,7 @@ def format_riskmatrix_status() -> str:
     )
     warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
     return (
-        "🧮 RISK MATRIX v4.1.1 HOTFIX\n\n"
+        "🧮 RISK MATRIX v4.2.1 RECON\n\n"
         f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
         f"Total equity: {format_money(equity)}\n\n"
         "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
@@ -22179,7 +22179,7 @@ def format_stress_status() -> str:
         for x in s.get("scenarios", [])
     )
     return (
-        "🔥 STRESS STATUS v4.1.1 HOTFIX\n\n"
+        "🔥 STRESS STATUS v4.2.1 RECON\n\n"
         f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
         f"Equity: {format_money(float(s.get('equity', 0) or 0))}\n"
         f"Worst scenario: {worst.get('scenario')} {format_money(float(worst.get('pnl', 0) or 0))} "
@@ -22224,7 +22224,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 # - Optional supervised sync updates bot cash and matching managed positions from
 #   broker average cost, but only after explicit Telegram confirmation.
 
-V42_VERSION = "v4.2-ibkr-readonly-reconcile-20260528"
+V42_VERSION = "v4.2.1-ibkr-readonly-reconcile-hotfix-20260528"
+
+# Display label fix: if the environment is empty or still has the old v4.1.1
+# hotfix label, show this as the v4.2.1 reconciliation candidate.
+# If the operator intentionally sets a different STRATEGY_VERSION, keep it.
+_STRATEGY_ENV_RAW = os.getenv("STRATEGY_VERSION", "").strip()
+if _STRATEGY_ENV_RAW in {"", "v4.1.1-hotfix-growth-spec-clean-20-45-20-5-10-monitor"}:
+    STRATEGY_VERSION = "v4.2.1-ibkr-reconcile-v4.1.1-hotfix-20-45-20-5-10-monitor"
 IBKR_RECON_ENABLED = os.getenv("IBKR_RECON_ENABLED", "1") != "0"
 IBKR_RECON_AUTO_ENABLED = os.getenv("IBKR_RECON_AUTO_ENABLED", "0") == "1"
 IBKR_RECON_AFTER_CLOSE_MINUTE = int(os.getenv("IBKR_RECON_AFTER_CLOSE_MINUTE", str(16 * 60 + 10)))
@@ -22237,6 +22244,8 @@ IBKR_RECON_VALUE_TOLERANCE = float(os.getenv("IBKR_RECON_VALUE_TOLERANCE", "2.0"
 IBKR_SYNC_ALLOW_CASH = os.getenv("IBKR_SYNC_ALLOW_CASH", "1") != "0"
 IBKR_SYNC_ALLOW_AVG_COST = os.getenv("IBKR_SYNC_ALLOW_AVG_COST", "1") != "0"
 IBKR_SYNC_ALLOW_QTY = os.getenv("IBKR_SYNC_ALLOW_QTY", "1") != "0"
+IBKR_BRIDGE_TIMEOUT = float(os.getenv("IBKR_BRIDGE_TIMEOUT", "45"))
+IBKR_BRIDGE_RETRIES = int(os.getenv("IBKR_BRIDGE_RETRIES", "2"))
 
 
 def _v42_float(value: Any, default: float = 0.0) -> float:
@@ -22511,22 +22520,31 @@ def _v42_fetch_snapshot() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not IBKR_RECON_ENABLED:
         return False, "IBKR reconciliation is disabled", None
     if IBKR_BRIDGE_URL:
-        try:
-            url = IBKR_BRIDGE_URL.rstrip("/") + "/snapshot"
-            headers = {}
-            params = {}
-            if IBKR_BRIDGE_TOKEN:
-                headers["X-IBKR-Bridge-Token"] = IBKR_BRIDGE_TOKEN
-                params["token"] = IBKR_BRIDGE_TOKEN
-            res = SESSION.get(url, headers=headers, params=params, timeout=20)
-            if res.status_code >= 400:
-                return False, f"Bridge HTTP {res.status_code}: {res.text[:300]}", None
-            data = res.json()
-            if not isinstance(data, dict):
-                return False, "Bridge returned non-object JSON", None
-            return True, "fresh bridge snapshot", data
-        except Exception as exc:
-            return False, f"Bridge fetch failed: {exc}", None
+        url = IBKR_BRIDGE_URL.rstrip("/") + "/snapshot"
+        headers = {}
+        params = {}
+        if IBKR_BRIDGE_TOKEN:
+            headers["X-IBKR-Bridge-Token"] = IBKR_BRIDGE_TOKEN
+            params["token"] = IBKR_BRIDGE_TOKEN
+        last_exc: Optional[Exception] = None
+        attempts = max(1, IBKR_BRIDGE_RETRIES + 1)
+        for attempt in range(attempts):
+            try:
+                res = SESSION.get(url, headers=headers, params=params, timeout=IBKR_BRIDGE_TIMEOUT)
+                if res.status_code >= 400:
+                    return False, f"Bridge HTTP {res.status_code}: {res.text[:300]}", None
+                data = res.json()
+                if not isinstance(data, dict):
+                    return False, "Bridge returned non-object JSON", None
+                return True, "fresh bridge snapshot", data
+            except Exception as exc:
+                last_exc = exc
+                if attempt < attempts - 1:
+                    time.sleep(1.0 * (attempt + 1))
+        cached = _v42_latest_snapshot_from_db()
+        if cached:
+            return True, f"latest stored snapshot fallback after bridge fetch failed: {last_exc}", cached
+        return False, f"Bridge fetch failed: {last_exc}", None
     if IBKR_SNAPSHOT_FILE:
         try:
             with open(IBKR_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
@@ -22648,10 +22666,10 @@ def _v42_format_money_signed(x: Any) -> str:
 def format_brokerstatus() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🏦 IBKR BROKER STATUS v4.2\n\n❌ " + info
+        return "🏦 IBKR BROKER STATUS v4.2.1\n\n❌ " + info
     warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major broker/bot warnings."
     return (
-        "🏦 IBKR BROKER STATUS v4.2\n\n"
+        "🏦 IBKR BROKER STATUS v4.2.1\n\n"
         f"Connection source: {info}\n"
         f"Snapshot ID: {sid}\n"
         f"Account: {rec.get('account')}\n"
@@ -22675,7 +22693,7 @@ def format_brokerstatus() -> str:
 def format_brokerpositions() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "📦 IBKR POSITIONS v4.2\n\n❌ " + info
+        return "📦 IBKR POSITIONS v4.2.1\n\n❌ " + info
     rows = rec.get("matched", [])
     if not rows:
         matched_text = "No bot-managed positions found in broker."
@@ -22690,7 +22708,7 @@ def format_brokerpositions() -> str:
             )
         matched_text = "\n".join(parts)
     return (
-        "📦 IBKR BOT-MANAGED POSITIONS v4.2\n\n"
+        "📦 IBKR BOT-MANAGED POSITIONS v4.2.1\n\n"
         f"Snapshot ID: {sid}\n"
         f"{matched_text}\n\n"
         "Use brokersyncpreview to see supervised sync proposals."
@@ -22700,7 +22718,7 @@ def format_brokerpositions() -> str:
 def format_brokerexternal() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧳 EXTERNAL LEGACY POSITIONS v4.2\n\n❌ " + info
+        return "🧳 EXTERNAL LEGACY POSITIONS v4.2.1\n\n❌ " + info
     ext = sorted(rec.get("external", []), key=lambda x: abs(float(x.get("market_value", 0) or 0)), reverse=True)
     if not ext:
         rows = "No external legacy positions found."
@@ -22712,7 +22730,7 @@ def format_brokerexternal() -> str:
             for x in ext[:25]
         )
     return (
-        "🧳 EXTERNAL LEGACY POSITIONS v4.2\n\n"
+        "🧳 EXTERNAL LEGACY POSITIONS v4.2.1\n\n"
         "These are broker holdings outside bot strategy ledgers. Bot sees them, but does not trade or count them as Core/Growth/SPEC/Tactical/Crypto.\n\n"
         f"Total external value: {format_money(float(rec.get('external_legacy_value', 0) or 0))}\n\n"
         f"{rows}"
@@ -22722,7 +22740,7 @@ def format_brokerexternal() -> str:
 def format_brokerreconcile() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧮 IBKR RECONCILIATION v4.2\n\n❌ " + info
+        return "🧮 IBKR RECONCILIATION v4.2.1\n\n❌ " + info
     warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major mismatches."
     sync_needed = [x for x in rec.get("matched", []) if x.get("needs_sync")]
     sync_rows = "\n".join(
@@ -22732,7 +22750,7 @@ def format_brokerreconcile() -> str:
     missing_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("missing_in_broker", [])[:10]) or "None."
     amb_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("ambiguous", [])[:10]) or "None."
     return (
-        "🧮 IBKR RECONCILIATION v4.2\n\n"
+        "🧮 IBKR RECONCILIATION v4.2.1\n\n"
         f"Snapshot ID: {sid}\n"
         f"Source: {info}\n"
         f"Status: {_v38_status_emoji(rec.get('status'))} {rec.get('status')}\n\n"
@@ -22754,7 +22772,7 @@ def format_brokerreconcile() -> str:
 def format_brokersyncpreview() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧾 BROKER SYNC PREVIEW v4.2\n\n❌ " + info
+        return "🧾 BROKER SYNC PREVIEW v4.2.1\n\n❌ " + info
     candidates = [x for x in rec.get("matched", []) if x.get("needs_sync")]
     rows = []
     if abs(float(rec.get("cash_diff", 0) or 0)) > 0.01:
@@ -22769,7 +22787,7 @@ def format_brokersyncpreview() -> str:
     else:
         rows_text = "\n".join(rows)
     return (
-        "🧾 BROKER SYNC PREVIEW v4.2\n\n"
+        "🧾 BROKER SYNC PREVIEW v4.2.1\n\n"
         "This would align bot cash and bot-managed position quantities/average costs with IBKR.\n"
         "It will NOT adopt external legacy positions and will NOT rewrite historical trade records.\n\n"
         f"Snapshot ID: {sid}\n"
@@ -22830,7 +22848,7 @@ def broker_sync_apply_confirmed() -> Tuple[bool, str]:
     refresh_portfolio()
     audit("IBKR_SYNC_APPLIED", "; ".join(actions))
     return True, (
-        "✅ BROKER SYNC APPLIED v4.2\n\n"
+        "✅ BROKER SYNC APPLIED v4.2.1\n\n"
         + ("\n".join(f"• {a}" for a in actions) if actions else "No changes needed.")
         + "\n\nExternal legacy positions were not adopted. Historical trade records were not rewritten."
     )
@@ -22893,14 +22911,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     text_lower = text_clean.lower()
     if text_lower in {"brokerhelp", "ibkrhelp"}:
         send(
-            "🏦 IBKR RECONCILIATION COMMANDS v4.2\n\n"
+            "🏦 IBKR RECONCILIATION COMMANDS v4.2.1\n\n"
             "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
             "brokerpositions — show bot-managed positions as seen by IBKR\n"
             "brokerexternal — show external legacy broker positions outside bot scope\n"
             "brokerreconcile — compare IBKR vs bot ledgers\n"
             "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
             "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
-            "No broker orders are placed in v4.2."
+            "No broker orders are placed in v4.2.1."
         )
         return
     if text_lower in {"brokerstatus", "ibkrstatus"}:
@@ -22922,6 +22940,55 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
     return _V42_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
+
+
+# -----------------------------------------------------------------------------
+# V4.2.1 DISPLAY / OPERATIONAL STATUS WRAPPER
+# -----------------------------------------------------------------------------
+# This final wrapper does not change trading logic. It fixes the public/private
+# command label so operators can confirm that the IBKR reconciliation layer is
+# the currently deployed candidate, while keeping the older v4.1.1 hotfix
+# information available.
+
+_V421_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.2.1 IBKR RECON / HOTFIX STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"V4.2 layer: {V42_VERSION}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
+            f"SPEC universe size: {len(SPEC_ALPHA_UNIVERSE)}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"IBKR auto reconcile: {yes_no(IBKR_RECON_AUTO_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            f"Bridge timeout/retries: {IBKR_BRIDGE_TIMEOUT}s / {IBKR_BRIDGE_RETRIES} retries\n"
+            f"Core public enabled: {yes_no(CORE_PUBLIC_SIGNAL_ENABLED)}\n"
+            f"SPEC public enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n\n"
+            "Read-only reconciliation only. No broker orders are placed."
+        )
+        return
+    if text_lower in {"brokerping", "bridgeping"}:
+        ok, info, snap = _v42_fetch_snapshot()
+        if ok and isinstance(snap, dict):
+            conn = snap.get("connection") or {}
+            send(
+                "🏓 IBKR BRIDGE PING v4.2.1\n\n"
+                f"Status: ✅ OK\n"
+                f"Source: {info}\n"
+                f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
+                f"Created UTC: {snap.get('created_utc', 'n/a')}\n"
+                "No broker orders are placed."
+            )
+        else:
+            send(f"🏓 IBKR BRIDGE PING v4.2.1\n\n❌ {info}")
+        return
+    return _V421_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
 if __name__ == "__main__":

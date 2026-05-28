@@ -1,0 +1,10 @@
+IBKR Bridge Token
+==================
+
+Token:
+vasif_super_secure_bridge_2026_12
+
+Keep this token private.
+Used for local read-only IBKR bridge authentication.
+
+cmd: curl "http://127.0.0.1:8765/snapshot?token=vasif_super_secure_bridge_2026_12"
