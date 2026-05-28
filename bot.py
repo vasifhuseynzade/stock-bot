@@ -22212,6 +22212,718 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 
+# -----------------------------------------------------------------------------
+# V4.2 IBKR READ-ONLY RECONCILIATION LAYER
+# -----------------------------------------------------------------------------
+# Purpose:
+# - Connect the Railway bot to an external IBKR bridge snapshot endpoint.
+# - Reconcile broker cash/positions with bot-ledger positions.
+# - Treat broker positions that are not owned by bot ledgers as EXTERNAL_LEGACY.
+# - Do NOT place broker orders in this version.
+# - Do NOT blindly import broker portfolio into strategy ledgers.
+# - Optional supervised sync updates bot cash and matching managed positions from
+#   broker average cost, but only after explicit Telegram confirmation.
+
+V42_VERSION = "v4.2-ibkr-readonly-reconcile-20260528"
+IBKR_RECON_ENABLED = os.getenv("IBKR_RECON_ENABLED", "1") != "0"
+IBKR_RECON_AUTO_ENABLED = os.getenv("IBKR_RECON_AUTO_ENABLED", "0") == "1"
+IBKR_RECON_AFTER_CLOSE_MINUTE = int(os.getenv("IBKR_RECON_AFTER_CLOSE_MINUTE", str(16 * 60 + 10)))
+IBKR_BRIDGE_URL = os.getenv("IBKR_BRIDGE_URL", "").strip().rstrip("/")
+IBKR_BRIDGE_TOKEN = os.getenv("IBKR_BRIDGE_TOKEN", "").strip()
+IBKR_SNAPSHOT_FILE = os.getenv("IBKR_SNAPSHOT_FILE", "").strip()
+IBKR_RECON_CASH_TOLERANCE = float(os.getenv("IBKR_RECON_CASH_TOLERANCE", "5.0"))
+IBKR_RECON_QTY_TOLERANCE = float(os.getenv("IBKR_RECON_QTY_TOLERANCE", "0.0005"))
+IBKR_RECON_VALUE_TOLERANCE = float(os.getenv("IBKR_RECON_VALUE_TOLERANCE", "2.0"))
+IBKR_SYNC_ALLOW_CASH = os.getenv("IBKR_SYNC_ALLOW_CASH", "1") != "0"
+IBKR_SYNC_ALLOW_AVG_COST = os.getenv("IBKR_SYNC_ALLOW_AVG_COST", "1") != "0"
+IBKR_SYNC_ALLOW_QTY = os.getenv("IBKR_SYNC_ALLOW_QTY", "1") != "0"
+
+
+def _v42_float(value: Any, default: float = 0.0) -> float:
+    try:
+        x = float(value)
+        if math.isfinite(x):
+            return x
+    except Exception:
+        pass
+    return default
+
+
+def _v42_round(value: Any, digits: int = 2) -> float:
+    return round(_v42_float(value), digits)
+
+
+def _v42_account_map(snapshot: Dict[str, Any]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for row in snapshot.get("account_summary", []) or []:
+        try:
+            # [account, tag, value, currency, model]
+            if len(row) >= 3:
+                tag = str(row[1])
+                value = str(row[2])
+                ccy = str(row[3]) if len(row) > 3 else ""
+                if ccy in {"", "USD", "BASE"}:
+                    out[tag] = value
+        except Exception:
+            continue
+    for row in snapshot.get("account_values", []) or []:
+        try:
+            if len(row) >= 3:
+                tag = str(row[1])
+                value = str(row[2])
+                ccy = str(row[3]) if len(row) > 3 else ""
+                if ccy in {"", "USD", "BASE"} and tag not in out:
+                    out[tag] = value
+        except Exception:
+            continue
+    return out
+
+
+def _v42_broker_cash(snapshot: Dict[str, Any]) -> float:
+    m = _v42_account_map(snapshot)
+    for key in ["TotalCashValue", "TotalCashBalance", "CashBalance", "AvailableFunds-S"]:
+        if key in m:
+            return _v42_float(m[key])
+    return 0.0
+
+
+def _v42_broker_netliq(snapshot: Dict[str, Any]) -> float:
+    m = _v42_account_map(snapshot)
+    for key in ["NetLiquidation", "EquityWithLoanValue"]:
+        if key in m:
+            return _v42_float(m[key])
+    return 0.0
+
+
+def _v42_broker_grosspos(snapshot: Dict[str, Any]) -> float:
+    m = _v42_account_map(snapshot)
+    return _v42_float(m.get("GrossPositionValue", 0.0))
+
+
+def _v42_normalize_broker_symbol(raw: Any) -> str:
+    sym = normalize_ticker(str(raw or ""))
+    return sym or str(raw or "").strip().upper()
+
+
+def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    positions: Dict[str, Dict[str, Any]] = {}
+    for p in snapshot.get("portfolio", []) or []:
+        try:
+            contract = p.get("contract") or {}
+            symbol = _v42_normalize_broker_symbol(contract.get("symbol") or contract.get("localSymbol"))
+            if not symbol:
+                continue
+            qty = _v42_float(p.get("position"))
+            if abs(qty) <= 1e-12:
+                continue
+            positions[symbol] = {
+                "ticker": symbol,
+                "qty": qty,
+                "market_price": _v42_float(p.get("marketPrice")),
+                "market_value": _v42_float(p.get("marketValue")),
+                "avg_cost": _v42_float(p.get("averageCost")),
+                "unrealized_pnl": _v42_float(p.get("unrealizedPNL")),
+                "realized_pnl": _v42_float(p.get("realizedPNL")),
+                "sec_type": str(contract.get("secType") or ""),
+                "currency": str(contract.get("currency") or ""),
+                "exchange": str(contract.get("primaryExchange") or contract.get("exchange") or ""),
+                "con_id": contract.get("conId"),
+                "local_symbol": str(contract.get("localSymbol") or symbol),
+            }
+        except Exception:
+            continue
+    return positions
+
+
+def _v42_bot_managed_positions() -> Dict[str, List[Dict[str, Any]]]:
+    refresh_portfolio()
+    rows: Dict[str, List[Dict[str, Any]]] = {}
+
+    def add(ticker: str, ledger: str, qty: float, avg: float, cost: float, position_id: str = "") -> None:
+        t = str(ticker).upper()
+        rows.setdefault(t, []).append({
+            "ticker": t,
+            "ledger": ledger,
+            "qty": float(qty),
+            "avg_entry_price": float(avg),
+            "cost_basis": float(cost),
+            "position_id": position_id,
+        })
+
+    for ticker, pos in (portfolio.get("positions") or {}).items():
+        add(ticker, "TACTICAL", float(pos.get("shares", 0) or 0), float(pos.get("price", 0) or 0), float(pos.get("shares", 0) or 0) * float(pos.get("price", 0) or 0), str(pos.get("position_id", "")))
+
+    try:
+        for ticker, pos in load_core_positions().items():
+            add(ticker, "CORE", pos.get("shares", 0), pos.get("avg_entry_price", 0), pos.get("cost_basis", 0), pos.get("core_position_id", ""))
+    except Exception:
+        pass
+    try:
+        for ticker, pos in load_growth_positions().items():
+            add(ticker, "GROWTH", pos.get("shares", 0), pos.get("avg_entry_price", 0), pos.get("cost_basis", 0), pos.get("growth_position_id", ""))
+    except Exception:
+        pass
+    try:
+        for ticker, pos in load_spec_positions().items():
+            add(ticker, "SPEC", pos.get("shares", 0), pos.get("avg_entry_price", 0), pos.get("cost_basis", 0), pos.get("spec_position_id", ""))
+    except Exception:
+        pass
+    try:
+        for ticker, pos in load_crypto_positions().items():
+            add(ticker, "CRYPTO", pos.get("units", 0), pos.get("avg_entry_price", 0), pos.get("cost_basis", 0), pos.get("crypto_position_id", ""))
+    except Exception:
+        pass
+    return rows
+
+
+def _v42_bot_cash() -> float:
+    refresh_portfolio()
+    return float(portfolio.get("cash", 0.0) or 0.0)
+
+
+# --- DB extension ---
+_V42_OLD_INIT_DB = init_db
+
+def init_db() -> None:
+    _V42_OLD_INIT_DB()
+    conn = db_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS broker_snapshots (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL DEFAULT 'IBKR',
+                account TEXT,
+                created_utc TEXT,
+                imported_at REAL NOT NULL,
+                broker_cash REAL,
+                broker_netliq REAL,
+                broker_gross_positions REAL,
+                raw_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_broker_snapshots_imported_at ON broker_snapshots(imported_at);
+
+            CREATE TABLE IF NOT EXISTS broker_position_snapshots (
+                snapshot_id TEXT NOT NULL,
+                ticker TEXT NOT NULL,
+                sec_type TEXT,
+                currency TEXT,
+                exchange_name TEXT,
+                con_id TEXT,
+                qty REAL NOT NULL,
+                market_price REAL,
+                market_value REAL,
+                avg_cost REAL,
+                unrealized_pnl REAL,
+                classification TEXT NOT NULL DEFAULT 'UNKNOWN',
+                matched_ledger TEXT,
+                created_at REAL NOT NULL,
+                PRIMARY KEY(snapshot_id, ticker)
+            );
+            CREATE INDEX IF NOT EXISTS idx_broker_position_snapshots_ticker ON broker_position_snapshots(ticker);
+
+            CREATE TABLE IF NOT EXISTS broker_reconcile_events (
+                id TEXT PRIMARY KEY,
+                snapshot_id TEXT,
+                time REAL NOT NULL,
+                status TEXT NOT NULL,
+                summary_json TEXT NOT NULL DEFAULT '{}'
+            );
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _v42_store_snapshot(snapshot: Dict[str, Any], classification: Optional[Dict[str, Any]] = None) -> str:
+    sid = str(snapshot.get("snapshot_id") or snapshot.get("id") or uuid.uuid4().hex)
+    acct = None
+    try:
+        acct = ((snapshot.get("connection") or {}).get("account_selected") or (snapshot.get("managed_accounts") or [None])[0])
+    except Exception:
+        acct = None
+    imported = now_ts()
+    raw = json_dumps(snapshot)
+    broker_positions = _v42_broker_positions(snapshot)
+    by_class = classification or {}
+    matched_ledgers = {}
+    classes = {}
+    for k in by_class.get("matched", []) or []:
+        classes[str(k.get("ticker", "")).upper()] = "MANAGED_MATCHED"
+        matched_ledgers[str(k.get("ticker", "")).upper()] = str(k.get("ledger", ""))
+    for k in by_class.get("external", []) or []:
+        classes[str(k.get("ticker", "")).upper()] = "EXTERNAL_LEGACY"
+    for k in by_class.get("missing_in_broker", []) or []:
+        classes[str(k.get("ticker", "")).upper()] = "BOT_MISSING_IN_BROKER"
+    for k in by_class.get("ambiguous", []) or []:
+        classes[str(k.get("ticker", "")).upper()] = "AMBIGUOUS"
+
+    with db_tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO broker_snapshots(id, source, account, created_utc, imported_at,
+                broker_cash, broker_netliq, broker_gross_positions, raw_json)
+            VALUES (?, 'IBKR', ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET raw_json = excluded.raw_json, imported_at = excluded.imported_at
+            """,
+            (
+                sid,
+                str(acct or ""),
+                str(snapshot.get("created_utc") or ""),
+                imported,
+                _v42_broker_cash(snapshot),
+                _v42_broker_netliq(snapshot),
+                _v42_broker_grosspos(snapshot),
+                raw,
+            ),
+        )
+        conn.execute("DELETE FROM broker_position_snapshots WHERE snapshot_id = ?", (sid,))
+        for ticker, bp in broker_positions.items():
+            conn.execute(
+                """
+                INSERT INTO broker_position_snapshots(snapshot_id, ticker, sec_type, currency, exchange_name,
+                    con_id, qty, market_price, market_value, avg_cost, unrealized_pnl,
+                    classification, matched_ledger, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sid, ticker, bp.get("sec_type"), bp.get("currency"), bp.get("exchange"), str(bp.get("con_id") or ""),
+                    bp.get("qty"), bp.get("market_price"), bp.get("market_value"), bp.get("avg_cost"), bp.get("unrealized_pnl"),
+                    classes.get(ticker, "UNKNOWN"), matched_ledgers.get(ticker, ""), imported,
+                ),
+            )
+    return sid
+
+
+def _v42_latest_snapshot_from_db() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute("SELECT raw_json FROM broker_snapshots ORDER BY imported_at DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        return json_loads_dict(row["raw_json"])
+    finally:
+        conn.close()
+
+
+def _v42_fetch_snapshot() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    if not IBKR_RECON_ENABLED:
+        return False, "IBKR reconciliation is disabled", None
+    if IBKR_BRIDGE_URL:
+        try:
+            url = IBKR_BRIDGE_URL.rstrip("/") + "/snapshot"
+            headers = {}
+            params = {}
+            if IBKR_BRIDGE_TOKEN:
+                headers["X-IBKR-Bridge-Token"] = IBKR_BRIDGE_TOKEN
+                params["token"] = IBKR_BRIDGE_TOKEN
+            res = SESSION.get(url, headers=headers, params=params, timeout=20)
+            if res.status_code >= 400:
+                return False, f"Bridge HTTP {res.status_code}: {res.text[:300]}", None
+            data = res.json()
+            if not isinstance(data, dict):
+                return False, "Bridge returned non-object JSON", None
+            return True, "fresh bridge snapshot", data
+        except Exception as exc:
+            return False, f"Bridge fetch failed: {exc}", None
+    if IBKR_SNAPSHOT_FILE:
+        try:
+            with open(IBKR_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return False, "Snapshot file returned non-object JSON", None
+            return True, "snapshot file", data
+        except Exception as exc:
+            return False, f"Snapshot file failed: {exc}", None
+    data = _v42_latest_snapshot_from_db()
+    if data:
+        return True, "latest stored snapshot", data
+    return False, "No IBKR bridge URL/file configured and no stored snapshot exists", None
+
+
+def _v42_reconcile_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    broker = _v42_broker_positions(snapshot)
+    bot = _v42_bot_managed_positions()
+    broker_cash = _v42_broker_cash(snapshot)
+    bot_cash = _v42_bot_cash()
+    broker_netliq = _v42_broker_netliq(snapshot)
+    broker_gross = _v42_broker_grosspos(snapshot)
+
+    matched: List[Dict[str, Any]] = []
+    external: List[Dict[str, Any]] = []
+    missing: List[Dict[str, Any]] = []
+    ambiguous: List[Dict[str, Any]] = []
+
+    for ticker, bpos in sorted(broker.items()):
+        owners = bot.get(ticker, [])
+        if not owners:
+            row = dict(bpos)
+            row["classification"] = "EXTERNAL_LEGACY"
+            external.append(row)
+        elif len(owners) > 1:
+            ambiguous.append({"ticker": ticker, "broker": bpos, "bot_ledgers": owners, "reason": "Ticker exists in multiple bot ledgers; broker snapshot only has aggregate position."})
+        else:
+            owner = owners[0]
+            qty_diff = _v42_float(bpos.get("qty")) - _v42_float(owner.get("qty"))
+            value_diff = _v42_float(bpos.get("market_value")) - (_v42_float(owner.get("qty")) * _v42_float(bpos.get("market_price")))
+            avg_diff = _v42_float(bpos.get("avg_cost")) - _v42_float(owner.get("avg_entry_price"))
+            matched.append({
+                "ticker": ticker,
+                "ledger": owner.get("ledger"),
+                "broker_qty": _v42_float(bpos.get("qty")),
+                "bot_qty": _v42_float(owner.get("qty")),
+                "qty_diff": qty_diff,
+                "broker_avg": _v42_float(bpos.get("avg_cost")),
+                "bot_avg": _v42_float(owner.get("avg_entry_price")),
+                "avg_diff": avg_diff,
+                "broker_value": _v42_float(bpos.get("market_value")),
+                "broker_unrealized_pnl": _v42_float(bpos.get("unrealized_pnl")),
+                "exchange": bpos.get("exchange"),
+                "currency": bpos.get("currency"),
+                "needs_sync": abs(qty_diff) > IBKR_RECON_QTY_TOLERANCE or abs(avg_diff) > 0.01,
+            })
+
+    for ticker, owners in sorted(bot.items()):
+        if ticker not in broker:
+            missing.append({"ticker": ticker, "bot_ledgers": owners, "reason": "Bot-managed position not found in broker snapshot."})
+
+    external_value = sum(_v42_float(x.get("market_value")) for x in external)
+    managed_broker_value = sum(_v42_float(x.get("broker_value")) for x in matched)
+    cash_diff = broker_cash - bot_cash
+    status = "OK"
+    warnings = []
+    if abs(cash_diff) > IBKR_RECON_CASH_TOLERANCE:
+        warnings.append(f"Broker cash differs from bot cash by {format_money(cash_diff)}")
+        status = "WARN"
+    if missing:
+        warnings.append(f"{len(missing)} bot-managed tickers missing in broker")
+        status = "WARN"
+    if ambiguous:
+        warnings.append(f"{len(ambiguous)} ambiguous tickers across multiple bot ledgers")
+        status = "WARN"
+
+    return {
+        "status": status,
+        "snapshot_created_utc": snapshot.get("created_utc"),
+        "account": (snapshot.get("connection") or {}).get("account_selected") or (snapshot.get("managed_accounts") or [None])[0],
+        "broker_cash": round(broker_cash, 2),
+        "bot_cash": round(bot_cash, 2),
+        "cash_diff": round(cash_diff, 2),
+        "broker_netliq": round(broker_netliq, 2),
+        "broker_gross_positions": round(broker_gross, 2),
+        "managed_broker_value": round(managed_broker_value, 2),
+        "external_legacy_value": round(external_value, 2),
+        "matched": matched,
+        "external": external,
+        "missing_in_broker": missing,
+        "ambiguous": ambiguous,
+        "warnings": warnings,
+        "notes": [
+            "External legacy positions are visible to the bot but excluded from Core/Growth/SPEC/Tactical/Crypto strategy ledgers.",
+            "Broker net liquidation includes external legacy positions; bot strategy equity excludes them unless you explicitly manage them outside bot.",
+        ],
+    }
+
+
+def _v42_fetch_store_reconcile() -> Tuple[bool, str, Optional[Dict[str, Any]], Optional[str]]:
+    ok, info, snap = _v42_fetch_snapshot()
+    if not ok or snap is None:
+        return False, info, None, None
+    rec = _v42_reconcile_snapshot(snap)
+    sid = _v42_store_snapshot(snap, rec)
+    with db_tx() as conn:
+        conn.execute(
+            "INSERT INTO broker_reconcile_events(id, snapshot_id, time, status, summary_json) VALUES (?, ?, ?, ?, ?)",
+            (uuid.uuid4().hex, sid, now_ts(), rec.get("status", "UNKNOWN"), json_dumps(rec)),
+        )
+    return True, info, rec, sid
+
+
+def _v42_format_money_signed(x: Any) -> str:
+    val = _v42_float(x)
+    return ("+" if val >= 0 else "") + format_money(val)
+
+
+def format_brokerstatus() -> str:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return "🏦 IBKR BROKER STATUS v4.2\n\n❌ " + info
+    warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major broker/bot warnings."
+    return (
+        "🏦 IBKR BROKER STATUS v4.2\n\n"
+        f"Connection source: {info}\n"
+        f"Snapshot ID: {sid}\n"
+        f"Account: {rec.get('account')}\n"
+        f"Status: {_v38_status_emoji(rec.get('status'))} {rec.get('status')}\n\n"
+        f"Broker cash: {format_money(float(rec.get('broker_cash', 0) or 0))}\n"
+        f"Bot cash: {format_money(float(rec.get('bot_cash', 0) or 0))}\n"
+        f"Cash diff: {_v42_format_money_signed(rec.get('cash_diff'))}\n"
+        f"Broker net liquidation: {format_money(float(rec.get('broker_netliq', 0) or 0))}\n"
+        f"Broker gross positions: {format_money(float(rec.get('broker_gross_positions', 0) or 0))}\n"
+        f"Bot-managed broker value: {format_money(float(rec.get('managed_broker_value', 0) or 0))}\n"
+        f"External legacy value: {format_money(float(rec.get('external_legacy_value', 0) or 0))}\n\n"
+        f"Managed matches: {len(rec.get('matched', []))}\n"
+        f"External legacy positions: {len(rec.get('external', []))}\n"
+        f"Missing in broker: {len(rec.get('missing_in_broker', []))}\n"
+        f"Ambiguous: {len(rec.get('ambiguous', []))}\n\n"
+        f"{warnings}\n\n"
+        "Read-only reconciliation only. No orders placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerpositions() -> str:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return "📦 IBKR POSITIONS v4.2\n\n❌ " + info
+    rows = rec.get("matched", [])
+    if not rows:
+        matched_text = "No bot-managed positions found in broker."
+    else:
+        parts = []
+        for r in rows[:20]:
+            flag = "⚠️" if r.get("needs_sync") else "✅"
+            parts.append(
+                f"{flag} {r.get('ticker')} [{r.get('ledger')}] qty {round(float(r.get('broker_qty',0)),6)} | "
+                f"IBKR avg {round(float(r.get('broker_avg',0)),4)} vs bot {round(float(r.get('bot_avg',0)),4)} | "
+                f"value {format_money(float(r.get('broker_value',0)))}"
+            )
+        matched_text = "\n".join(parts)
+    return (
+        "📦 IBKR BOT-MANAGED POSITIONS v4.2\n\n"
+        f"Snapshot ID: {sid}\n"
+        f"{matched_text}\n\n"
+        "Use brokersyncpreview to see supervised sync proposals."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerexternal() -> str:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return "🧳 EXTERNAL LEGACY POSITIONS v4.2\n\n❌ " + info
+    ext = sorted(rec.get("external", []), key=lambda x: abs(float(x.get("market_value", 0) or 0)), reverse=True)
+    if not ext:
+        rows = "No external legacy positions found."
+    else:
+        rows = "\n".join(
+            f"• {x.get('ticker')} {round(float(x.get('qty',0)),6)} @ {round(float(x.get('market_price',0)),4)} | "
+            f"value {format_money(float(x.get('market_value',0)))} | avg {round(float(x.get('avg_cost',0)),4)} | "
+            f"P/L {format_money(float(x.get('unrealized_pnl',0)))} | {x.get('exchange')}"
+            for x in ext[:25]
+        )
+    return (
+        "🧳 EXTERNAL LEGACY POSITIONS v4.2\n\n"
+        "These are broker holdings outside bot strategy ledgers. Bot sees them, but does not trade or count them as Core/Growth/SPEC/Tactical/Crypto.\n\n"
+        f"Total external value: {format_money(float(rec.get('external_legacy_value', 0) or 0))}\n\n"
+        f"{rows}"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerreconcile() -> str:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return "🧮 IBKR RECONCILIATION v4.2\n\n❌ " + info
+    warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major mismatches."
+    sync_needed = [x for x in rec.get("matched", []) if x.get("needs_sync")]
+    sync_rows = "\n".join(
+        f"• {x.get('ticker')} [{x.get('ledger')}] qty diff {round(float(x.get('qty_diff',0)),6)}, avg diff {round(float(x.get('avg_diff',0)),4)}"
+        for x in sync_needed[:15]
+    ) or "No managed position avg/qty sync needed."
+    missing_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("missing_in_broker", [])[:10]) or "None."
+    amb_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("ambiguous", [])[:10]) or "None."
+    return (
+        "🧮 IBKR RECONCILIATION v4.2\n\n"
+        f"Snapshot ID: {sid}\n"
+        f"Source: {info}\n"
+        f"Status: {_v38_status_emoji(rec.get('status'))} {rec.get('status')}\n\n"
+        f"Cash: broker {format_money(float(rec.get('broker_cash',0)))} vs bot {format_money(float(rec.get('bot_cash',0)))} "
+        f"({ _v42_format_money_signed(rec.get('cash_diff')) })\n"
+        f"Broker net liquidation: {format_money(float(rec.get('broker_netliq',0)))}\n"
+        f"External legacy value: {format_money(float(rec.get('external_legacy_value',0)))}\n\n"
+        f"{warnings}\n\n"
+        "Managed positions needing sync preview:\n"
+        f"{sync_rows}\n\n"
+        "Missing in broker:\n"
+        f"{missing_rows}\n\n"
+        "Ambiguous:\n"
+        f"{amb_rows}\n\n"
+        "No ledger changes were made."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokersyncpreview() -> str:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return "🧾 BROKER SYNC PREVIEW v4.2\n\n❌ " + info
+    candidates = [x for x in rec.get("matched", []) if x.get("needs_sync")]
+    rows = []
+    if abs(float(rec.get("cash_diff", 0) or 0)) > 0.01:
+        rows.append(f"• Cash: bot {format_money(float(rec.get('bot_cash',0)))} -> broker {format_money(float(rec.get('broker_cash',0)))}")
+    for x in candidates[:20]:
+        rows.append(
+            f"• {x.get('ticker')} [{x.get('ledger')}]: qty {round(float(x.get('bot_qty',0)),6)} -> {round(float(x.get('broker_qty',0)),6)}, "
+            f"avg {round(float(x.get('bot_avg',0)),4)} -> {round(float(x.get('broker_avg',0)),4)}"
+        )
+    if not rows:
+        rows_text = "No sync actions proposed."
+    else:
+        rows_text = "\n".join(rows)
+    return (
+        "🧾 BROKER SYNC PREVIEW v4.2\n\n"
+        "This would align bot cash and bot-managed position quantities/average costs with IBKR.\n"
+        "It will NOT adopt external legacy positions and will NOT rewrite historical trade records.\n\n"
+        f"Snapshot ID: {sid}\n"
+        f"{rows_text}\n\n"
+        "To apply, send exactly:\n"
+        "brokersyncapply CONFIRM\n\n"
+        "Use only after reviewing brokerreconcile."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v42_update_ledger_position_from_broker(conn: sqlite3.Connection, ledger: str, ticker: str, qty: float, avg: float) -> None:
+    cost = qty * avg
+    now = now_ts()
+    if ledger == "CORE":
+        conn.execute("UPDATE core_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=? WHERE ticker=?", (round(qty,8), round(avg,6), round(cost,6), now, ticker))
+    elif ledger == "GROWTH":
+        conn.execute("UPDATE growth_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=? WHERE ticker=?", (round(qty,8), round(avg,6), round(cost,6), now, ticker))
+    elif ledger == "SPEC":
+        conn.execute("UPDATE spec_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=? WHERE ticker=?", (round(qty,8), round(avg,6), round(cost,6), now, ticker))
+    elif ledger == "CRYPTO":
+        conn.execute("UPDATE crypto_positions SET units=?, avg_entry_price=?, cost_basis=?, last_update_time=? WHERE ticker=?", (round(qty,8), round(avg,6), round(cost,6), now, ticker))
+    elif ledger == "TACTICAL":
+        # Tactical positions are share/stop based; only sync quantity and entry price, leave stop/risk unchanged.
+        conn.execute("UPDATE positions SET shares=?, entry_price=? WHERE ticker=?", (int(round(qty)), round(avg,6), ticker))
+
+
+def broker_sync_apply_confirmed() -> Tuple[bool, str]:
+    ok, info, rec, sid = _v42_fetch_store_reconcile()
+    if not ok or rec is None:
+        return False, info
+    if rec.get("ambiguous"):
+        return False, "Sync blocked: ambiguous tickers exist across multiple bot ledgers. Resolve manually first."
+    if rec.get("missing_in_broker"):
+        return False, "Sync blocked: some bot-managed positions are missing in broker. Resolve manually first."
+    matched = rec.get("matched", []) or []
+    actions = []
+    with db_tx() as conn:
+        if IBKR_SYNC_ALLOW_CASH:
+            set_cash_tx(conn, float(rec.get("broker_cash", 0) or 0))
+            actions.append(f"cash -> {format_money(float(rec.get('broker_cash',0)))}")
+        for x in matched:
+            if not x.get("needs_sync"):
+                continue
+            ticker = str(x.get("ticker", "")).upper()
+            ledger = str(x.get("ledger", "")).upper()
+            qty = float(x.get("broker_qty", 0) or 0)
+            avg = float(x.get("broker_avg", 0) or 0)
+            if qty <= 0 or avg <= 0:
+                continue
+            if not (IBKR_SYNC_ALLOW_AVG_COST or IBKR_SYNC_ALLOW_QTY):
+                continue
+            _v42_update_ledger_position_from_broker(conn, ledger, ticker, qty, avg)
+            actions.append(f"{ticker}[{ledger}] qty/avg -> {round(qty,6)} @ {round(avg,4)}")
+        conn.execute(
+            "INSERT INTO broker_reconcile_events(id, snapshot_id, time, status, summary_json) VALUES (?, ?, ?, ?, ?)",
+            (uuid.uuid4().hex, sid, now_ts(), "SYNC_APPLIED", json_dumps({"actions": actions, "source": info})),
+        )
+    refresh_portfolio()
+    audit("IBKR_SYNC_APPLIED", "; ".join(actions))
+    return True, (
+        "✅ BROKER SYNC APPLIED v4.2\n\n"
+        + ("\n".join(f"• {a}" for a in actions) if actions else "No changes needed.")
+        + "\n\nExternal legacy positions were not adopted. Historical trade records were not rewritten."
+    )
+
+
+def maybe_send_ibkr_reconcile_after_close() -> None:
+    if not (IBKR_RECON_ENABLED and IBKR_RECON_AUTO_ENABLED):
+        return
+    current_ny = ny_now()
+    if not is_market_weekday(current_ny):
+        return
+    minutes = current_ny.hour * 60 + current_ny.minute
+    if minutes < IBKR_RECON_AFTER_CLOSE_MINUTE:
+        return
+    today = current_ny.date().isoformat()
+    if get_meta("last_ibkr_reconcile_day") == today:
+        return
+    set_meta("last_ibkr_reconcile_day", today)
+    try:
+        send(format_brokerreconcile())
+    except Exception as exc:
+        logger.exception(f"[IBKR AUTO RECON ERROR] {exc}")
+        send(f"⚠️ IBKR auto reconcile failed: {exc}")
+
+
+# Wrap monthly/after-close loop hook. This is called each main loop iteration.
+_V42_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
+
+def maybe_send_wealth_core_signal() -> None:
+    _V42_OLD_MAYBE_SEND_MONTHLY()
+    maybe_send_ibkr_reconcile_after_close()
+
+
+_V42_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:
+    zip_path = _V42_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        conn = db_connect()
+        try:
+            snapshots = [dict(r) for r in conn.execute("SELECT id, source, account, created_utc, imported_at, broker_cash, broker_netliq, broker_gross_positions FROM broker_snapshots ORDER BY imported_at DESC LIMIT 20").fetchall()]
+            positions = [dict(r) for r in conn.execute("SELECT * FROM broker_position_snapshots ORDER BY created_at DESC, ticker ASC LIMIT 500").fetchall()]
+            events = [dict(r) for r in conn.execute("SELECT * FROM broker_reconcile_events ORDER BY time DESC LIMIT 50").fetchall()]
+        finally:
+            conn.close()
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("broker_snapshots_summary.table.json", json.dumps(safe_convert(snapshots), indent=2))
+            z.writestr("broker_position_snapshots.table.json", json.dumps(safe_convert(positions), indent=2))
+            z.writestr("broker_reconcile_events.table.json", json.dumps(safe_convert(events), indent=2))
+    except Exception as exc:
+        print(f"[V42 BROKER EXPORT WARNING] {exc}")
+    return zip_path
+
+
+# Extend help and commands.
+_V42_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"brokerhelp", "ibkrhelp"}:
+        send(
+            "🏦 IBKR RECONCILIATION COMMANDS v4.2\n\n"
+            "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
+            "brokerpositions — show bot-managed positions as seen by IBKR\n"
+            "brokerexternal — show external legacy broker positions outside bot scope\n"
+            "brokerreconcile — compare IBKR vs bot ledgers\n"
+            "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
+            "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
+            "No broker orders are placed in v4.2."
+        )
+        return
+    if text_lower in {"brokerstatus", "ibkrstatus"}:
+        send(format_brokerstatus()); return
+    if text_lower in {"brokerpositions", "ibkrpositions"}:
+        send(format_brokerpositions()); return
+    if text_lower in {"brokerexternal", "ibkrexternal"}:
+        send(format_brokerexternal()); return
+    if text_lower in {"brokerreconcile", "ibkrreconcile"}:
+        send(format_brokerreconcile()); return
+    if text_lower in {"brokersyncpreview", "ibkrsyncpreview"}:
+        send(format_brokersyncpreview()); return
+    if text_lower == "brokersyncapply confirm":
+        ok, msg = broker_sync_apply_confirmed()
+        send(msg if ok else f"❌ BROKER SYNC REJECTED\n\n{msg}")
+        return
+    if text_lower.startswith("brokersyncapply"):
+        send("⚠️ Dangerous sync command. To apply the preview, send exactly:\n\nbrokersyncapply CONFIRM")
+        return
+    return _V42_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
 if __name__ == "__main__":
 
 
