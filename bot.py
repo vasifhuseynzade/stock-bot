@@ -24830,6 +24830,319 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     return _V442_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+
+# =============================================================================
+# V4.4.3 REPORTING / LABEL / VALIDATION CLEANUP
+# =============================================================================
+# Reporting-only patch. No strategy, universe, allocation, ledger, execution,
+# monthly-lock, cost-aware, partial-fill, or IBKR reconciliation logic changes.
+# Purpose:
+# - Remove stale v3.8/v4.3/v4.4.2 labels from user-facing reports.
+# - Replace the old v3.8 institutional validation snapshot with current
+#   v4.4.2/v4.4.3 operating assumptions and limitations.
+
+V443_VERSION = "v4.4.3-reporting-cleanup-20-45-20-5-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V443_VERSION)
+else:
+    STRATEGY_VERSION = V443_VERSION
+
+V443_VALIDATION_STRATEGY_LABEL = "v4.4.2 partial-fill/monthly-lock/cost-aware"
+V443_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 20 / Long VCP 5 / Crypto 10"
+V443_KNOWN_LIMITATIONS = [
+    "v4.4.2 is aggressive and growth-led",
+    "backtest period is limited",
+    "crypto permission/gate required",
+    "manual execution and reconciliation still required",
+    "Core UCITS fee drag controlled by cost-aware execution",
+]
+V443_LIVE_VALIDATION_RULES = [
+    "Keep Core/Growth/SPEC as monthly rotation sleeves; daily plan checks are monitoring unless monthly-lock allows action.",
+    "Use partial-fill commands only for real broker fills that already happened.",
+    "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
+    "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
+    "Do not enable broker order automation in this version; IBKR reconciliation remains read-only.",
+    "Export download_state regularly, especially before redeploys or manual corrections.",
+]
+
+
+def _v443_label_cleanup(msg: Any) -> str:
+    text = str(msg)
+    replacements = [
+        ("INSTITUTIONAL STATUS v3.8", "INSTITUTIONAL STATUS v4.4.3"),
+        ("DATA HEALTH v3.8", "DATA HEALTH v4.4.3"),
+        ("RISK MATRIX v3.8", "RISK MATRIX v4.4.3"),
+        ("STRESS STATUS v3.8", "STRESS STATUS v4.4.3"),
+        ("EXECUTION STATUS v3.8", "EXECUTION STATUS v4.4.3"),
+        ("MODEL DRIFT STATUS v3.8", "MODEL DRIFT STATUS v4.4.3"),
+        ("VALIDATION STATUS v3.8", "VALIDATION STATUS v4.4.3"),
+        ("IBKR BROKER STATUS v4.3", "IBKR BROKER STATUS v4.4.3"),
+        ("IBKR POSITIONS v4.3", "IBKR POSITIONS v4.4.3"),
+        ("IBKR BOT-MANAGED POSITIONS v4.3", "IBKR BOT-MANAGED POSITIONS v4.4.3"),
+        ("EXTERNAL LEGACY POSITIONS v4.3", "EXTERNAL LEGACY POSITIONS v4.4.3"),
+        ("IBKR RECONCILIATION v4.3", "IBKR RECONCILIATION v4.4.3"),
+        ("BROKER SYNC PREVIEW v4.3", "BROKER SYNC PREVIEW v4.4.3"),
+        ("BROKER SYNC APPLIED v4.3", "BROKER SYNC APPLIED v4.4.3"),
+        ("IBKR RECONCILIATION COMMANDS v4.3", "IBKR RECONCILIATION COMMANDS v4.4.3"),
+        ("IBKR BRIDGE PING v4.3", "IBKR BRIDGE PING v4.4.3"),
+        ("RISK MATRIX v4.3 RECON", "RISK MATRIX v4.4.3 RECON"),
+        ("STRESS STATUS v4.3 RECON", "STRESS STATUS v4.4.3 RECON"),
+        ("v4.3 RECON", "v4.4.3 RECON"),
+        ("v4.3", "v4.4.3"),
+        ("V4.3", "V4.4.3"),
+        ("V4.4.2 PARTIAL-FILL + MONTHLY LOCK STATUS", "V4.4.3 REPORTING CLEANUP + PARTIAL-FILL + MONTHLY LOCK STATUS"),
+        ("GROWTH ALPHA PLAN v4.4.2", "GROWTH ALPHA PLAN v4.4.3"),
+        ("CORE WEALTH PLAN v4.4.2", "CORE WEALTH PLAN v4.4.3"),
+        ("SPEC_ALPHA PLAN v4.4.2", "SPEC_ALPHA PLAN v4.4.3"),
+        ("v4.4.2 underfill rule", "v4.4.3 underfill rule"),
+        ("v4.4.2: Core partial fills", "v4.4.3: Core partial fills"),
+        ("v4.4.2: SPEC partial fills", "v4.4.3: SPEC partial fills"),
+        ("v4.4.2: recorded as broker partial fill", "v4.4.3: recorded as broker partial fill"),
+        ("v4.4.2 manual ledger edit", "v4.4.3 manual ledger edit"),
+        ("v4.4.2-partial-fill-ledger-tools-20-45-20-5-10-monitor", V443_VERSION),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    # Avoid double replacements when a string already contains v4.4.3.
+    text = text.replace("v4.4.3.3", "v4.4.3").replace("V4.4.3.3", "V4.4.3")
+    return text
+
+
+# ---- Validation snapshot cleanup ----
+def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
+    return {
+        "strategy_version": STRATEGY_VERSION,
+        "strategy": V443_VALIDATION_STRATEGY_LABEL,
+        "allocation": V443_ALLOCATION_LABEL,
+        "known_limitations": list(V443_KNOWN_LIMITATIONS),
+        "live_validation_rules": list(V443_LIVE_VALIDATION_RULES),
+        "notes": [
+            "v4.4.3 is a reporting/label cleanup over v4.4.2; trading logic is unchanged.",
+            "Historical v3.8 modeled validation numbers are intentionally removed from the live validation text to avoid confusion.",
+        ],
+    }
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    limitations = "\n".join(f"- {x}" for x in V443_KNOWN_LIMITATIONS)
+    rules = "\n".join(f"• {x}" for x in V443_LIVE_VALIDATION_RULES)
+    return (
+        "🧪 VALIDATION STATUS v4.4.3\n\n"
+        f"Strategy: {V443_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V443_ALLOCATION_LABEL}\n\n"
+        "Known limitations:\n"
+        f"{limitations}\n\n"
+        "Live validation rules:\n"
+        f"{rules}\n\n"
+        "Reporting note: v4.4.3 changes labels/validation text only; strategy logic remains v4.4.2 partial-fill/monthly-lock/cost-aware."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+_V443_OLD_INSTITUTIONAL_SNAPSHOT = institutional_snapshot
+
+def institutional_snapshot() -> Dict[str, Any]:  # type: ignore[override]
+    data = _V443_OLD_INSTITUTIONAL_SNAPSHOT()
+    data["validationstatus"] = institutional_validation_snapshot()
+    data["monitor_version"] = "v4.4.3_reporting_cleanup_diagnostic_only"
+    data["strategy_version"] = STRATEGY_VERSION
+    data["trading_logic_changed_by_v443"] = False
+    data["reporting_cleanup"] = True
+    return data
+
+
+# ---- Wrap existing report formatters with label cleanup ----
+_V443_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
+_V443_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
+_V443_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
+_V443_OLD_FORMAT_STRESS_STATUS = format_stress_status
+_V443_OLD_FORMAT_EXECUTION_STATUS = format_execution_status
+_V443_OLD_FORMAT_DRIFT_STATUS = format_drift_status
+_V443_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
+_V443_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V443_OLD_FORMAT_BROKERPOSITIONS = format_brokerpositions
+_V443_OLD_FORMAT_BROKEREXTERNAL = format_brokerexternal
+_V443_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V443_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+_V443_OLD_BROKER_SYNC_APPLY_CONFIRMED = broker_sync_apply_confirmed
+_V443_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+_V443_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
+_V443_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+_V443_OLD_FORMAT_CRYPTO_PLAN = format_crypto_alpha_plan
+
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_RISKMATRIX_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_STRESS_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_execution_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_EXECUTION_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_drift_status() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_DRIFT_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_ALLOCATION_PLAN())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerpositions() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERPOSITIONS())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerexternal() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_BROKEREXTERNAL())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
+
+
+def broker_sync_apply_confirmed() -> Tuple[bool, str]:  # type: ignore[override]
+    ok, msg = _V443_OLD_BROKER_SYNC_APPLY_CONFIRMED()
+    return ok, _v443_label_cleanup(msg)
+
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_GROWTH_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_CORE_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_SPEC_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v443_label_cleanup(_V443_OLD_FORMAT_CRYPTO_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+
+# ---- Relabel a few command response strings without changing behavior ----
+_V443_OLD_RECORD_CORE_BUY = record_core_buy
+
+def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ok, msg = _V443_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=partial_ok)
+    return ok, _v443_label_cleanup(msg)
+
+
+_V443_OLD_RECORD_GROWTH_BUY = record_growth_buy
+
+def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ok, msg = _V443_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
+    return ok, _v443_label_cleanup(msg)
+
+
+_V443_OLD_RECORD_SPEC_BUY = record_spec_buy
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ok, msg = _V443_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
+    return ok, _v443_label_cleanup(msg)
+
+
+# ---- Status/command cleanup ----
+_V443_OLD_HANDLE_COMMAND = handle_command
+
+def _v443_status_text() -> str:
+    try:
+        market_ok, reason = growth_alpha_market_filter_ok()
+    except Exception as exc:
+        market_ok, reason = False, f"error: {exc}"
+    try:
+        win = _v44_monthly_rebalance_window_info()
+    except Exception as exc:
+        win = {"open": False, "reason": f"error: {exc}"}
+    return (
+        "🛠️ V4.4.3 REPORTING CLEANUP STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Strategy logic: {V443_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V443_ALLOCATION_LABEL}\n"
+        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+        f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+        "Execution controls unchanged from v4.4.2:\n"
+        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
+        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
+        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+        "• Crypto/VCP logic unchanged.\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed.\n\n"
+        "Reporting cleanup:\n"
+        "• Broker/risk/stress/validation labels now show v4.4.3.\n"
+        "• Old v3.8 validation model text removed from validationstatus."
+    )
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower in {"v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        send(_v443_status_text())
+        return
+
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+
+    if text_lower in {"brokerhelp", "ibkrhelp"}:
+        send(
+            "🏦 IBKR RECONCILIATION COMMANDS v4.4.3\n\n"
+            "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
+            "brokerpositions — show bot-managed positions as seen by IBKR\n"
+            "brokerexternal — show external legacy broker positions outside bot scope\n"
+            "brokerreconcile — compare IBKR vs bot ledgers\n"
+            "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
+            "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
+            "No broker orders are placed in v4.4.3."
+        )
+        return
+
+    if text_lower in {"brokerping", "bridgeping"}:
+        try:
+            ok, info, snap = _v42_fetch_snapshot()
+            if ok and isinstance(snap, dict):
+                conn = snap.get("connection") or {}
+                send(
+                    "🏓 IBKR BRIDGE PING v4.4.3\n\n"
+                    f"Status: ✅ OK\n"
+                    f"Source: {info}\n"
+                    f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
+                    f"Created UTC: {snap.get('created_utc', 'n/a')}\n"
+                    "No broker orders are placed."
+                )
+            else:
+                send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {info}")
+        except Exception as exc:
+            send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {exc}")
+        return
+
+    return _V443_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
 if __name__ == "__main__":
 
 
