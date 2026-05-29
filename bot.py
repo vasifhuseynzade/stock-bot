@@ -21495,7 +21495,7 @@ def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
     return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.1.1 FREEZE 20/45/20/5/10\n\n"
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.3 COST-AWARE 20/45/20/5/10\n\n"
         "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
@@ -22161,7 +22161,7 @@ def format_riskmatrix_status() -> str:
     )
     warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
     return (
-        "🧮 RISK MATRIX v4.2.1 RECON\n\n"
+        "🧮 RISK MATRIX v4.3 RECON\n\n"
         f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
         f"Total equity: {format_money(equity)}\n\n"
         "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
@@ -22179,7 +22179,7 @@ def format_stress_status() -> str:
         for x in s.get("scenarios", [])
     )
     return (
-        "🔥 STRESS STATUS v4.2.1 RECON\n\n"
+        "🔥 STRESS STATUS v4.3 RECON\n\n"
         f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
         f"Equity: {format_money(float(s.get('equity', 0) or 0))}\n"
         f"Worst scenario: {worst.get('scenario')} {format_money(float(worst.get('pnl', 0) or 0))} "
@@ -22224,14 +22224,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 # - Optional supervised sync updates bot cash and matching managed positions from
 #   broker average cost, but only after explicit Telegram confirmation.
 
-V42_VERSION = "v4.2.1-ibkr-readonly-reconcile-hotfix-20260528"
+V42_VERSION = "v4.3-ibkr-readonly-reconcile-hotfix-20260528"
 
 # Display label fix: if the environment is empty or still has the old v4.1.1
-# hotfix label, show this as the v4.2.1 reconciliation candidate.
+# hotfix label, show this as the v4.3 reconciliation candidate.
 # If the operator intentionally sets a different STRATEGY_VERSION, keep it.
 _STRATEGY_ENV_RAW = os.getenv("STRATEGY_VERSION", "").strip()
 if _STRATEGY_ENV_RAW in {"", "v4.1.1-hotfix-growth-spec-clean-20-45-20-5-10-monitor"}:
-    STRATEGY_VERSION = "v4.2.1-ibkr-reconcile-v4.1.1-hotfix-20-45-20-5-10-monitor"
+    STRATEGY_VERSION = "v4.3-ibkr-reconcile-v4.1.1-hotfix-20-45-20-5-10-monitor"
 IBKR_RECON_ENABLED = os.getenv("IBKR_RECON_ENABLED", "1") != "0"
 IBKR_RECON_AUTO_ENABLED = os.getenv("IBKR_RECON_AUTO_ENABLED", "0") == "1"
 IBKR_RECON_AFTER_CLOSE_MINUTE = int(os.getenv("IBKR_RECON_AFTER_CLOSE_MINUTE", str(16 * 60 + 10)))
@@ -22666,10 +22666,10 @@ def _v42_format_money_signed(x: Any) -> str:
 def format_brokerstatus() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🏦 IBKR BROKER STATUS v4.2.1\n\n❌ " + info
+        return "🏦 IBKR BROKER STATUS v4.3\n\n❌ " + info
     warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major broker/bot warnings."
     return (
-        "🏦 IBKR BROKER STATUS v4.2.1\n\n"
+        "🏦 IBKR BROKER STATUS v4.3\n\n"
         f"Connection source: {info}\n"
         f"Snapshot ID: {sid}\n"
         f"Account: {rec.get('account')}\n"
@@ -22693,7 +22693,7 @@ def format_brokerstatus() -> str:
 def format_brokerpositions() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "📦 IBKR POSITIONS v4.2.1\n\n❌ " + info
+        return "📦 IBKR POSITIONS v4.3\n\n❌ " + info
     rows = rec.get("matched", [])
     if not rows:
         matched_text = "No bot-managed positions found in broker."
@@ -22708,7 +22708,7 @@ def format_brokerpositions() -> str:
             )
         matched_text = "\n".join(parts)
     return (
-        "📦 IBKR BOT-MANAGED POSITIONS v4.2.1\n\n"
+        "📦 IBKR BOT-MANAGED POSITIONS v4.3\n\n"
         f"Snapshot ID: {sid}\n"
         f"{matched_text}\n\n"
         "Use brokersyncpreview to see supervised sync proposals."
@@ -22718,7 +22718,7 @@ def format_brokerpositions() -> str:
 def format_brokerexternal() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧳 EXTERNAL LEGACY POSITIONS v4.2.1\n\n❌ " + info
+        return "🧳 EXTERNAL LEGACY POSITIONS v4.3\n\n❌ " + info
     ext = sorted(rec.get("external", []), key=lambda x: abs(float(x.get("market_value", 0) or 0)), reverse=True)
     if not ext:
         rows = "No external legacy positions found."
@@ -22730,7 +22730,7 @@ def format_brokerexternal() -> str:
             for x in ext[:25]
         )
     return (
-        "🧳 EXTERNAL LEGACY POSITIONS v4.2.1\n\n"
+        "🧳 EXTERNAL LEGACY POSITIONS v4.3\n\n"
         "These are broker holdings outside bot strategy ledgers. Bot sees them, but does not trade or count them as Core/Growth/SPEC/Tactical/Crypto.\n\n"
         f"Total external value: {format_money(float(rec.get('external_legacy_value', 0) or 0))}\n\n"
         f"{rows}"
@@ -22740,7 +22740,7 @@ def format_brokerexternal() -> str:
 def format_brokerreconcile() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧮 IBKR RECONCILIATION v4.2.1\n\n❌ " + info
+        return "🧮 IBKR RECONCILIATION v4.3\n\n❌ " + info
     warnings = "\n".join("⚠️ " + w for w in rec.get("warnings", [])) or "✅ No major mismatches."
     sync_needed = [x for x in rec.get("matched", []) if x.get("needs_sync")]
     sync_rows = "\n".join(
@@ -22750,7 +22750,7 @@ def format_brokerreconcile() -> str:
     missing_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("missing_in_broker", [])[:10]) or "None."
     amb_rows = "\n".join(f"• {x.get('ticker')}: {x.get('reason')}" for x in rec.get("ambiguous", [])[:10]) or "None."
     return (
-        "🧮 IBKR RECONCILIATION v4.2.1\n\n"
+        "🧮 IBKR RECONCILIATION v4.3\n\n"
         f"Snapshot ID: {sid}\n"
         f"Source: {info}\n"
         f"Status: {_v38_status_emoji(rec.get('status'))} {rec.get('status')}\n\n"
@@ -22772,7 +22772,7 @@ def format_brokerreconcile() -> str:
 def format_brokersyncpreview() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
-        return "🧾 BROKER SYNC PREVIEW v4.2.1\n\n❌ " + info
+        return "🧾 BROKER SYNC PREVIEW v4.3\n\n❌ " + info
     candidates = [x for x in rec.get("matched", []) if x.get("needs_sync")]
     rows = []
     if abs(float(rec.get("cash_diff", 0) or 0)) > 0.01:
@@ -22787,7 +22787,7 @@ def format_brokersyncpreview() -> str:
     else:
         rows_text = "\n".join(rows)
     return (
-        "🧾 BROKER SYNC PREVIEW v4.2.1\n\n"
+        "🧾 BROKER SYNC PREVIEW v4.3\n\n"
         "This would align bot cash and bot-managed position quantities/average costs with IBKR.\n"
         "It will NOT adopt external legacy positions and will NOT rewrite historical trade records.\n\n"
         f"Snapshot ID: {sid}\n"
@@ -22848,7 +22848,7 @@ def broker_sync_apply_confirmed() -> Tuple[bool, str]:
     refresh_portfolio()
     audit("IBKR_SYNC_APPLIED", "; ".join(actions))
     return True, (
-        "✅ BROKER SYNC APPLIED v4.2.1\n\n"
+        "✅ BROKER SYNC APPLIED v4.3\n\n"
         + ("\n".join(f"• {a}" for a in actions) if actions else "No changes needed.")
         + "\n\nExternal legacy positions were not adopted. Historical trade records were not rewritten."
     )
@@ -22911,14 +22911,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     text_lower = text_clean.lower()
     if text_lower in {"brokerhelp", "ibkrhelp"}:
         send(
-            "🏦 IBKR RECONCILIATION COMMANDS v4.2.1\n\n"
+            "🏦 IBKR RECONCILIATION COMMANDS v4.3\n\n"
             "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
             "brokerpositions — show bot-managed positions as seen by IBKR\n"
             "brokerexternal — show external legacy broker positions outside bot scope\n"
             "brokerreconcile — compare IBKR vs bot ledgers\n"
             "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
             "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
-            "No broker orders are placed in v4.2.1."
+            "No broker orders are placed in v4.3."
         )
         return
     if text_lower in {"brokerstatus", "ibkrstatus"}:
@@ -22943,7 +22943,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 
 # -----------------------------------------------------------------------------
-# V4.2.1 DISPLAY / OPERATIONAL STATUS WRAPPER
+# V4.3 DISPLAY / OPERATIONAL STATUS WRAPPER
 # -----------------------------------------------------------------------------
 # This final wrapper does not change trading logic. It fixes the public/private
 # command label so operators can confirm that the IBKR reconciliation layer is
@@ -22958,7 +22958,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
         market_ok, reason = growth_alpha_market_filter_ok()
         send(
-            "🛠️ V4.2.1 IBKR RECON / HOTFIX STATUS\n\n"
+            "🛠️ V4.3 IBKR RECON / HOTFIX STATUS\n\n"
             f"Strategy display: {STRATEGY_VERSION}\n"
             f"V4.2 layer: {V42_VERSION}\n"
             f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
@@ -22978,7 +22978,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         if ok and isinstance(snap, dict):
             conn = snap.get("connection") or {}
             send(
-                "🏓 IBKR BRIDGE PING v4.2.1\n\n"
+                "🏓 IBKR BRIDGE PING v4.3\n\n"
                 f"Status: ✅ OK\n"
                 f"Source: {info}\n"
                 f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
@@ -22986,14 +22986,14 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
                 "No broker orders are placed."
             )
         else:
-            send(f"🏓 IBKR BRIDGE PING v4.2.1\n\n❌ {info}")
+            send(f"🏓 IBKR BRIDGE PING v4.3\n\n❌ {info}")
         return
     return _V421_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
 
 # -----------------------------------------------------------------------------
-# V4.2.2 CORE COMMISSION / IBKR SYMBOL-MAPPING HOTFIX
+# V4.3 CORE COMMISSION / IBKR SYMBOL-MAPPING HOTFIX
 # -----------------------------------------------------------------------------
 # Operational-only patch. It does not change strategy selection. It fixes two
 # live-account issues:
@@ -23002,10 +23002,10 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 # 2) IBKR portfolio symbols for LSE UCITS often arrive without the .L suffix;
 #    map known core UCITS symbols back to bot tickers for reconciliation.
 
-V42_VERSION = "v4.2.2-ibkr-recon-core-fee"
+V42_VERSION = "v4.3-ibkr-recon-core-fee"
 STRATEGY_VERSION = os.getenv(
     "STRATEGY_VERSION",
-    "v4.2.2-ibkr-recon-core-fee-20-45-20-5-10-monitor",
+    "v4.3-ibkr-recon-core-fee-20-45-20-5-10-monitor",
 )
 
 IBKR_CORE_SYMBOL_ALIASES = {
@@ -23274,7 +23274,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
         market_ok, reason = growth_alpha_market_filter_ok()
         send(
-            "🛠️ V4.2.2 IBKR RECON / CORE FEE HOTFIX STATUS\n\n"
+            "🛠️ V4.3 COST-AWARE / IBKR RECON STATUS\n\n"
             f"Strategy display: {STRATEGY_VERSION}\n"
             f"V4.2 layer: {V42_VERSION}\n"
             f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
@@ -23289,6 +23289,421 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     return _V422_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+# -----------------------------------------------------------------------------
+# V4.3 COST-AWARE SMALL-ACCOUNT EXECUTION OVERLAY
+# -----------------------------------------------------------------------------
+# Operational/execution policy only. No new alpha logic.
+# Purpose:
+# - Avoid fee drag from tiny LSE/UCITS Core orders.
+# - Keep monthly rotation rankings intact while limiting live execution to the
+#   best few candidates when account size is still small.
+# - Avoid duplicate tickers across Growth and SPEC, because IBKR reports one
+#   aggregate broker position while the bot tracks separate strategy ledgers.
+
+V43_VERSION = "v4.3-cost-aware-execution-20-45-20-5-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V43_VERSION)
+else:
+    STRATEGY_VERSION = V43_VERSION
+
+V43_COST_AWARE_ENABLED = os.getenv("V43_COST_AWARE_ENABLED", "1").strip() != "0"
+V43_SMALL_ACCOUNT_EQUITY = float(os.getenv("V43_SMALL_ACCOUNT_EQUITY", "10000"))
+
+# LSE/UCITS fixed commissions make tiny Core tickets inefficient.
+V43_CORE_MIN_ORDER_DOLLARS = float(os.getenv("V43_CORE_MIN_ORDER_DOLLARS", "400"))
+V43_CORE_MAX_NEW_BUYS_SMALL = int(os.getenv("V43_CORE_MAX_NEW_BUYS_SMALL", "2"))
+V43_CORE_MAX_NEW_BUYS_PER_CLUSTER_SMALL = int(os.getenv("V43_CORE_MAX_NEW_BUYS_PER_CLUSTER_SMALL", "1"))
+V43_CORE_BLOCK_TINY_SELLS = os.getenv("V43_CORE_BLOCK_TINY_SELLS", "1").strip() != "0"
+
+# Growth remains main engine, but small accounts should enter top few leaders first.
+V43_GROWTH_EXECUTE_TOP_N_SMALL = int(os.getenv("V43_GROWTH_EXECUTE_TOP_N_SMALL", "3"))
+V43_GROWTH_MIN_ORDER_DOLLARS = float(os.getenv("V43_GROWTH_MIN_ORDER_DOLLARS", "250"))
+V43_GROWTH_AVOID_SPEC_OVERLAP = os.getenv("V43_GROWTH_AVOID_SPEC_OVERLAP", "1").strip() != "0"
+V43_GROWTH_MAX_NEW_BUYS_PER_CLUSTER_SMALL = int(os.getenv("V43_GROWTH_MAX_NEW_BUYS_PER_CLUSTER_SMALL", "1"))
+
+# SPEC top 10 remains a hold list. Buys/adds should focus on best-ranked names only.
+V43_SPEC_MAX_HOLDINGS_SMALL = int(os.getenv("V43_SPEC_MAX_HOLDINGS_SMALL", "6"))
+V43_SPEC_BUY_RANK_LIMIT_SMALL = int(os.getenv("V43_SPEC_BUY_RANK_LIMIT_SMALL", "5"))
+V43_SPEC_MIN_ORDER_DOLLARS = float(os.getenv("V43_SPEC_MIN_ORDER_DOLLARS", "75"))
+V43_SPEC_AVOID_GROWTH_OVERLAP = os.getenv("V43_SPEC_AVOID_GROWTH_OVERLAP", "1").strip() != "0"
+V43_SPEC_MAX_NEW_BUYS_PER_SECTOR_SMALL = int(os.getenv("V43_SPEC_MAX_NEW_BUYS_PER_SECTOR_SMALL", "1"))
+
+
+def _v43_equity() -> float:
+    try:
+        return float(compute_equity_snapshot_data().get("equity", 0.0) or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _v43_small_account_mode() -> bool:
+    if not V43_COST_AWARE_ENABLED:
+        return False
+    eq = _v43_equity()
+    return eq > 0 and eq < V43_SMALL_ACCOUNT_EQUITY
+
+
+def _v43_mark_skip(item: Dict[str, Any], reason: str, new_action: str = "SKIP") -> None:
+    item["v43_original_action"] = item.get("action")
+    item["action"] = new_action
+    item["v43_skip_reason"] = reason
+
+
+def _v43_refresh_actionable(plan: Dict[str, Any]) -> Dict[str, Any]:
+    plan["actionable"] = [
+        a for a in plan.get("actions", []) or []
+        if str(a.get("action", "")).upper() in {"BUY", "ADD", "TRIM", "SELL"}
+    ]
+    return plan
+
+
+def _v43_position_tickers(loader_name: str) -> set:
+    try:
+        loader = globals().get(loader_name)
+        if loader is None:
+            return set()
+        positions = loader()
+        if isinstance(positions, dict):
+            return {str(x).upper() for x in positions.keys()}
+    except Exception:
+        pass
+    return set()
+
+
+def _v43_has_position(loader_name: str, ticker: str) -> bool:
+    return str(ticker).upper() in _v43_position_tickers(loader_name)
+
+
+# ---- Core cost-aware plan/action overlay ----
+_V43_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
+
+def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V43_OLD_COMPUTE_CORE_PLAN()
+    if not V43_COST_AWARE_ENABLED:
+        return plan
+
+    small = _v43_small_account_mode()
+    plan["v43_cost_aware"] = {
+        "enabled": True,
+        "small_account_mode": small,
+        "small_account_equity_threshold": V43_SMALL_ACCOUNT_EQUITY,
+        "core_min_order_dollars": V43_CORE_MIN_ORDER_DOLLARS,
+        "core_max_new_buys_small": V43_CORE_MAX_NEW_BUYS_SMALL,
+        "core_max_new_buys_per_cluster_small": V43_CORE_MAX_NEW_BUYS_PER_CLUSTER_SMALL,
+        "policy": "Rank top core assets, but execute only the best 1-2 sizeable Core orders in small accounts. Tiny Core orders stay as cash.",
+    }
+    if not small:
+        return plan
+
+    allowed_new = 0
+    new_cluster_counts: Dict[str, int] = {}
+    for item in plan.get("actions", []) or []:
+        action = str(item.get("action", "")).upper()
+        current_value = float(item.get("current_value", 0.0) or 0.0)
+        suggested = float(item.get("suggested_dollars", 0.0) or 0.0)
+        cluster = str(item.get("cluster") or "other")
+
+        if action in {"BUY", "ADD"}:
+            if suggested < V43_CORE_MIN_ORDER_DOLLARS:
+                _v43_mark_skip(item, f"Core action below cost-aware minimum ${V43_CORE_MIN_ORDER_DOLLARS:.0f}; leave cash unallocated.", "HOLD" if current_value > 0 else "SKIP")
+                continue
+            if current_value <= 0:
+                if allowed_new >= V43_CORE_MAX_NEW_BUYS_SMALL:
+                    _v43_mark_skip(item, f"Small-account Core max new buys reached ({V43_CORE_MAX_NEW_BUYS_SMALL}).", "SKIP")
+                    continue
+                if new_cluster_counts.get(cluster, 0) >= V43_CORE_MAX_NEW_BUYS_PER_CLUSTER_SMALL:
+                    _v43_mark_skip(item, f"Small-account Core cluster cap reached for {cluster}.", "SKIP")
+                    continue
+                allowed_new += 1
+                new_cluster_counts[cluster] = new_cluster_counts.get(cluster, 0) + 1
+        elif action in {"TRIM", "SELL"} and V43_CORE_BLOCK_TINY_SELLS and suggested < V43_CORE_MIN_ORDER_DOLLARS:
+            _v43_mark_skip(item, f"Core {action.lower()} below cost-aware minimum; avoid paying fixed commission for tiny rebalance.", "HOLD")
+
+    return _v43_refresh_actionable(plan)
+
+
+_V43_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V43_OLD_FORMAT_CORE_PLAN(plan)
+    ca = plan.get("v43_cost_aware") or {}
+    if ca.get("enabled"):
+        note = (
+            "\n\n🧾 v4.3 cost-aware Core execution:\n"
+            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))} under {format_money(float(ca.get('small_account_equity_threshold', 0) or 0))}.\n"
+            f"• Minimum Core order: {format_money(float(ca.get('core_min_order_dollars', 0) or 0))}.\n"
+            f"• Max new Core buys in small-account mode: {ca.get('core_max_new_buys_small')}.\n"
+            "• Top-ranked assets may show SKIP/HOLD when order size is too small; skipped Core allocation stays cash.\n"
+            "• For LSE/UCITS fills with commission, record: corebuy TICKER SHARES at FILL_PRICE fee COMMISSION."
+        )
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V43_OLD_RECORD_CORE_BUY = record_core_buy
+
+def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0) -> Tuple[bool, str]:  # type: ignore[override]
+    if V43_COST_AWARE_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        try:
+            total = float(shares) * float(price) + float(fee or 0.0)
+        except Exception:
+            total = 0.0
+        if total < V43_CORE_MIN_ORDER_DOLLARS:
+            return False, (
+                f"Core buy rejected by v4.3 cost-aware execution: total order {format_money(total)} is below "
+                f"minimum {format_money(V43_CORE_MIN_ORDER_DOLLARS)}. Leave this Core allocation as cash until order size is worthwhile."
+            )
+        try:
+            plan = current_core_plan_for_validation()
+            action = latest_core_plan_action_map(plan).get(ticker_norm, {})
+            if str(action.get("action", "")).upper() == "SKIP":
+                return False, f"Core buy rejected by v4.3 plan policy: {action.get('v43_skip_reason', 'not executable in cost-aware mode')}"
+        except Exception:
+            pass
+    return _V43_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
+
+
+# ---- Growth cost-aware plan/action overlay ----
+_V43_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
+
+def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V43_OLD_COMPUTE_GROWTH_PLAN()
+    if not V43_COST_AWARE_ENABLED:
+        return plan
+
+    small = _v43_small_account_mode()
+    spec_tickers = _v43_position_tickers("load_spec_positions")
+    allowed_new_clusters: Dict[str, int] = {}
+    plan["v43_cost_aware"] = {
+        "enabled": True,
+        "small_account_mode": small,
+        "growth_execute_top_n_small": V43_GROWTH_EXECUTE_TOP_N_SMALL,
+        "growth_min_order_dollars": V43_GROWTH_MIN_ORDER_DOLLARS,
+        "avoid_spec_overlap": V43_GROWTH_AVOID_SPEC_OVERLAP,
+        "policy": "Growth ranks top 5, but small-account execution prioritizes top 3, avoids SPEC overlap, and skips tiny orders.",
+    }
+    if not small:
+        return plan
+
+    for item in plan.get("actions", []) or []:
+        action = str(item.get("action", "")).upper()
+        if action not in {"BUY", "ADD"}:
+            continue
+        ticker = str(item.get("ticker", "")).upper()
+        rank = int(item.get("rank") or 999)
+        current_value = float(item.get("current_value", 0.0) or 0.0)
+        suggested = float(item.get("suggested_dollars", 0.0) or 0.0)
+        cluster = str(item.get("cluster") or "other")
+
+        if V43_GROWTH_AVOID_SPEC_OVERLAP and ticker in spec_tickers:
+            _v43_mark_skip(item, f"Ticker already exists in SPEC ledger; avoid duplicate broker position across sleeves.", "HOLD" if current_value > 0 else "SKIP")
+            continue
+        if current_value <= 0 and rank > V43_GROWTH_EXECUTE_TOP_N_SMALL:
+            _v43_mark_skip(item, f"Small-account Growth execution only opens top {V43_GROWTH_EXECUTE_TOP_N_SMALL} ranks first.", "SKIP")
+            continue
+        if suggested < V43_GROWTH_MIN_ORDER_DOLLARS:
+            _v43_mark_skip(item, f"Growth action below minimum {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}.", "HOLD" if current_value > 0 else "SKIP")
+            continue
+        if current_value <= 0:
+            if allowed_new_clusters.get(cluster, 0) >= V43_GROWTH_MAX_NEW_BUYS_PER_CLUSTER_SMALL:
+                _v43_mark_skip(item, f"Small-account Growth cluster cap reached for {cluster}.", "SKIP")
+                continue
+            allowed_new_clusters[cluster] = allowed_new_clusters.get(cluster, 0) + 1
+
+    return _v43_refresh_actionable(plan)
+
+
+_V43_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V43_OLD_FORMAT_GROWTH_PLAN(plan)
+    ca = plan.get("v43_cost_aware") or {}
+    if ca.get("enabled"):
+        note = (
+            "\n\n🧾 v4.3 cost-aware Growth execution:\n"
+            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))}.\n"
+            f"• Open/add priority: top {ca.get('growth_execute_top_n_small')} ranks first.\n"
+            f"• Minimum Growth order: {format_money(float(ca.get('growth_min_order_dollars', 0) or 0))}.\n"
+            "• Avoids buying a ticker in Growth if it is already held in SPEC.\n"
+            "• Top 5 remains the selection/hold list; not every ranked name must be bought immediately."
+        )
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V43_OLD_RECORD_GROWTH_BUY = record_growth_buy
+
+def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V43_COST_AWARE_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        amount = float(shares) * float(price)
+        if amount < V43_GROWTH_MIN_ORDER_DOLLARS:
+            return False, f"Growth buy rejected by v4.3: order {format_money(amount)} is below minimum {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}."
+        if V43_GROWTH_AVOID_SPEC_OVERLAP and _v43_has_position("load_spec_positions", ticker_norm):
+            return False, f"Growth buy rejected by v4.3: {ticker_norm} is already held in SPEC. Avoid duplicate ticker across sleeves."
+        try:
+            plan = current_growth_plan_for_validation()
+            action = latest_growth_plan_action_map(plan).get(ticker_norm, {})
+            if str(action.get("action", "")).upper() == "SKIP":
+                return False, f"Growth buy rejected by v4.3 plan policy: {action.get('v43_skip_reason', 'not executable in cost-aware mode')}"
+            if str(action.get("action", "")).upper() not in {"BUY", "ADD"}:
+                return False, f"Growth buy rejected by v4.3: current plan action for {ticker_norm} is {action.get('action')}."
+        except Exception:
+            pass
+    return _V43_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
+
+
+# ---- SPEC cost-aware plan/action overlay ----
+_V43_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
+
+def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V43_OLD_COMPUTE_SPEC_PLAN()
+    if not V43_COST_AWARE_ENABLED:
+        return plan
+
+    small = _v43_small_account_mode()
+    spec_positions = load_spec_positions() if SPEC_ALPHA_LEDGER_ENABLED else {}
+    spec_count = len(spec_positions)
+    growth_tickers = _v43_position_tickers("load_growth_positions")
+    new_sector_counts: Dict[str, int] = {}
+    plan["v43_cost_aware"] = {
+        "enabled": True,
+        "small_account_mode": small,
+        "spec_max_holdings_small": V43_SPEC_MAX_HOLDINGS_SMALL,
+        "spec_buy_rank_limit_small": V43_SPEC_BUY_RANK_LIMIT_SMALL,
+        "spec_min_order_dollars": V43_SPEC_MIN_ORDER_DOLLARS,
+        "avoid_growth_overlap": V43_SPEC_AVOID_GROWTH_OVERLAP,
+        "policy": "SPEC top 10 is the hold list; small-account buys/adds only execute from ranks 1-5 when size and holding-count rules pass.",
+    }
+    if not small:
+        return plan
+
+    for item in plan.get("actions", []) or []:
+        action = str(item.get("action", "")).upper()
+        if action not in {"BUY", "ADD"}:
+            continue
+        ticker = str(item.get("ticker", "")).upper()
+        rank = int(item.get("rank") or 999)
+        current_value = float(item.get("current_value", 0.0) or 0.0)
+        suggested = float(item.get("suggested_dollars", 0.0) or 0.0)
+        sector = str(item.get("sector") or item.get("bucket") or "other")
+
+        if V43_SPEC_AVOID_GROWTH_OVERLAP and ticker in growth_tickers:
+            _v43_mark_skip(item, "Ticker already exists in Growth ledger; avoid duplicate broker position across sleeves.", "HOLD" if current_value > 0 else "SKIP")
+            continue
+        if rank > V43_SPEC_BUY_RANK_LIMIT_SMALL:
+            _v43_mark_skip(item, f"SPEC small-account execution buys/adds only ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}; rank {rank} remains hold/watch.", "HOLD" if current_value > 0 else "SKIP")
+            continue
+        if suggested < V43_SPEC_MIN_ORDER_DOLLARS:
+            _v43_mark_skip(item, f"SPEC action below minimum {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}.", "HOLD" if current_value > 0 else "SKIP")
+            continue
+        if current_value <= 0 and spec_count >= V43_SPEC_MAX_HOLDINGS_SMALL:
+            _v43_mark_skip(item, f"SPEC max holdings reached ({spec_count}/{V43_SPEC_MAX_HOLDINGS_SMALL}); sell rotation exits before new buys.", "SKIP")
+            continue
+        if current_value <= 0:
+            if new_sector_counts.get(sector, 0) >= V43_SPEC_MAX_NEW_BUYS_PER_SECTOR_SMALL:
+                _v43_mark_skip(item, f"SPEC new-buy sector cap reached for {sector}.", "SKIP")
+                continue
+            new_sector_counts[sector] = new_sector_counts.get(sector, 0) + 1
+
+    return _v43_refresh_actionable(plan)
+
+
+_V43_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V43_OLD_FORMAT_SPEC_PLAN(plan)
+    ca = plan.get("v43_cost_aware") or {}
+    if ca.get("enabled"):
+        note = (
+            "\n\n🧾 v4.3 cost-aware SPEC execution:\n"
+            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))}.\n"
+            f"• Top 10 = hold/eligibility list; buys/adds limited to ranks 1-{ca.get('spec_buy_rank_limit_small')}.\n"
+            f"• Max SPEC holdings before new buys: {ca.get('spec_max_holdings_small')}.\n"
+            f"• Minimum SPEC order: {format_money(float(ca.get('spec_min_order_dollars', 0) or 0))}.\n"
+            "• Avoids buying a SPEC ticker already held in Growth.\n"
+            "• Existing holdings may be held while still in top 10; dropped names remain sell candidates."
+        )
+        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+            msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V43_OLD_RECORD_SPEC_BUY = record_spec_buy
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V43_COST_AWARE_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        amount = float(shares) * float(price)
+        spec_positions = load_spec_positions() if SPEC_ALPHA_LEDGER_ENABLED else {}
+        already_held = ticker_norm in {str(x).upper() for x in spec_positions.keys()}
+        if amount < V43_SPEC_MIN_ORDER_DOLLARS:
+            return False, f"SPEC buy rejected by v4.3: order {format_money(amount)} is below minimum {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}."
+        if (not already_held) and len(spec_positions) >= V43_SPEC_MAX_HOLDINGS_SMALL:
+            return False, f"SPEC buy rejected by v4.3: max SPEC holdings reached ({len(spec_positions)}/{V43_SPEC_MAX_HOLDINGS_SMALL}). Sell rotation exits before new buys."
+        if V43_SPEC_AVOID_GROWTH_OVERLAP and _v43_has_position("load_growth_positions", ticker_norm):
+            return False, f"SPEC buy rejected by v4.3: {ticker_norm} is already held in Growth. Avoid duplicate ticker across sleeves."
+        try:
+            plan = current_spec_plan_for_validation()
+            action = latest_spec_plan_action_map(plan).get(ticker_norm, {})
+            if str(action.get("action", "")).upper() == "SKIP":
+                return False, f"SPEC buy rejected by v4.3 plan policy: {action.get('v43_skip_reason', 'not executable in cost-aware mode')}"
+            if str(action.get("action", "")).upper() not in {"BUY", "ADD"}:
+                return False, f"SPEC buy rejected by v4.3: current plan action for {ticker_norm} is {action.get('action')}."
+        except Exception:
+            pass
+    return _V43_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
+
+
+# ---- v4.3 status / allocation / diagnostics labels ----
+_V43_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    msg = _V43_OLD_FORMAT_ALLOCATION_PLAN()
+    msg = msg.replace("v4.1.1 FREEZE", "v4.3 COST-AWARE")
+    note = (
+        "\n\n🧾 v4.3 cost-aware execution overlay:\n"
+        "• Core: avoid tiny UCITS/LSE orders; execute only sizeable top-ranked Core actions.\n"
+        "• Growth: top 5 remains the hold list, but small-account buys prioritize top 3 and avoid SPEC overlap.\n"
+        "• SPEC: top 10 remains the hold list, but small-account buys/adds focus on ranks 1-5 and max 6 holdings.\n"
+        "• Crypto: unchanged; top-1 tactical crypto only when the BTC/ETH/SOL gate is ON.\n"
+        "• VCP tactical: unchanged."
+    )
+    if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+        msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V43_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v43status", "coststatus", "hotfixstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.3 COST-AWARE EXECUTION STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n\n"
+            "Execution policy:\n"
+            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
+            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
+            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+            "• Crypto/VCP logic unchanged.\n"
+            "• Read-only IBKR reconciliation only; no broker orders are placed."
+        )
+        return
+    return _V43_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
 
 if __name__ == "__main__":
 
