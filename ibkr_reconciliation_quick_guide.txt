@@ -1,0 +1,165 @@
+IBKR RECONCILIATION QUICK GUIDE
+================================
+
+Current mode:
+- v4.2 / v4.2.1 = read-only IBKR reconciliation.
+- It does NOT place broker orders.
+- It does NOT automatically create new strategy positions from IBKR.
+- New manual trades still need the correct Telegram ledger command first.
+- Reconciliation then fixes cash, quantity, and average-cost differences for bot-managed positions.
+
+DO NOT SHARE YOUR BRIDGE TOKEN.
+Use a private fresh token, not any token pasted in chat.
+
+DAILY USE WITHOUT RECONCILIATION
+--------------------------------
+Laptop can be OFF.
+Railway bot continues running.
+Use normal Telegram commands:
+
+portfolio
+equity
+riskmatrix
+stressstatus
+wealthplan
+growthplan
+specplan
+cryptoplan
+
+
+WHEN YOU WANT IBKR RECONCILIATION
+---------------------------------
+1) Open TWS and log into live account.
+
+TWS API settings:
+- Enable ActiveX and Socket Clients: ON
+- Read-Only API: ON
+- Allow localhost only: ON
+- Live port: 7496
+
+2) Start IBKR bridge in PowerShell / CMD:
+
+cd C:\Users\vasif\OneDrive\Desktop\v4_2_ibkr_bridge_pack
+py .\ibkr_bridge_server_py314.py --tws-host 127.0.0.1 --tws-port 7496 --client-id 91 --bind 127.0.0.1 --http-port 8765 --token vasif_super_secure_bridge_2026_12
+
+Leave this window open.
+
+Optional local tests:
+
+curl http://127.0.0.1:8765/health
+curl "http://127.0.0.1:8765/snapshot?token=vasif_super_secure_bridge_2026_12"
+
+3) Start Cloudflare quick tunnel in a SECOND PowerShell / CMD window:
+
+cloudflared tunnel --url http://127.0.0.1:8765
+
+Copy the new https://....trycloudflare.com URL.
+
+4) Update Railway variables if the tunnel URL changed:
+
+IBKR_RECON_ENABLED=1
+IBKR_RECON_AUTO_ENABLED=0
+IBKR_BRIDGE_URL=https://https://mambo-executed-andrew-jaguar.trycloudflare.com
+IBKR_BRIDGE_TOKEN=vasif_super_secure_bridge_2026_12
+
+Redeploy Railway after changing variables.
+
+5) Run these Telegram commands:
+
+brokerstatus
+brokerreconcile
+brokerexternal
+brokerpositions
+brokersyncpreview
+
+6) Review brokersyncpreview.
+Only if it shows clean cash / avg-cost / quantity alignment for existing bot-managed positions, run:
+
+brokersyncapply CONFIRM
+
+Do NOT run brokersyncapply if there are missing positions, ambiguous positions, or external legacy adoption.
+
+
+AFTER MANUAL TRADES
+-------------------
+For a NEW trade, still record it manually first:
+
+Core:
+corebuy TICKER SHARES at PRICE
+coresell TICKER SHARES at PRICE
+
+Growth:
+growthbuy TICKER SHARES at PRICE
+growthsell TICKER SHARES at PRICE
+
+SPEC:
+specbuy TICKER SHARES at PRICE
+specsell TICKER SHARES at PRICE
+
+Long VCP tactical:
+bought TICKER SHARES at PRICE
+sold TICKER SHARES at PRICE
+
+Crypto:
+cryptobuy TICKER UNITS at PRICE
+cryptosell TICKER UNITS at PRICE
+
+Then reconcile:
+
+brokerreconcile
+brokersyncpreview
+
+Apply only if clean:
+
+brokersyncapply CONFIRM
+
+
+AFTER-MARKET DAILY CHECK
+------------------------
+Recommended time: 16:10-16:30 New York time.
+
+Run:
+
+brokerstatus
+brokerreconcile
+brokerexternal
+brokerpositions
+brokersyncpreview
+portfolio
+equity
+riskmatrix
+stressstatus
+download_state
+
+Then you may close:
+- Cloudflare tunnel window: Ctrl+C
+- IBKR bridge window: Ctrl+C
+- TWS: log out/close if desired
+
+
+WITHDRAWAL COMMANDS
+-------------------
+Available commands:
+
+withdrawinit
+withdrawplan
+withdrawdone AMOUNT
+showwithdrawals
+download_withdrawals
+
+The bot can automatically SEND A WITHDRAWAL SIGNAL after market close if eligible.
+It does NOT withdraw money automatically.
+After you manually withdraw in broker/bank, record it with:
+
+withdrawdone AMOUNT
+
+Withdrawal signal needs conditions like:
+- withdrawal HWM initialized
+- profit above HWM
+- minimum profit threshold met
+- minimum withdrawal amount met
+- review period reached
+- enough cash remains after withdrawal
+
+Current default behavior is conservative, so do not expect frequent withdrawal alerts early.
+

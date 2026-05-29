@@ -22991,6 +22991,305 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     return _V421_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+
+# -----------------------------------------------------------------------------
+# V4.2.2 CORE COMMISSION / IBKR SYMBOL-MAPPING HOTFIX
+# -----------------------------------------------------------------------------
+# Operational-only patch. It does not change strategy selection. It fixes two
+# live-account issues:
+# 1) Small LSE/UCITS orders may show IBKR average cost including fixed fees;
+#    validate the actual fill price against quote and record fee separately.
+# 2) IBKR portfolio symbols for LSE UCITS often arrive without the .L suffix;
+#    map known core UCITS symbols back to bot tickers for reconciliation.
+
+V42_VERSION = "v4.2.2-ibkr-recon-core-fee"
+STRATEGY_VERSION = os.getenv(
+    "STRATEGY_VERSION",
+    "v4.2.2-ibkr-recon-core-fee-20-45-20-5-10-monitor",
+)
+
+IBKR_CORE_SYMBOL_ALIASES = {
+    "SMH": "SMH.L",
+    "IUIT": "IUIT.L",
+    "CNDX": "CNDX.L",
+    "CMOD": "CMOD.L",
+    "COPA": "COPA.L",
+    "VUAA": "VUAA.L",
+    "VUSD": "VUSD.L",
+    "CSUS": "CSUS.L",
+    "IUHC": "IUHC.L",
+    "IUFS": "IUFS.L",
+    "IUES": "IUES.L",
+    "EGLN": "EGLN.L",
+    "PHAG": "PHAG.L",
+    "IB01": "IB01.L",
+    "IBTA": "IBTA.L",
+    "IDBT": "IDBT.L",
+    "DTLA": "DTLA.L",
+}
+
+IBKR_UCITS_EXCHANGES = {
+    "LSE", "LSEETF", "EUIBSI", "LSEETF1", "LSEETF2", "CHIXUK",
+    "BATEUK", "TRQXUK", "AQUIS", "XLON", "LONDON",
+}
+
+
+def _v422_canonical_broker_symbol(contract: Dict[str, Any]) -> str:
+    raw = contract.get("symbol") or contract.get("localSymbol")
+    sym = _v42_normalize_broker_symbol(raw)
+    exch = str(contract.get("primaryExchange") or contract.get("exchange") or "").upper()
+    local = _v42_normalize_broker_symbol(contract.get("localSymbol") or sym)
+    # Map LSE/UCITS broker symbols without .L back to bot symbols only when the
+    # exchange looks like a London/UK venue. This avoids mapping a US SMH ETF to SMH.L.
+    for candidate in [sym, local]:
+        if candidate in IBKR_CORE_SYMBOL_ALIASES and (exch in IBKR_UCITS_EXCHANGES or candidate not in WATCHLIST):
+            return IBKR_CORE_SYMBOL_ALIASES[candidate]
+    return sym
+
+
+def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:  # type: ignore[override]
+    positions: Dict[str, Dict[str, Any]] = {}
+    for p in snapshot.get("portfolio", []) or []:
+        try:
+            contract = p.get("contract") or {}
+            symbol = _v422_canonical_broker_symbol(contract)
+            if not symbol:
+                continue
+            qty = _v42_float(p.get("position"))
+            if abs(qty) <= 1e-12:
+                continue
+            raw_symbol = _v42_normalize_broker_symbol(contract.get("symbol") or contract.get("localSymbol"))
+            positions[symbol] = {
+                "ticker": symbol,
+                "broker_symbol": raw_symbol,
+                "qty": qty,
+                "market_price": _v42_float(p.get("marketPrice")),
+                "market_value": _v42_float(p.get("marketValue")),
+                "avg_cost": _v42_float(p.get("averageCost")),
+                "unrealized_pnl": _v42_float(p.get("unrealizedPNL")),
+                "realized_pnl": _v42_float(p.get("realizedPNL")),
+                "sec_type": str(contract.get("secType") or ""),
+                "currency": str(contract.get("currency") or ""),
+                "exchange": str(contract.get("primaryExchange") or contract.get("exchange") or ""),
+                "con_id": contract.get("conId"),
+                "local_symbol": str(contract.get("localSymbol") or raw_symbol),
+            }
+        except Exception:
+            continue
+    return positions
+
+
+def record_core_buy(  # type: ignore[override]
+    ticker: str,
+    shares: float,
+    price: float,
+    update_id: Optional[int] = None,
+    fee: float = 0.0,
+) -> Tuple[bool, str]:
+    ticker = normalize_ticker(ticker) or ""
+    if not ticker:
+        return False, "Invalid ticker"
+    if not CORE_LEDGER_ENABLED:
+        return False, "Core ledger is disabled."
+    if shares <= 0 or not math.isfinite(shares):
+        return False, "Core shares must be positive and finite."
+    if (not CORE_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
+        return False, "Fractional core shares are disabled."
+    if not is_finite_positive(price):
+        return False, "Core price must be positive and finite."
+    if fee is None:
+        fee = 0.0
+    try:
+        fee = float(fee)
+    except Exception:
+        return False, "Core fee/commission must be numeric."
+    if not math.isfinite(fee) or fee < 0:
+        return False, "Core fee/commission must be finite and non-negative."
+    if ticker not in WEALTH_CORE_UNIVERSE:
+        return False, f"{ticker} is not in the core wealth universe."
+
+    gross_amount = shares * price
+    amount = gross_amount + fee
+    effective_avg = amount / shares if shares > 0 else price
+    if amount < CORE_MIN_TRADE_DOLLARS:
+        return False, f"Core trade amount is below minimum {format_money(CORE_MIN_TRADE_DOLLARS)}."
+
+    plan = current_core_plan_for_validation()
+    target = core_target_for_ticker(plan, ticker)
+    action = latest_core_plan_action_map(plan).get(ticker)
+    if CORE_REQUIRE_ACTIVE_PLAN_FOR_BUY and not CORE_ALLOW_BUY_OUTSIDE_PLAN:
+        if target is None:
+            allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", [])[:WEALTH_CORE_TOP_N])
+            return False, (
+                f"Core buy rejected: {ticker} is not in the active core plan.\n"
+                f"Current ranked core candidates: {allowed or 'none'}"
+            )
+        if action and str(action.get("action", "")).upper() in {"TRIM", "SELL", "AVOID"}:
+            return False, f"Core buy rejected: current plan action for {ticker} is {action.get('action')}."
+
+    # Validate the actual execution price, not the commission-adjusted IBKR average cost.
+    ok, msg, quote = validate_core_price_against_quote(ticker, price)
+    if not ok:
+        return False, msg + "\n\nIf this is an IBKR average cost including commission, use:\ncorebuy TICKER SHARES at FILL_PRICE fee COMMISSION"
+
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash:
+            mark_update_processed_tx(conn, update_id, "rejected_core_insufficient_cash")
+            return False, "Not enough cash for core buy."
+
+        row = conn.execute("SELECT * FROM core_positions WHERE ticker = ?", (ticker,)).fetchone()
+        now = now_ts()
+        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+        plan_id = str(plan.get("plan_id"))
+
+        if row is None:
+            core_position_id = f"CORE_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
+            new_shares = shares
+            new_cost = amount
+            avg_price = effective_avg
+            entry_time = now
+            highest = price
+            conn.execute(
+                """
+                INSERT INTO core_positions(
+                    ticker, core_position_id, strategy_version, shares,
+                    avg_entry_price, cost_basis, entry_time, last_update_time,
+                    highest, sleeve, target_account_pct, last_plan_id, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CORE_WEALTH', ?, ?, ?)
+                """,
+                (
+                    ticker,
+                    core_position_id,
+                    WEALTH_STRATEGY_VERSION,
+                    round(new_shares, 8),
+                    round(avg_price, 6),
+                    round(new_cost, 6),
+                    now,
+                    now,
+                    round(highest, 6),
+                    target_pct,
+                    plan_id,
+                    f"fee={round(fee, 6)}; fill_price={round(price, 6)}",
+                ),
+            )
+        else:
+            pos = row_to_core_position(row)
+            core_position_id = pos["core_position_id"]
+            old_shares = float(pos["shares"])
+            old_cost = float(pos["cost_basis"])
+            new_shares = old_shares + shares
+            new_cost = old_cost + amount
+            avg_price = new_cost / new_shares
+            entry_time = float(pos["entry_time"])
+            highest = max(float(pos.get("highest") or price), price)
+            old_notes = str(pos.get("notes") or "")
+            new_note = (old_notes + "; " if old_notes else "") + f"fee={round(fee, 6)}; fill_price={round(price, 6)}"
+            conn.execute(
+                """
+                UPDATE core_positions
+                SET shares = ?, avg_entry_price = ?, cost_basis = ?,
+                    last_update_time = ?, highest = ?, target_account_pct = ?,
+                    last_plan_id = ?, strategy_version = ?, notes = ?
+                WHERE ticker = ?
+                """,
+                (
+                    round(new_shares, 8),
+                    round(avg_price, 6),
+                    round(new_cost, 6),
+                    now,
+                    round(highest, 6),
+                    target_pct,
+                    plan_id,
+                    WEALTH_STRATEGY_VERSION,
+                    new_note[:500],
+                    ticker,
+                ),
+            )
+
+        conn.execute(
+            """
+            INSERT INTO core_trades(
+                id, core_position_id, ticker, side, shares, price, amount,
+                realized_profit, time, strategy_version, plan_id, reason, created_at
+            ) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex,
+                core_position_id,
+                ticker,
+                round(shares, 8),
+                round(price, 6),  # actual fill price excluding commission
+                round(amount, 6), # total cost including commission
+                now,
+                WEALTH_STRATEGY_VERSION,
+                plan_id,
+                "core_plan_buy" if fee <= 0 else f"core_plan_buy_fee_{round(fee, 4)}",
+                now,
+            ),
+        )
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "processed_core_buy")
+
+    refresh_portfolio()
+    audit("CORE_BUY", f"{ticker} shares={shares} fill_price={price} fee={fee} total={amount}")
+    fee_line = f"\n🧾 Fee/commission: {format_money(fee)}\n📌 Effective avg cost: {round(effective_avg, 4)}" if fee > 0 else ""
+    return True, (
+        f"🏛️ CORE BUY RECORDED {ticker}\n\n"
+        f"📦 Shares: {format_core_shares(shares)}\n"
+        f"💵 Fill price: {round(price, 4)}"
+        f"{fee_line}\n"
+        f"💰 Total cost: {format_money(amount)}\n"
+        f"🎯 Plan action: {None if action is None else action.get('action')}\n"
+        f"🏦 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
+        f"💵 Cash left: {format_money(portfolio['cash'])}"
+    )
+
+
+_V422_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    # New optional-fee Core command:
+    # corebuy CMOD.L 2.18 at 33.4225 fee 4
+    # corebuyfee CMOD.L 2.18 at 33.4225 fee 4
+    core_fee_cmd = re.fullmatch(
+        r"(?i)\s*(corebuy|corebuyfee)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+(?:fee|fees|commission|comm)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if core_fee_cmd:
+        ticker = normalize_ticker(core_fee_cmd.group(2))
+        shares = float(core_fee_cmd.group(3))
+        price = float(core_fee_cmd.group(4))
+        fee = float(core_fee_cmd.group(5))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.2.2 IBKR RECON / CORE FEE HOTFIX STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"V4.2 layer: {V42_VERSION}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            "Core fee syntax enabled:\n"
+            "corebuy TICKER SHARES at FILL_PRICE fee COMMISSION\n"
+            "IBKR core symbol aliases enabled for LSE UCITS.\n"
+            "Read-only reconciliation only. No broker orders are placed."
+        )
+        return
+
+    return _V422_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
 if __name__ == "__main__":
 
 
