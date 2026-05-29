@@ -23705,6 +23705,1131 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     return _V43_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+# -----------------------------------------------------------------------------
+# V4.4 MONTHLY ROTATION LOCK OVERLAY
+# -----------------------------------------------------------------------------
+# Operational policy only. No new alpha logic.
+# Purpose:
+# - Core, Growth Alpha, and SPEC_ALPHA are monthly rotation sleeves.
+# - Daily/redeploy plan checks should NOT create next-day churn.
+# - Rotation sells/trims are actionable only during a monthly rebalance window
+#   and after a minimum hold period, unless a hard portfolio/risk exit applies.
+# - Daily plans can still monitor rankings and show watchlist items.
+
+V44_VERSION = "v4.4-monthly-lock-cost-aware-20-45-20-5-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V44_VERSION)
+else:
+    STRATEGY_VERSION = V44_VERSION
+
+V44_MONTHLY_LOCK_ENABLED = os.getenv("V44_MONTHLY_LOCK_ENABLED", "1").strip() != "0"
+V44_MONTHLY_REBALANCE_SESSIONS = int(os.getenv("V44_MONTHLY_REBALANCE_SESSIONS", "5"))
+V44_FORCE_REBALANCE_WINDOW = os.getenv("V44_FORCE_REBALANCE_WINDOW", "0").strip() == "1"
+V44_ALLOW_HARD_MONTHLY_EXITS = os.getenv("V44_ALLOW_HARD_MONTHLY_EXITS", "1").strip() != "0"
+V44_BLOCK_DAILY_TRIMS = os.getenv("V44_BLOCK_DAILY_TRIMS", "1").strip() != "0"
+V44_ALLOW_MANUAL_LOCKED_SELL = os.getenv("V44_ALLOW_MANUAL_LOCKED_SELL", "0").strip() == "1"
+V44_CORE_MIN_HOLD_DAYS = int(os.getenv("V44_CORE_MIN_HOLD_DAYS", "45"))
+V44_GROWTH_MIN_HOLD_DAYS = int(os.getenv("V44_GROWTH_MIN_HOLD_DAYS", "21"))
+V44_SPEC_MIN_HOLD_DAYS = int(os.getenv("V44_SPEC_MIN_HOLD_DAYS", "21"))
+V44_SPEC_HOLD_RANK_BUFFER = int(os.getenv("V44_SPEC_HOLD_RANK_BUFFER", "20"))
+V44_GROWTH_HOLD_RANK_BUFFER = int(os.getenv("V44_GROWTH_HOLD_RANK_BUFFER", "10"))
+V44_CORE_HOLD_RANK_BUFFER = int(os.getenv("V44_CORE_HOLD_RANK_BUFFER", "8"))
+
+
+def _v44_monthly_rebalance_window_info() -> Dict[str, Any]:
+    """Return whether today is inside the configured monthly rebalance window."""
+    current = ny_now()
+    if V44_FORCE_REBALANCE_WINDOW:
+        return {"open": True, "reason": "Forced open by V44_FORCE_REBALANCE_WINDOW=1", "session_number": None}
+    try:
+        month_start = current.replace(day=1).date()
+        sched = NYSE.schedule(start_date=month_start, end_date=current.date())
+        sessions = [d.date() for d in sched.index]
+        if current.date() not in sessions:
+            return {"open": False, "reason": "Today is not a NYSE session.", "session_number": None}
+        session_number = sessions.index(current.date()) + 1
+        is_open = session_number <= max(1, V44_MONTHLY_REBALANCE_SESSIONS)
+        return {
+            "open": bool(is_open),
+            "reason": f"NYSE session {session_number} of month; window is first {V44_MONTHLY_REBALANCE_SESSIONS} sessions.",
+            "session_number": session_number,
+        }
+    except Exception as exc:
+        return {"open": False, "reason": f"Calendar check failed: {exc}", "session_number": None}
+
+
+def _v44_position_age_days(sleeve: str, ticker: str) -> Optional[float]:
+    ticker = str(ticker).upper()
+    try:
+        if sleeve == "CORE":
+            positions = load_core_positions() if CORE_LEDGER_ENABLED else {}
+        elif sleeve == "GROWTH":
+            positions = load_growth_positions() if GROWTH_ALPHA_LEDGER_ENABLED else {}
+        elif sleeve == "SPEC":
+            positions = load_spec_positions() if SPEC_ALPHA_LEDGER_ENABLED else {}
+        else:
+            positions = {}
+        pos = positions.get(ticker) or positions.get(ticker.upper())
+        if not pos:
+            return None
+        raw_ts = pos.get("entry_time") or pos.get("last_update_time")
+        if raw_ts is None:
+            return None
+        ts = float(raw_ts)
+        if not math.isfinite(ts) or ts <= 0:
+            return None
+        return max(0.0, (now_ts() - ts) / 86400.0)
+    except Exception:
+        return None
+
+
+def _v44_min_hold_days(sleeve: str) -> int:
+    if sleeve == "CORE":
+        return V44_CORE_MIN_HOLD_DAYS
+    if sleeve == "GROWTH":
+        return V44_GROWTH_MIN_HOLD_DAYS
+    if sleeve == "SPEC":
+        return V44_SPEC_MIN_HOLD_DAYS
+    return 21
+
+
+def _v44_hold_rank_buffer(sleeve: str) -> int:
+    if sleeve == "CORE":
+        return V44_CORE_HOLD_RANK_BUFFER
+    if sleeve == "GROWTH":
+        return V44_GROWTH_HOLD_RANK_BUFFER
+    if sleeve == "SPEC":
+        return V44_SPEC_HOLD_RANK_BUFFER
+    return 10
+
+
+def _v44_scored_rank_map(plan: Dict[str, Any], sleeve: str) -> Dict[str, int]:
+    ranked: Dict[str, int] = {}
+    for idx, item in enumerate(plan.get("all_scored", []) or [], start=1):
+        ticker = str(item.get("ticker", "")).upper()
+        if ticker and ticker not in ranked:
+            ranked[ticker] = idx
+    return ranked
+
+
+def _v44_hard_monthly_exit(plan: Dict[str, Any], item: Dict[str, Any]) -> Tuple[bool, str]:
+    """Hard exits bypass monthly lock only for real risk/allocation reasons."""
+    if not V44_ALLOW_HARD_MONTHLY_EXITS:
+        return False, "Hard exits disabled by configuration."
+    risk = plan.get("risk_guard", {}) or {}
+    if bool(risk.get("hard_active")):
+        return True, "Portfolio hard-pause/risk guard is active."
+    reason = str(item.get("reason", "")).lower()
+    hard_phrases = [
+        "market filter failed",
+        "allocation is currently zero",
+        "allocation guard",
+        "risk/allocation guard",
+        "hard pause",
+        "panic",
+    ]
+    for phrase in hard_phrases:
+        if phrase in reason:
+            return True, f"Hard monthly exit reason: {item.get('reason')}"
+    return False, "Rotation exit only."
+
+
+def _v44_lock_action(item: Dict[str, Any], sleeve: str, original_action: str, reason: str) -> None:
+    item["v44_monthly_lock"] = True
+    item["v44_original_action"] = original_action
+    item["v44_lock_reason"] = reason
+    item["action"] = "HOLD"
+    item["reason"] = reason
+
+
+def _v44_apply_monthly_lock(plan: Dict[str, Any], sleeve: str) -> Dict[str, Any]:
+    if not V44_MONTHLY_LOCK_ENABLED:
+        return plan
+    win = _v44_monthly_rebalance_window_info()
+    window_open = bool(win.get("open"))
+    min_hold = _v44_min_hold_days(sleeve)
+    rank_buffer = _v44_hold_rank_buffer(sleeve)
+    scored_rank = _v44_scored_rank_map(plan, sleeve)
+    locked: List[Dict[str, Any]] = []
+
+    for item in plan.get("actions", []) or []:
+        action = str(item.get("action", "")).upper()
+        if action not in {"SELL", "TRIM"}:
+            continue
+        if action == "TRIM" and not V44_BLOCK_DAILY_TRIMS:
+            continue
+        ticker = str(item.get("ticker", "")).upper()
+        hard, hard_reason = _v44_hard_monthly_exit(plan, item)
+        if hard:
+            item["v44_monthly_lock_checked"] = True
+            item["v44_lock_bypassed"] = True
+            item["v44_lock_bypass_reason"] = hard_reason
+            continue
+        age_days = _v44_position_age_days(sleeve, ticker)
+        score_rank = scored_rank.get(ticker)
+        reasons: List[str] = []
+        if not window_open:
+            reasons.append(str(win.get("reason")))
+        if age_days is not None and age_days < min_hold:
+            reasons.append(f"min hold {min_hold} days not reached; held {round(age_days, 1)} days")
+        # If a current position is still in the broader ranked/qualified list, do not churn it.
+        if score_rank is not None and score_rank <= rank_buffer:
+            reasons.append(f"still qualified inside {sleeve} hold buffer rank {score_rank}/{rank_buffer}")
+        if reasons:
+            lock_reason = (
+                f"v4.4 monthly lock: {original_action_label(action)} blocked. "
+                + "; ".join(reasons)
+                + ". Treat as HOLD/watch, not an execution order."
+            )
+            _v44_lock_action(item, sleeve, action, lock_reason)
+            locked.append(item)
+
+    plan["v44_monthly_lock"] = {
+        "enabled": True,
+        "sleeve": sleeve,
+        "rebalance_window_open": window_open,
+        "rebalance_window_reason": win.get("reason"),
+        "min_hold_days": min_hold,
+        "hold_rank_buffer": rank_buffer,
+        "locked_count": len(locked),
+        "locked_tickers": [x.get("ticker") for x in locked],
+        "policy": "Monthly sleeves do not execute daily/redeploy rotation sells or trims. Locked exits are HOLD/watch until monthly window and minimum hold are satisfied, unless a hard risk/allocation exit applies.",
+    }
+    return _v43_refresh_actionable(plan)
+
+
+def original_action_label(action: str) -> str:
+    action = str(action).upper()
+    return {"SELL": "sell", "TRIM": "trim"}.get(action, action.lower())
+
+
+def _v44_locked_items(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [x for x in plan.get("actions", []) or [] if bool(x.get("v44_monthly_lock"))]
+
+
+def _v44_monthly_lock_note(plan: Dict[str, Any], sleeve_label_text: str) -> str:
+    info = plan.get("v44_monthly_lock") or {}
+    if not info.get("enabled"):
+        return ""
+    locked = _v44_locked_items(plan)
+    note = (
+        f"\n\n🔒 v4.4 monthly-lock policy for {sleeve_label_text}:\n"
+        f"• Rebalance window: {yes_no(bool(info.get('rebalance_window_open')))} — {info.get('rebalance_window_reason')}\n"
+        f"• Minimum hold before rotation sell/trim: {info.get('min_hold_days')} days.\n"
+        f"• Daily/redeploy plans are monitoring only for exits unless a hard risk/allocation exit appears.\n"
+        f"• Locked exits/trims: {info.get('locked_count', 0)}.\n"
+    )
+    if locked:
+        note += "\n🟡 Monthly-lock watchlist — do NOT execute today:\n"
+        for item in locked[:10]:
+            note += (
+                f"• HOLD {item.get('ticker')} — was {item.get('v44_original_action')} | "
+                f"{item.get('v44_lock_reason')}\n"
+            )
+    return note
+
+
+# ---- Core monthly-lock overlay ----
+_V44_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
+
+def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
+    return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_CORE_PLAN(), "CORE")
+
+
+_V44_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V44_OLD_FORMAT_CORE_PLAN(plan)
+    msg = msg.replace("v4.3", "v4.4")
+    note = _v44_monthly_lock_note(plan, "Core")
+    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+        msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+# ---- Growth monthly-lock overlay ----
+_V44_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
+
+def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_GROWTH_PLAN(), "GROWTH")
+
+
+_V44_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V44_OLD_FORMAT_GROWTH_PLAN(plan)
+    msg = msg.replace("v4.3", "v4.4")
+    note = _v44_monthly_lock_note(plan, "Growth Alpha")
+    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+        msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+# ---- SPEC monthly-lock overlay ----
+_V44_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
+
+def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_SPEC_PLAN(), "SPEC")
+
+
+_V44_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _V44_OLD_FORMAT_SPEC_PLAN(plan)
+    msg = msg.replace("v4.3", "v4.4")
+    note = _v44_monthly_lock_note(plan, "SPEC_ALPHA")
+    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+        msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+# ---- Validation-plan freshness guard ----
+# Existing databases may contain a still-valid v4.3 plan without v4.4 lock metadata.
+# For sell validation, force recomputation once so locked exits cannot slip through.
+_V44_OLD_CURRENT_CORE_PLAN_FOR_VALIDATION = current_core_plan_for_validation
+
+def current_core_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V44_OLD_CURRENT_CORE_PLAN_FOR_VALIDATION()
+    if V44_MONTHLY_LOCK_ENABLED and not (plan.get("v44_monthly_lock") or {}).get("enabled"):
+        plan = compute_wealth_core_plan()
+        save_core_plan_signal(plan)
+    return plan
+
+
+_V44_OLD_CURRENT_GROWTH_PLAN_FOR_VALIDATION = current_growth_plan_for_validation
+
+def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V44_OLD_CURRENT_GROWTH_PLAN_FOR_VALIDATION()
+    if V44_MONTHLY_LOCK_ENABLED and not (plan.get("v44_monthly_lock") or {}).get("enabled"):
+        plan = compute_growth_alpha_plan()
+        save_growth_plan_signal(plan)
+    return plan
+
+
+_V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
+
+def current_spec_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION()
+    if V44_MONTHLY_LOCK_ENABLED and not (plan.get("v44_monthly_lock") or {}).get("enabled"):
+        plan = compute_spec_alpha_plan()
+        save_spec_plan_signal(plan)
+    return plan
+
+
+# ---- Sell guards: prevent accidental execution of locked monthly exits ----
+def _v44_locked_sell_message(sleeve: str, ticker: str, plan: Dict[str, Any]) -> Optional[str]:
+    action = None
+    if sleeve == "CORE":
+        action = latest_core_plan_action_map(plan).get(ticker)
+    elif sleeve == "GROWTH":
+        action = latest_growth_plan_action_map(plan).get(ticker)
+    elif sleeve == "SPEC":
+        action = latest_spec_plan_action_map(plan).get(ticker)
+    if action and bool(action.get("v44_monthly_lock")) and not V44_ALLOW_MANUAL_LOCKED_SELL:
+        return (
+            f"{sleeve} sell blocked by v4.4 monthly lock for {ticker}.\n"
+            f"Original action: {action.get('v44_original_action')}\n"
+            f"Reason: {action.get('v44_lock_reason')}\n"
+            "This is a monthly rotation sleeve, not a daily churn system. "
+            "Set V44_ALLOW_MANUAL_LOCKED_SELL=1 only if you intentionally want to override."
+        )
+    return None
+
+
+_V44_OLD_RECORD_CORE_SELL = record_core_sell
+
+def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V44_MONTHLY_LOCK_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        try:
+            plan = current_core_plan_for_validation()
+            locked = _v44_locked_sell_message("CORE", ticker_norm, plan)
+            if locked:
+                return False, locked
+        except Exception:
+            pass
+    return _V44_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
+
+
+_V44_OLD_RECORD_GROWTH_SELL = record_growth_sell
+
+def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V44_MONTHLY_LOCK_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        try:
+            plan = current_growth_plan_for_validation()
+            locked = _v44_locked_sell_message("GROWTH", ticker_norm, plan)
+            if locked:
+                return False, locked
+        except Exception:
+            pass
+    return _V44_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
+
+
+_V44_OLD_RECORD_SPEC_SELL = record_spec_sell
+
+def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V44_MONTHLY_LOCK_ENABLED:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        try:
+            plan = current_spec_plan_for_validation()
+            locked = _v44_locked_sell_message("SPEC", ticker_norm, plan)
+            if locked:
+                return False, locked
+        except Exception:
+            pass
+    return _V44_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
+
+
+# ---- Labels/status ----
+_V44_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    msg = _V44_OLD_FORMAT_ALLOCATION_PLAN()
+    msg = msg.replace("v4.3 COST-AWARE", "v4.4 MONTHLY-LOCK")
+    note = (
+        "\n\n🔒 v4.4 monthly-lock overlay:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves; daily checks are monitoring only for exits.\n"
+        "• Rotation sells/trims require the monthly rebalance window and minimum hold period.\n"
+        "• Hard risk/allocation exits can still bypass the lock.\n"
+        "• VCP and Crypto tactical logic are unchanged."
+    )
+    if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
+        msg += note
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V44_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        win = _v44_monthly_rebalance_window_info()
+        send(
+            "🛠️ V4.4 MONTHLY-LOCK + COST-AWARE STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+            "Monthly exit/trim policy:\n"
+            f"• Core min hold: {V44_CORE_MIN_HOLD_DAYS} days | hold buffer rank {V44_CORE_HOLD_RANK_BUFFER}\n"
+            f"• Growth min hold: {V44_GROWTH_MIN_HOLD_DAYS} days | hold buffer rank {V44_GROWTH_HOLD_RANK_BUFFER}\n"
+            f"• SPEC min hold: {V44_SPEC_MIN_HOLD_DAYS} days | hold buffer rank {V44_SPEC_HOLD_RANK_BUFFER}\n"
+            "• Daily/redeploy SELL/TRIM is blocked unless monthly window + min hold are satisfied, or a hard risk/allocation exit applies.\n\n"
+            "Execution policy still active:\n"
+            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
+            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
+            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+            "• Read-only IBKR reconciliation only; no broker orders are placed."
+        )
+        return
+    return _V44_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+# -----------------------------------------------------------------------------
+# V4.4.1 USER-FRIENDLY MONTHLY PLAN CLARITY OVERLAY
+# -----------------------------------------------------------------------------
+# Operational/reporting only. No alpha logic changes.
+# Purpose:
+# - Monthly rotation plans must be easier to execute safely.
+# - Show estimated shares/units, suggested max limit, and exact command examples.
+# - Make it clear that Core/Growth/SPEC are monthly rotation sleeves, not daily churn.
+# - Add a controlled overweight-resize exception so accidental oversize manual buys
+#   can be reduced without disabling the monthly-lock system globally.
+
+V441_VERSION = "v4.4.1-clear-plans-monthly-lock-cost-aware-20-45-20-5-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V441_VERSION)
+else:
+    STRATEGY_VERSION = V441_VERSION
+
+V441_CORE_LIMIT_BUFFER_PCT = float(os.getenv("V441_CORE_LIMIT_BUFFER_PCT", "0.003"))
+V441_GROWTH_LIMIT_BUFFER_PCT = float(os.getenv("V441_GROWTH_LIMIT_BUFFER_PCT", "0.005"))
+V441_SPEC_LIMIT_BUFFER_PCT = float(os.getenv("V441_SPEC_LIMIT_BUFFER_PCT", "0.005"))
+V441_ALLOW_OVERWEIGHT_RESIZE_SELL = os.getenv("V441_ALLOW_OVERWEIGHT_RESIZE_SELL", "1").strip() != "0"
+V441_OVERWEIGHT_RESIZE_THRESHOLD = float(os.getenv("V441_OVERWEIGHT_RESIZE_THRESHOLD", "1.20"))
+
+
+def _v441_float(value: Any, default: float = 0.0) -> float:
+    try:
+        v = float(value)
+        return v if math.isfinite(v) else default
+    except Exception:
+        return default
+
+
+def _v441_action_emoji(action: str) -> str:
+    action = str(action or "HOLD").upper()
+    return {
+        "BUY": "🟢 BUY",
+        "ADD": "🟢 ADD",
+        "HOLD": "🟡 HOLD",
+        "TRIM": "🟠 TRIM",
+        "SELL": "🔴 SELL",
+        "SKIP": "⚪ SKIP",
+        "WATCH": "👀 WATCH",
+    }.get(action, action)
+
+
+def _v441_qty_text(dollars: float, price: float) -> str:
+    if dollars <= 0 or price <= 0:
+        return "n/a"
+    qty = dollars / price
+    if qty >= 10:
+        return str(round(qty, 2))
+    if qty >= 1:
+        return str(round(qty, 4)).rstrip("0").rstrip(".")
+    return str(round(qty, 6)).rstrip("0").rstrip(".")
+
+
+def _v441_limit_price(price: float, buffer_pct: float) -> float:
+    if price <= 0:
+        return 0.0
+    return round(price * (1.0 + buffer_pct), 4)
+
+
+def _v441_skip_reason(item: Dict[str, Any]) -> str:
+    for key in ["v43_skip_reason", "v44_lock_reason", "skip_reason", "reason"]:
+        val = item.get(key)
+        if val:
+            return str(val)
+    return "Not actionable under current policy."
+
+
+def _v441_execution_line(item: Dict[str, Any], sleeve: str, limit_buffer: float) -> str:
+    ticker = str(item.get("ticker", "?")).upper()
+    action = str(item.get("action", "HOLD")).upper()
+    price = _v441_float(item.get("price"), 0.0)
+    target_value = _v441_float(item.get("target_value"), 0.0)
+    current_value = _v441_float(item.get("current_value"), 0.0)
+    action_dollars = _v441_float(item.get("suggested_dollars"), 0.0)
+    target_pct = item.get("target_account_pct", "n/a")
+    rank = item.get("rank")
+    group = item.get("cluster") or item.get("sector") or item.get("bucket") or "other"
+    qty = _v441_qty_text(action_dollars, price)
+    max_limit = _v441_limit_price(price, limit_buffer)
+
+    head = f"{rank}) " if rank is not None else ""
+    line = (
+        f"{head}{_v441_action_emoji(action)} {ticker} ({group})\n"
+        f"   Target: {format_money(target_value)} ({target_pct}% acct) | Current: {format_money(current_value)} | Action: {format_money(action_dollars)}\n"
+        f"   Plan price: {price} | Est. qty: {qty} | Max limit guide: {max_limit if max_limit else 'n/a'}\n"
+    )
+    if action in {"BUY", "ADD"} and price > 0 and action_dollars > 0:
+        cmd = {
+            "CORE": "corebuy",
+            "GROWTH": "growthbuy",
+            "SPEC": "specbuy",
+        }.get(sleeve.upper(), "buy")
+        fee_note = " fee COMMISSION" if sleeve.upper() == "CORE" else ""
+        line += f"   Command after fill: {cmd} {ticker} ACTUAL_QTY at ACTUAL_FILL_PRICE{fee_note}\n"
+    if action in {"SKIP", "WATCH"} or item.get("v43_skip_reason") or item.get("v44_monthly_lock"):
+        line += f"   Why: {_v441_skip_reason(item)}\n"
+    return line
+
+
+def _v441_plan_header(title: str, plan: Dict[str, Any], target_key: str, current_key: str) -> str:
+    risk = plan.get("risk_guard", {}) or {}
+    market = plan.get("market", "UNKNOWN")
+    market_extra = ""
+    if plan.get("market_score") is not None:
+        market_extra = f" ({plan.get('market_score')}/8)"
+    return (
+        f"{title}\n\n"
+        "Private execution guide. Execute in broker first, then record with the correct ledger command.\n"
+        "Monthly rotation sleeve: daily checks are monitoring; do not churn daily exits.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(market))}{market_extra}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action', 'n/a')}\n"
+        f"💼 Equity estimate: {format_money(_v441_float(plan.get('account_equity')))}\n"
+        f"🎯 Target sleeve: {format_money(_v441_float(plan.get(target_key)))}\n"
+        f"📦 Current sleeve: {format_money(_v441_float(plan.get(current_key)))}\n\n"
+    )
+
+
+def _v441_format_monthly_plan(plan: Dict[str, Any], sleeve: str, title: str, target_key: str, current_key: str, limit_buffer: float, max_rank: int = 10) -> str:
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if a.get("rank") is not None]
+    exits = [a for a in actions if str(a.get("action", "")).upper() in {"SELL", "TRIM"}]
+    actionable = [a for a in ranked if str(a.get("action", "")).upper() in {"BUY", "ADD"}]
+    msg = _v441_plan_header(title, plan, target_key, current_key)
+
+    if actionable:
+        msg += "✅ ACTIONABLE BUY/ADD NOW\n"
+        for item in actionable[:5]:
+            msg += _v441_execution_line(item, sleeve, limit_buffer)
+        msg += "\n"
+    else:
+        msg += "✅ ACTIONABLE BUY/ADD NOW\nNone under current cost-aware/monthly-lock rules.\n\n"
+
+    if exits:
+        msg += "🔴 EXIT / TRIM MONITOR\n"
+        for item in exits[:5]:
+            msg += _v441_execution_line(item, sleeve, limit_buffer)
+        msg += "Note: v4.4 monthly-lock blocks daily/redeploy exits unless the monthly window + min hold rules allow them.\n\n"
+
+    if ranked:
+        msg += "📋 RANKED HOLD / WATCH LIST\n"
+        for item in ranked[:max_rank]:
+            msg += _v441_execution_line(item, sleeve, limit_buffer)
+            if len(msg) > MAX_TELEGRAM_MESSAGE - 800:
+                msg += "...list truncated to fit Telegram.\n"
+                break
+
+    if sleeve.upper() == "CORE":
+        msg += (
+            "\nExecution rules:\n"
+            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)}; tiny Core allocation stays cash.\n"
+            "• For LSE/UCITS with commission: corebuy TICKER QTY at FILL_PRICE fee COMMISSION.\n"
+        )
+    elif sleeve.upper() == "GROWTH":
+        msg += (
+            "\nExecution rules:\n"
+            f"• Small-account Growth opens/adds top {V43_GROWTH_EXECUTE_TOP_N_SMALL} first, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}.\n"
+            "• Avoid duplicate Growth/SPEC tickers.\n"
+        )
+    elif sleeve.upper() == "SPEC":
+        msg += (
+            "\nExecution rules:\n"
+            f"• SPEC top 10 is hold/watch; buy/add ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL} only, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}.\n"
+            f"• Max SPEC holdings before new buys: {V43_SPEC_MAX_HOLDINGS_SMALL}.\n"
+        )
+    msg += "• Use ACTUAL_FILL_PRICE after broker fill; do not enter broker average cost if it includes commission.\n"
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V441_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v441_format_monthly_plan(
+        plan,
+        sleeve="CORE",
+        title="🏛️ CORE WEALTH PLAN v4.4.1 — CLEAR EXECUTION VIEW",
+        target_key="target_core_value",
+        current_key="current_core_value",
+        limit_buffer=V441_CORE_LIMIT_BUFFER_PCT,
+        max_rank=WEALTH_CORE_TOP_N,
+    )
+
+
+_V441_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v441_format_monthly_plan(
+        plan,
+        sleeve="GROWTH",
+        title="🚀 GROWTH ALPHA PLAN v4.4.1 — CLEAR EXECUTION VIEW",
+        target_key="target_growth_value",
+        current_key="current_growth_value",
+        limit_buffer=V441_GROWTH_LIMIT_BUFFER_PCT,
+        max_rank=GROWTH_ALPHA_TOP_N,
+    )
+
+
+_V441_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v441_format_monthly_plan(
+        plan,
+        sleeve="SPEC",
+        title="⚡ SPEC_ALPHA PLAN v4.4.1 — CLEAR EXECUTION VIEW",
+        target_key="target_spec_value",
+        current_key="current_spec_value",
+        limit_buffer=V441_SPEC_LIMIT_BUFFER_PCT,
+        max_rank=SPEC_ALPHA_TOP_N,
+    )
+
+
+def _v441_position_over_target(plan: Dict[str, Any], ticker: str, loader_name: str, target_multiplier: float = V441_OVERWEIGHT_RESIZE_THRESHOLD) -> Tuple[bool, str]:
+    try:
+        ticker_norm = normalize_ticker(str(ticker)) or ""
+        if not ticker_norm:
+            return False, "bad ticker"
+        actions = {str(a.get("ticker", "")).upper(): a for a in plan.get("actions", []) or []}
+        item = actions.get(ticker_norm)
+        if not item:
+            return False, "ticker not in current plan"
+        target_value = _v441_float(item.get("target_value"), 0.0)
+        loader = globals().get(loader_name)
+        if loader is None:
+            return False, "loader missing"
+        positions = loader()
+        pos = positions.get(ticker_norm)
+        if not pos:
+            return False, "position not found"
+        prices = get_prices_batch([ticker_norm])
+        mark = _v441_float(prices.get(ticker_norm), _v441_float(pos.get("avg_entry_price") or pos.get("price"), 0.0))
+        current_value = mark * _v441_float(pos.get("shares"), 0.0)
+        if target_value > 0 and current_value > target_value * target_multiplier:
+            return True, f"current {format_money(current_value)} > {round(target_multiplier,2)}x target {format_money(target_value)}"
+        return False, f"current {format_money(current_value)} within target tolerance"
+    except Exception as exc:
+        return False, str(exc)
+
+
+_V441_OLD_RECORD_GROWTH_SELL = record_growth_sell
+
+def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
+        try:
+            ok, reason = _v441_position_over_target(current_growth_plan_for_validation(), ticker, "load_growth_positions")
+            if ok:
+                return _V44_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
+        except Exception:
+            pass
+    return _V441_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
+
+
+_V441_OLD_RECORD_SPEC_SELL = record_spec_sell
+
+def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
+        try:
+            ok, reason = _v441_position_over_target(current_spec_plan_for_validation(), ticker, "load_spec_positions")
+            if ok:
+                return _V44_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
+        except Exception:
+            pass
+    return _V441_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
+
+
+_V441_OLD_RECORD_CORE_SELL = record_core_sell
+
+def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+    if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
+        try:
+            ok, reason = _v441_position_over_target(current_core_plan_for_validation(), ticker, "load_core_positions")
+            if ok:
+                return _V44_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
+        except Exception:
+            pass
+    return _V441_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
+
+
+_V441_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        win = _v44_monthly_rebalance_window_info()
+        send(
+            "🛠️ V4.4.1 CLEAR PLANS + MONTHLY LOCK STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+            "Plan display improvements:\n"
+            "• Core/Growth/SPEC plans now show estimated quantity and max limit guide.\n"
+            "• Messages separate ACTIONABLE buys from HOLD/WATCH monitoring.\n"
+            "• Monthly-lock still blocks daily churn sells.\n"
+            "• Overweight resize sells are allowed only to correct oversized manual buys.\n\n"
+            "Execution policy:\n"
+            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
+            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
+            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+            "• Read-only IBKR reconciliation only; no broker orders are placed."
+        )
+        return
+    return _V441_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+# =============================================================================
+# V4.4.2 PARTIAL-FILL + LEDGER CORRECTION HOTFIX
+# =============================================================================
+# Purpose:
+# - Do not change strategy, universe, scoring, allocations, or risk model.
+# - Keep v4.4 monthly lock and v4.3 cost-aware execution.
+# - Add a narrow way to record legitimate broker partial fills below normal
+#   minimum-order thresholds, without reopening tiny planned micro-trades.
+# - Add confirmed manual ledger position correction commands for rare mistakes.
+
+V442_VERSION = "v4.4.2-partial-fill-ledger-tools-20-45-20-5-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V442_VERSION)
+else:
+    STRATEGY_VERSION = V442_VERSION
+
+V442_ALLOW_PARTIAL_FILL_RECORDING = os.getenv("V442_ALLOW_PARTIAL_FILL_RECORDING", "1").strip() != "0"
+V442_PARTIAL_FILL_MIN_DOLLARS = float(os.getenv("V442_PARTIAL_FILL_MIN_DOLLARS", "25"))
+V442_UNDERFILL_PRIORITY_ENABLED = os.getenv("V442_UNDERFILL_PRIORITY_ENABLED", "1").strip() != "0"
+V442_GROWTH_UNDERFILL_RATIO = float(os.getenv("V442_GROWTH_UNDERFILL_RATIO", "0.85"))
+V442_GROWTH_UNDERFILL_MIN_DOLLARS = float(os.getenv("V442_GROWTH_UNDERFILL_MIN_DOLLARS", "75"))
+V442_ALLOW_LEDGER_EDIT = os.getenv("V442_ALLOW_LEDGER_EDIT", "1").strip() != "0"
+
+
+def _v442_action_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    for item in plan.get("actions", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker_norm:
+            return item
+    return None
+
+
+def _v442_validate_partial_monthly_buy(plan: Dict[str, Any], ticker: str, shares: float, price: float, sleeve: str) -> Tuple[bool, str]:
+    if not V442_ALLOW_PARTIAL_FILL_RECORDING:
+        return False, "partial-fill recording is disabled"
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if not ticker_norm:
+        return False, "invalid ticker"
+    amount = float(shares) * float(price)
+    if not math.isfinite(amount) or amount <= 0:
+        return False, "invalid amount"
+    if amount < V442_PARTIAL_FILL_MIN_DOLLARS:
+        return False, f"partial fill below minimum recordable notional {format_money(V442_PARTIAL_FILL_MIN_DOLLARS)}"
+    item = _v442_action_for_ticker(plan, ticker_norm)
+    if item is None:
+        return False, f"{ticker_norm} is not in the active {sleeve} plan"
+    original_action = str(item.get("v44_original_action") or item.get("action") or "").upper()
+    action = str(item.get("action") or "").upper()
+    acceptable = {"BUY", "ADD", "HOLD", "SKIP"}
+    if action not in acceptable and original_action not in acceptable:
+        return False, f"{ticker_norm} is not a buy/add/hold candidate in the active {sleeve} plan"
+    plan_price = _v441_float(item.get("price"), 0.0)
+    if plan_price > 0:
+        deviation = abs(float(price) - plan_price) / plan_price
+        if deviation > BUY_QUOTE_DEVIATION_LIMIT:
+            return False, f"fill price deviates too far from plan price ({round(deviation*100, 2)}% > {round(BUY_QUOTE_DEVIATION_LIMIT*100, 2)}%)"
+    return True, "OK"
+
+
+def _v442_append_position_note(table: str, ticker: str, note: str) -> None:
+    try:
+        with db_tx() as conn:
+            row = conn.execute(f"SELECT notes FROM {table} WHERE ticker = ?", (ticker,)).fetchone()
+            if row is None:
+                return
+            old = str(row["notes"] or "")
+            joined = (old + " | " + note).strip(" |") if old else note
+            conn.execute(f"UPDATE {table} SET notes = ?, last_update_time = ? WHERE ticker = ?", (joined[:1000], now_ts(), ticker))
+    except Exception as exc:
+        print(f"[V4.4.2 NOTE WARNING] {ticker}: {exc}")
+
+
+_V442_OLD_RECORD_CORE_BUY = record_core_buy
+
+def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if partial_ok:
+        plan = current_core_plan_for_validation()
+        ok, reason = _v442_validate_partial_monthly_buy(plan, ticker_norm, shares, price, "CORE")
+        if not ok:
+            return False, "Core partial-fill recording rejected: " + reason
+        # Bypass v4.3 minimum-order gate only for an already-filled broker partial.
+        ok2, msg = _V43_OLD_RECORD_CORE_BUY(ticker_norm, shares, price, update_id=update_id, fee=fee)
+        if ok2:
+            _v442_append_position_note("core_positions", ticker_norm, f"v4.4.2 partial fill recorded: {shares} @ {price}, fee={fee}")
+            msg += "\n\n🧩 v4.4.2: recorded as broker partial fill below normal Core minimum-order threshold."
+        return ok2, msg
+    return _V442_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
+
+
+_V442_OLD_RECORD_GROWTH_BUY = record_growth_buy
+
+def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if partial_ok:
+        plan = current_growth_plan_for_validation()
+        ok, reason = _v442_validate_partial_monthly_buy(plan, ticker_norm, shares, price, "GROWTH")
+        if not ok:
+            return False, "Growth partial-fill recording rejected: " + reason
+        if V43_GROWTH_AVOID_SPEC_OVERLAP and _v43_has_position("load_spec_positions", ticker_norm) and not _v43_has_position("load_growth_positions", ticker_norm):
+            return False, f"Growth partial-fill recording rejected: {ticker_norm} is already held in SPEC. Keep one ticker in one monthly ledger."
+        ok2, msg = _V43_OLD_RECORD_GROWTH_BUY(ticker_norm, shares, price, update_id=update_id)
+        if ok2:
+            item = _v442_action_for_ticker(plan, ticker_norm) or {}
+            target_value = _v441_float(item.get("target_value"), 0.0)
+            _v442_append_position_note("growth_positions", ticker_norm, f"v4.4.2 partial fill recorded: {shares} @ {price}; target_value={round(target_value,2)}")
+            msg += "\n\n🧩 v4.4.2: recorded as broker partial fill below normal Growth minimum-order threshold. Future plans may show UNDERFILLED ADD priority if it remains a leader."
+        return ok2, msg
+    return _V442_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
+
+
+_V442_OLD_RECORD_SPEC_BUY = record_spec_buy
+
+def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if partial_ok:
+        plan = current_spec_plan_for_validation()
+        ok, reason = _v442_validate_partial_monthly_buy(plan, ticker_norm, shares, price, "SPEC")
+        if not ok:
+            return False, "SPEC partial-fill recording rejected: " + reason
+        if V43_SPEC_AVOID_GROWTH_OVERLAP and _v43_has_position("load_growth_positions", ticker_norm) and not _v43_has_position("load_spec_positions", ticker_norm):
+            return False, f"SPEC partial-fill recording rejected: {ticker_norm} is already held in Growth. Keep one ticker in one monthly ledger."
+        ok2, msg = _V43_OLD_RECORD_SPEC_BUY(ticker_norm, shares, price, update_id=update_id)
+        if ok2:
+            _v442_append_position_note("spec_positions", ticker_norm, f"v4.4.2 partial fill recorded: {shares} @ {price}")
+            msg += "\n\n🧩 v4.4.2: recorded as broker partial fill below normal SPEC minimum-order threshold."
+        return ok2, msg
+    return _V442_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
+
+
+_V442_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
+
+def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    plan = _V442_OLD_COMPUTE_GROWTH_PLAN()
+    if not (V442_UNDERFILL_PRIORITY_ENABLED and V43_COST_AWARE_ENABLED):
+        return plan
+    try:
+        for item in plan.get("actions", []) or []:
+            ticker = str(item.get("ticker", "")).upper()
+            rank = int(item.get("rank") or 999)
+            target_value = _v441_float(item.get("target_value"), 0.0)
+            current_value = _v441_float(item.get("current_value"), 0.0)
+            suggested = max(0.0, target_value - current_value)
+            ratio = current_value / target_value if target_value > 0 else 1.0
+            if (
+                current_value > 0
+                and target_value > 0
+                and ratio < V442_GROWTH_UNDERFILL_RATIO
+                and suggested >= V442_GROWTH_UNDERFILL_MIN_DOLLARS
+                and rank <= V43_GROWTH_EXECUTE_TOP_N_SMALL
+                and str(item.get("action", "")).upper() in {"HOLD", "SKIP"}
+            ):
+                item["action"] = "ADD"
+                item["suggested_dollars"] = round(suggested, 2)
+                item["v442_underfill_priority"] = True
+                item["v43_skip_reason"] = (
+                    f"v4.4.2 underfill priority: current {format_money(current_value)} is {round(ratio*100,1)}% "
+                    f"of target {format_money(target_value)}; catch-up add is allowed if price is within max limit."
+                )
+        plan["v442_underfill_priority"] = {
+            "enabled": True,
+            "growth_underfill_ratio": V442_GROWTH_UNDERFILL_RATIO,
+            "growth_underfill_min_dollars": V442_GROWTH_UNDERFILL_MIN_DOLLARS,
+        }
+    except Exception as exc:
+        print(f"[V4.4.2 UNDERFILL PLAN WARNING] {exc}")
+    return plan
+
+
+# Rewrap plan validation so the v4.4 monthly-lock layer sees the v4.4.2 underfill-adjusted Growth plan.
+def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
+    latest = load_latest_growth_plan()
+    if latest is None:
+        return compute_growth_alpha_plan()
+    plan = latest.get("plan", {}) or {}
+    if V44_MONTHLY_LOCK_ENABLED and not (plan.get("v44_monthly_lock") or {}).get("enabled"):
+        plan = _v44_apply_monthly_lock(plan, "GROWTH")
+    if V442_UNDERFILL_PRIORITY_ENABLED:
+        # Recompute rather than mutate an old stored plan if underfill status may have changed after broker fills.
+        return compute_growth_alpha_plan()
+    return plan
+
+
+def _v442_set_monthly_position(table: str, id_col: str, ticker: str, shares: float, avg_price: float, note: str) -> Tuple[bool, str]:
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if not ticker_norm:
+        return False, "invalid ticker"
+    if not (math.isfinite(float(shares)) and float(shares) > 0 and math.isfinite(float(avg_price)) and float(avg_price) > 0):
+        return False, "shares and average price must be positive"
+    if not V442_ALLOW_LEDGER_EDIT:
+        return False, "ledger edit commands are disabled"
+    try:
+        with db_tx() as conn:
+            row = conn.execute(f"SELECT * FROM {table} WHERE ticker = ?", (ticker_norm,)).fetchone()
+            if row is None:
+                return False, f"{ticker_norm} not found in {table}; use the normal buy command first"
+            cost = round(float(shares) * float(avg_price), 6)
+            old_notes = str(row["notes"] or "") if "notes" in row.keys() else ""
+            new_notes = (old_notes + " | " + note).strip(" |") if old_notes else note
+            conn.execute(
+                f"UPDATE {table} SET shares = ?, avg_entry_price = ?, cost_basis = ?, last_update_time = ?, notes = ? WHERE ticker = ?",
+                (round(float(shares), 8), round(float(avg_price), 6), cost, now_ts(), new_notes[:1000], ticker_norm),
+            )
+        return True, (
+            f"🛠️ LEDGER POSITION EDITED\n\n"
+            f"Ledger table: {table}\n"
+            f"Ticker: {ticker_norm}\n"
+            f"Shares/units: {round(float(shares), 8)}\n"
+            f"Avg price: {round(float(avg_price), 6)}\n"
+            f"Cost basis: {format_money(cost)}\n\n"
+            "Cash and historical trade records were NOT changed. Run brokerreconcile/brokersyncpreview after this if needed."
+        )
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _v442_set_crypto_position(ticker: str, units: float, avg_price: float, note: str) -> Tuple[bool, str]:
+    ticker_norm = normalize_ticker(str(ticker)) or ""
+    if not ticker_norm:
+        return False, "invalid ticker"
+    if not (math.isfinite(float(units)) and float(units) > 0 and math.isfinite(float(avg_price)) and float(avg_price) > 0):
+        return False, "units and average price must be positive"
+    if not V442_ALLOW_LEDGER_EDIT:
+        return False, "ledger edit commands are disabled"
+    try:
+        with db_tx() as conn:
+            row = conn.execute("SELECT * FROM crypto_positions WHERE ticker = ?", (ticker_norm,)).fetchone()
+            if row is None:
+                return False, f"{ticker_norm} not found in crypto_positions; use cryptobuy first"
+            cost = round(float(units) * float(avg_price), 6)
+            old_notes = str(row["notes"] or "")
+            new_notes = (old_notes + " | " + note).strip(" |") if old_notes else note
+            conn.execute(
+                "UPDATE crypto_positions SET units = ?, avg_entry_price = ?, cost_basis = ?, last_update_time = ?, notes = ? WHERE ticker = ?",
+                (round(float(units), 8), round(float(avg_price), 6), cost, now_ts(), new_notes[:1000], ticker_norm),
+            )
+        return True, (
+            f"🛠️ CRYPTO LEDGER POSITION EDITED\n\n"
+            f"Ticker: {ticker_norm}\nUnits: {round(float(units), 8)}\nAvg price: {round(float(avg_price), 6)}\nCost basis: {format_money(cost)}\n\n"
+            "Cash and historical trade records were NOT changed."
+        )
+    except Exception as exc:
+        return False, str(exc)
+
+
+_V442_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _v441_format_monthly_plan(
+        plan,
+        sleeve="GROWTH",
+        title="🚀 GROWTH ALPHA PLAN v4.4.2 — CLEAR EXECUTION + UNDERFILL VIEW",
+        target_key="target_growth_value",
+        current_key="current_growth_value",
+        limit_buffer=V441_GROWTH_LIMIT_BUFFER_PCT,
+        max_rank=GROWTH_ALPHA_TOP_N,
+    )
+    extra = (
+        "\n🧩 v4.4.2 underfill rule:\n"
+        f"• Confirmed partial fills can be recorded with: growthbuy TICKER QTY at PRICE partial\n"
+        f"• Underfilled top-{V43_GROWTH_EXECUTE_TOP_N_SMALL} Growth leaders can be prioritized for later catch-up adds if still leading.\n"
+    )
+    return (msg + extra)[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _v441_format_monthly_plan(
+        plan,
+        sleeve="CORE",
+        title="🏛️ CORE WEALTH PLAN v4.4.2 — CLEAR EXECUTION VIEW",
+        target_key="target_core_value",
+        current_key="current_core_value",
+        limit_buffer=V441_CORE_LIMIT_BUFFER_PCT,
+        max_rank=WEALTH_CORE_TOP_N,
+    )
+    return (msg + "\n🧩 v4.4.2: Core partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    msg = _v441_format_monthly_plan(
+        plan,
+        sleeve="SPEC",
+        title="⚡ SPEC_ALPHA PLAN v4.4.2 — CLEAR EXECUTION VIEW",
+        target_key="target_spec_value",
+        current_key="current_spec_value",
+        limit_buffer=V441_SPEC_LIMIT_BUFFER_PCT,
+        max_rank=SPEC_ALPHA_TOP_N,
+    )
+    return (msg + "\n🧩 v4.4.2: SPEC partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
+
+
+_V442_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+
+    if text_lower in {"v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        win = _v44_monthly_rebalance_window_info()
+        send(
+            "🛠️ V4.4.2 PARTIAL-FILL + MONTHLY LOCK STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+            "Execution controls:\n"
+            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
+            f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
+            f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+            "\nPartial-fill commands after a real broker fill:\n"
+            "• growthbuy TICKER QTY at PRICE partial\n"
+            "• specbuy TICKER QTY at PRICE partial\n"
+            "• corebuy TICKER QTY at PRICE fee COMMISSION partial\n\n"
+            "Manual correction commands, existing positions only, CONFIRM required:\n"
+            "• editgrowth TICKER SHARES at AVG_PRICE CONFIRM\n"
+            "• editspec TICKER SHARES at AVG_PRICE CONFIRM\n"
+            "• editcore TICKER SHARES at AVG_PRICE CONFIRM\n"
+            "• editcrypto TICKER UNITS at AVG_PRICE CONFIRM\n\n"
+            "Read-only IBKR reconciliation only; no broker orders are placed."
+        )
+        return
+
+    # Confirmed partial-fill recording for monthly ledgers.
+    core_partial = re.fullmatch(
+        r"(?i)\s*corebuy\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+fee\s+([0-9]+(?:\.[0-9]+)?))?\s+partial\s*",
+        text_clean,
+    )
+    if core_partial:
+        ticker = normalize_ticker(core_partial.group(1))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        shares = float(core_partial.group(2)); price = float(core_partial.group(3)); fee = float(core_partial.group(4) or 0.0)
+        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=True)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    monthly_partial = re.fullmatch(
+        r"(?i)\s*(growthbuy|specbuy)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+partial\s*",
+        text_clean,
+    )
+    if monthly_partial:
+        action = monthly_partial.group(1).lower()
+        ticker = normalize_ticker(monthly_partial.group(2))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        shares = float(monthly_partial.group(3)); price = float(monthly_partial.group(4))
+        if action == "growthbuy":
+            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
+        else:
+            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    # Manual ledger correction commands. These do not touch cash or trade history.
+    edit_cmd = re.fullmatch(
+        r"(?i)\s*(editcore|editgrowth|editspec|editcrypto)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+CONFIRM\s*",
+        text_clean,
+    )
+    if edit_cmd:
+        cmd = edit_cmd.group(1).lower()
+        ticker = normalize_ticker(edit_cmd.group(2))
+        qty = float(edit_cmd.group(3)); avg = float(edit_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        note = f"v4.4.2 manual ledger edit at {ny_now().strftime('%Y-%m-%d %H:%M %Z')}"
+        if cmd == "editcore":
+            ok, msg = _v442_set_monthly_position("core_positions", "core_position_id", ticker, qty, avg, note)
+        elif cmd == "editgrowth":
+            ok, msg = _v442_set_monthly_position("growth_positions", "growth_position_id", ticker, qty, avg, note)
+        elif cmd == "editspec":
+            ok, msg = _v442_set_monthly_position("spec_positions", "spec_position_id", ticker, qty, avg, note)
+        else:
+            ok, msg = _v442_set_crypto_position(ticker, qty, avg, note)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    return _V442_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
 if __name__ == "__main__":
 
 
