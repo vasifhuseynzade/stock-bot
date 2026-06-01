@@ -27641,6 +27641,508 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     return _V462_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+# =============================================================================
+# V4.6.3 MONTHLY DASHBOARD + CRYPTO AUTO ALERTS
+# =============================================================================
+# Operational / UX patch only. No strategy scoring, allocation, or execution-rule
+# changes. Purpose:
+# - Send one private monthly dashboard for Core/Growth/SPEC so the user does not
+#   need to remember wealthplan/growthplan/specplan.
+# - Send detailed Core/Growth/SPEC plans together from that dashboard once/month.
+# - Add Crypto Alpha tactical auto-checks because Crypto is not a monthly sleeve.
+# - Keep Swing Alpha as the live tactical scan engine and IBKR read-only.
+
+V463_VERSION = "v4.6.3-monthly-dashboard-crypto-alerts-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V463_VERSION)
+else:
+    STRATEGY_VERSION = V463_VERSION
+
+V463_VALIDATION_STRATEGY_LABEL = "v4.6.3 monthly dashboard + crypto auto alerts over v4.6.2 Swing Alpha/Hybrid Crypto"
+V463_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V463_MONTHLY_DASHBOARD_ENABLED = os.getenv("V463_MONTHLY_DASHBOARD_ENABLED", "1").strip() != "0"
+V463_MONTHLY_SEND_DETAILED_PLANS = os.getenv("V463_MONTHLY_SEND_DETAILED_PLANS", "1").strip() != "0"
+V463_MONTHLY_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("V463_MONTHLY_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 18)))
+V463_MONTHLY_REQUIRE_REBALANCE_WINDOW = os.getenv("V463_MONTHLY_REQUIRE_REBALANCE_WINDOW", "1").strip() != "0"
+V463_CRYPTO_AUTO_CHECK_ENABLED = os.getenv("V463_CRYPTO_AUTO_CHECK_ENABLED", "1").strip() != "0"
+V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN = int(os.getenv("V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN", "240"))
+V463_CRYPTO_DAILY_STATUS_MINUTE = int(os.getenv("V463_CRYPTO_DAILY_STATUS_MINUTE", str(16 * 60 + 25)))
+V463_CRYPTO_SEND_NO_ACTION_DAILY = os.getenv("V463_CRYPTO_SEND_NO_ACTION_DAILY", "1").strip() != "0"
+
+
+def _v463_after_minute(minute: int) -> bool:
+    n = ny_now()
+    return (n.hour * 60 + n.minute) >= int(minute)
+
+
+def _v463_plan_actions(plan: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not plan:
+        return []
+    raw = plan.get("actionable")
+    if raw is None:
+        raw = plan.get("actions", []) or []
+    out: List[Dict[str, Any]] = []
+    for item in raw or []:
+        if str(item.get("action", "")).upper() in {"BUY", "ADD", "TRIM", "SELL"}:
+            out.append(item)
+    return out
+
+
+def _v463_summarize_plan(label: str, plan: Optional[Dict[str, Any]], error: Optional[str] = None) -> str:
+    if error:
+        return f"• {label}: ⚠️ error — {error}"
+    if not plan:
+        return f"• {label}: ⚠️ unavailable"
+    acts = _v463_plan_actions(plan)
+    if not acts:
+        return f"• {label}: ✅ no actionable trade now"
+    parts: List[str] = []
+    for item in acts[:4]:
+        action = str(item.get("action", "?")).upper()
+        ticker = str(item.get("ticker", "?")).upper()
+        amount = item.get("suggested_dollars", item.get("target_value", item.get("current_value", 0)))
+        try:
+            amount_txt = format_money(float(amount or 0))
+        except Exception:
+            amount_txt = "n/a"
+        parts.append(f"{action} {ticker} ~{amount_txt}")
+    if len(acts) > 4:
+        parts.append(f"+{len(acts)-4} more")
+    return f"• {label}: ⚠️ " + "; ".join(parts)
+
+
+def _v463_crypto_gate_signature(plan: Dict[str, Any]) -> str:
+    gate = plan.get("gate", {}) or {}
+    rows = gate.get("rows", []) or []
+    row_sig = ",".join(f"{str(r.get('ticker','')).upper()}:{1 if r.get('ok') else 0}" for r in rows)
+    return f"btc={1 if gate.get('btc_ok') else 0}|gate2={1 if gate.get('gate2_ok') else 0}|rows={row_sig}"
+
+
+def _v463_crypto_action_signature(plan: Dict[str, Any]) -> str:
+    acts = _v463_plan_actions(plan)
+    if not acts:
+        return "NO_ACTION"
+    parts: List[str] = []
+    for item in acts:
+        parts.append(
+            f"{str(item.get('action','')).upper()}:{str(item.get('ticker','')).upper()}:{str(item.get('sub_strategy',''))}:"
+            f"{round(float(item.get('target_value',0) or 0),2)}:{round(float(item.get('current_value',0) or 0),2)}"
+        )
+    return "|".join(parts)
+
+
+def _v463_prepare_dashboard_plans() -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Dict[str, str]]:
+    errors: Dict[str, str] = {}
+    core_plan = growth_plan = spec_plan = crypto_plan = None
+    try:
+        core_plan = compute_wealth_core_plan()
+        save_core_plan_signal(core_plan)
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 MONTHLY CORE ERROR] {exc}")
+        errors["Core"] = str(exc)
+    try:
+        growth_plan = compute_growth_alpha_plan()
+        save_growth_plan_signal(growth_plan)
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 MONTHLY GROWTH ERROR] {exc}")
+        errors["Growth"] = str(exc)
+    try:
+        spec_plan = compute_spec_alpha_plan()
+        save_spec_plan_signal(spec_plan)
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 MONTHLY SPEC ERROR] {exc}")
+        errors["SPEC"] = str(exc)
+    try:
+        crypto_plan = compute_crypto_alpha_plan()
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 CRYPTO SUMMARY ERROR] {exc}")
+        errors["Crypto"] = str(exc)
+    return core_plan, growth_plan, spec_plan, crypto_plan, errors
+
+
+def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optional[Dict[str, Any]], spec_plan: Optional[Dict[str, Any]], crypto_plan: Optional[Dict[str, Any]], errors: Dict[str, str]) -> str:
+    try:
+        win = _v44_monthly_rebalance_window_info()
+        win_text = f"{yes_no(bool(win.get('open')))} — {win.get('reason')}"
+    except Exception as exc:
+        win_text = f"n/a — {exc}"
+    return (
+        "🗓️ MONTHLY ACTION DASHBOARD v4.6.3\n\n"
+        "This is the monthly control message. You should not need to manually run wealthplan/growthplan/specplan.\n\n"
+        f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
+        f"Monthly window: {win_text}\n"
+        f"Allocation: {V463_ALLOCATION_LABEL}\n\n"
+        "Monthly rotation sleeves:\n"
+        f"{_v463_summarize_plan('Core', core_plan, errors.get('Core'))}\n"
+        f"{_v463_summarize_plan('Growth', growth_plan, errors.get('Growth'))}\n"
+        f"{_v463_summarize_plan('SPEC', spec_plan, errors.get('SPEC'))}\n\n"
+        "Tactical sleeves:\n"
+        "• Swing Alpha: automatic near-close entries/exits; record with swingbuy/swingsell after broker fill.\n"
+        f"{_v463_summarize_plan('Crypto', crypto_plan, errors.get('Crypto'))}\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly sleeves; daily checks are monitoring.\n"
+        "• Crypto is tactical, not monthly. It has separate auto checks.\n"
+        "• Execute in IBKR first, then record using the correct ledger command.\n"
+        "• IBKR remains read-only; no orders are placed by the bot.\n"
+        + ("\nDetailed Core/Growth/SPEC plans follow." if V463_MONTHLY_SEND_DETAILED_PLANS else "")
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False) -> bool:
+    if not (V463_MONTHLY_DASHBOARD_ENABLED or force):
+        return False
+    n = ny_now()
+    if not force:
+        if is_market_weekday(n) and not _v463_after_minute(V463_MONTHLY_REVIEW_AFTER_CLOSE_MINUTE):
+            return False
+        if V463_MONTHLY_REQUIRE_REBALANCE_WINDOW:
+            try:
+                if not bool(_v44_monthly_rebalance_window_info().get("open")):
+                    return False
+            except Exception:
+                return False
+        month_key = n.strftime("%Y-%m")
+        if get_meta("last_v463_monthly_dashboard_month") == month_key:
+            return False
+    else:
+        month_key = n.strftime("%Y-%m")
+    core_plan, growth_plan, spec_plan, crypto_plan, errors = _v463_prepare_dashboard_plans()
+    send(_v463_dashboard_text(core_plan, growth_plan, spec_plan, crypto_plan, errors))
+    if V463_MONTHLY_SEND_DETAILED_PLANS:
+        if core_plan is not None:
+            send(format_wealth_core_plan(core_plan))
+        if growth_plan is not None:
+            send(format_growth_alpha_plan(growth_plan))
+        if spec_plan is not None:
+            send(format_spec_alpha_plan(spec_plan))
+        if crypto_plan is not None:
+            send(format_crypto_alpha_plan(crypto_plan))
+    if not preview_only:
+        set_meta("last_v463_monthly_dashboard_month", month_key)
+        set_meta("last_v463_monthly_dashboard_ts", str(now_ts()))
+        # Mark old monthly keys to stop older wrappers from later sending a partial/single sleeve plan.
+        set_meta("last_wealth_core_month", month_key)
+        set_meta("last_wealth_core_alert_ts", str(now_ts()))
+        set_meta("last_growth_alpha_month", month_key)
+        set_meta("last_growth_alpha_alert_ts", str(now_ts()))
+        set_meta("last_spec_alpha_month", month_key)
+        set_meta("last_spec_alpha_alert_ts", str(now_ts()))
+        audit("V463_MONTHLY_DASHBOARD", f"month={month_key} errors={list(errors.keys())}")
+    return True
+
+
+def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:
+    if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
+        return False
+    if not CRYPTO_ALPHA_ENABLED:
+        return False
+    n = ny_now()
+    today = n.date().isoformat()
+    if not force:
+        last_ts = get_meta("last_v463_crypto_auto_check_ts")
+        if last_ts:
+            try:
+                elapsed = (now_ts() - float(last_ts)) / 60.0
+                daily_due = V463_CRYPTO_SEND_NO_ACTION_DAILY and _v463_after_minute(V463_CRYPTO_DAILY_STATUS_MINUTE) and get_meta("last_v463_crypto_daily_status_day") != today
+                if elapsed < max(15, V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN) and not daily_due:
+                    return False
+            except Exception:
+                pass
+    try:
+        plan = compute_crypto_alpha_plan()
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 CRYPTO AUTO CHECK ERROR] {exc}")
+        if force:
+            send(f"⚠️ Crypto auto-check failed: {exc}")
+        return False
+    set_meta("last_v463_crypto_auto_check_ts", str(now_ts()))
+    gate_sig = _v463_crypto_gate_signature(plan)
+    action_sig = _v463_crypto_action_signature(plan)
+    last_gate = get_meta("last_v463_crypto_gate_signature")
+    last_action = get_meta("last_v463_crypto_action_signature")
+    reason = ""
+    if force:
+        reason = "manual check"
+    elif action_sig != "NO_ACTION" and action_sig != last_action:
+        reason = "new crypto action"
+    elif last_gate is not None and gate_sig != last_gate:
+        reason = "crypto gate changed"
+    elif V463_CRYPTO_SEND_NO_ACTION_DAILY and _v463_after_minute(V463_CRYPTO_DAILY_STATUS_MINUTE) and get_meta("last_v463_crypto_daily_status_day") != today:
+        reason = "daily crypto status"
+    if not reason:
+        if last_gate is None:
+            set_meta("last_v463_crypto_gate_signature", gate_sig)
+        if last_action is None:
+            set_meta("last_v463_crypto_action_signature", action_sig)
+        return False
+    header = f"🪙 CRYPTO AUTO CHECK v4.6.3 — {reason}\n\n"
+    send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
+    set_meta("last_v463_crypto_gate_signature", gate_sig)
+    set_meta("last_v463_crypto_action_signature", action_sig)
+    if reason == "daily crypto status":
+        set_meta("last_v463_crypto_daily_status_day", today)
+    audit("V463_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
+    return True
+
+
+# Replace the chained monthly hook with a unified user-friendly hook.
+def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
+    try:
+        send_v463_monthly_dashboard(force=False, preview_only=False)
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 MONTHLY DASHBOARD ERROR] {exc}")
+    try:
+        maybe_send_crypto_alpha_auto_signal(force=False)
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 CRYPTO AUTO ERROR] {exc}")
+    try:
+        maybe_send_ibkr_reconcile_after_close()
+    except Exception as exc:
+        logger.exception(f"[V4.6.3 IBKR AUTO ERROR] {exc}")
+
+
+def _v463_label_cleanup(text: Any) -> str:
+    out = str(text)
+    for old, new in [
+        ("v4.6.2", "v4.6.3"), ("V4.6.2", "V4.6.3"),
+        ("v4.6.1", "v4.6.3"), ("V4.6.1", "V4.6.3"),
+    ]:
+        out = out.replace(old, new)
+    out = out.replace(V461_VALIDATION_STRATEGY_LABEL, V463_VALIDATION_STRATEGY_LABEL)
+    out = out.replace(V461_ALLOCATION_LABEL, V463_ALLOCATION_LABEL)
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+_V463_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
+_V463_OLD_FORMAT_VALIDATION = format_validation_status
+_V463_OLD_FORMAT_INSTITUTIONAL = format_institutional_status
+_V463_OLD_FORMAT_DATAHEALTH = format_datahealth_status
+_V463_OLD_FORMAT_RISK = format_riskmatrix_status
+_V463_OLD_FORMAT_STRESS = format_stress_status
+_V463_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V463_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V463_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    msg = _v463_label_cleanup(_V463_OLD_FORMAT_ALLOCATION_PLAN())
+    note = (
+        "\n\n🧭 v4.6.3 automation note:\n"
+        "• Monthly dashboard auto-sends Core/Growth/SPEC during the monthly review window.\n"
+        "• Crypto auto-checks separately because it is tactical, not monthly.\n"
+    )
+    return (msg + note)[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    msg = _v463_label_cleanup(_V463_OLD_FORMAT_VALIDATION())
+    msg += (
+        "\n\nUser-friendly automation v4.6.3:\n"
+        "• Core/Growth/SPEC full monthly plans are sent together by the dashboard.\n"
+        "• Crypto sends tactical auto-check messages when action/gate changes and daily after the configured review time.\n"
+        "• Swing Alpha remains the live near-close signal engine.\n"
+    )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_INSTITUTIONAL())
+
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_DATAHEALTH())
+
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_RISK())
+
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_STRESS())
+
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSTATUS())
+
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERRECONCILE())
+
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSYNCPREVIEW())
+
+
+def _v463_status_text() -> str:
+    try:
+        win = _v44_monthly_rebalance_window_info()
+        win_txt = f"{yes_no(bool(win.get('open')))} — {win.get('reason')}"
+    except Exception:
+        win_txt = "n/a"
+    try:
+        cp = compute_crypto_alpha_plan()
+        crypto_actions = len(_v463_plan_actions(cp))
+        gate = cp.get("gate", {}) or {}
+        crypto_txt = f"BTC gate {yes_no(bool(gate.get('btc_ok')))}, 4h gate {yes_no(bool(gate.get('gate2_ok')))}, actions {crypto_actions}"
+    except Exception as exc:
+        crypto_txt = f"error: {exc}"
+    return (
+        "🛠️ V4.6.3 MONTHLY DASHBOARD + CRYPTO ALERT STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Strategy logic: {V463_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V463_ALLOCATION_LABEL}\n"
+        f"Monthly dashboard enabled: {yes_no(V463_MONTHLY_DASHBOARD_ENABLED)}\n"
+        f"Monthly detailed plans: {yes_no(V463_MONTHLY_SEND_DETAILED_PLANS)}\n"
+        f"Monthly window: {win_txt}\n"
+        f"Last monthly dashboard: {get_meta('last_v463_monthly_dashboard_month', 'None')}\n\n"
+        f"Crypto auto-check enabled: {yes_no(V463_CRYPTO_AUTO_CHECK_ENABLED)}\n"
+        f"Crypto check interval: {V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN} minutes\n"
+        f"Crypto daily status: {yes_no(V463_CRYPTO_SEND_NO_ACTION_DAILY)} after minute {V463_CRYPTO_DAILY_STATUS_MINUTE}\n"
+        f"Crypto current check: {crypto_txt}\n\n"
+        "Commands:\n"
+        "• monthlydashboard — force monthly dashboard preview now\n"
+        "• cryptocheck — force crypto tactical check now\n"
+        "• cryptoplan — manual crypto full plan\n"
+        "• swingstatus/swingplan — Swing Alpha status/preview\n\n"
+        "No broker orders are placed. IBKR reconciliation remains read-only."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+_V463_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v463status", "dashboardstatus", "v462status", "deploycheck"}:
+        send(_v463_status_text())
+        return
+    if text_lower in {"monthlydashboard", "rebalancedashboard", "dashboard"}:
+        send_v463_monthly_dashboard(force=True, preview_only=True)
+        return
+    if text_lower in {"cryptocheck", "cryptoalert", "cryptoscan"}:
+        maybe_send_crypto_alpha_auto_signal(force=True)
+        return
+    return _V463_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+_V463_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V463_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("v463_monthly_dashboard_crypto_alerts.json", json.dumps(safe_convert({
+                "version": V463_VERSION,
+                "strategy_logic": V463_VALIDATION_STRATEGY_LABEL,
+                "allocation": V463_ALLOCATION_LABEL,
+                "monthly_dashboard_enabled": V463_MONTHLY_DASHBOARD_ENABLED,
+                "monthly_send_detailed_plans": V463_MONTHLY_SEND_DETAILED_PLANS,
+                "crypto_auto_check_enabled": V463_CRYPTO_AUTO_CHECK_ENABLED,
+                "crypto_check_interval_min": V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN,
+                "crypto_daily_status_enabled": V463_CRYPTO_SEND_NO_ACTION_DAILY,
+                "notes": "v4.6.3 adds a monthly dashboard and crypto tactical auto alerts. No strategy scoring changed; no broker orders are placed.",
+            }), indent=2))
+    except Exception as exc:
+        print(f"[V4.6.3 EXPORT WARNING] {exc}")
+    return zip_path
+
+
+# ---- v4.6.3 final label/user-facing cleanup ----
+# Keep crypto daily status closer to U.S. after-close by default; the 4h/action
+# checks are still throttled separately by V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN.
+V463_CRYPTO_DAILY_STATUS_MINUTE = int(os.getenv("V463_CRYPTO_DAILY_STATUS_MINUTE", str(16 * 60 + 30)))
+
+
+def _v463_label_cleanup(text: Any) -> str:  # type: ignore[override]
+    out = str(text)
+    for old, new in [
+        ("v4.6.2", "v4.6.3"), ("V4.6.2", "V4.6.3"),
+        ("v4.6.1", "v4.6.3"), ("V4.6.1", "V4.6.3"),
+        ("v4.6 —", "v4.6.3 —"), ("v4.6 -", "v4.6.3 -"),
+        ("v4.5 —", "v4.6.3 —"), ("v4.5 -", "v4.6.3 -"),
+        ("v4.5:", "v4.6.3:"), (" v4.5", " v4.6.3"),
+        ("v4.4.2", "v4.6.3"), ("V4.4.2", "V4.6.3"),
+        ("v4.3", "v4.6.3"), ("V4.3", "V4.6.3"),
+    ]:
+        out = out.replace(old, new)
+    out = out.replace("default buys use cheaper major crypto names", "uses BTC/ETH/SOL hybrid major-trend candidates")
+    out = out.replace("BTC/ETH/SOL are indicators;", "BTC/ETH/SOL are both indicators and tradable candidates;")
+    try:
+        out = out.replace(V461_VALIDATION_STRATEGY_LABEL, V463_VALIDATION_STRATEGY_LABEL)
+        out = out.replace(V461_ALLOCATION_LABEL, V463_ALLOCATION_LABEL)
+    except Exception:
+        pass
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+
+_V463_FINAL_OLD_CORE_PLAN_FORMAT = format_wealth_core_plan
+_V463_FINAL_OLD_GROWTH_PLAN_FORMAT = format_growth_alpha_plan
+_V463_FINAL_OLD_SPEC_PLAN_FORMAT = format_spec_alpha_plan
+_V463_FINAL_OLD_CRYPTO_PLAN_FORMAT = format_crypto_alpha_plan
+_V463_FINAL_OLD_SWING_PLAN_FORMAT = format_swing_alpha_plan
+
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_FINAL_OLD_CORE_PLAN_FORMAT(plan))
+
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_FINAL_OLD_GROWTH_PLAN_FORMAT(plan))
+
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_FINAL_OLD_SPEC_PLAN_FORMAT(plan))
+
+
+def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_FINAL_OLD_CRYPTO_PLAN_FORMAT(plan))
+
+
+def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v463_label_cleanup(_V463_FINAL_OLD_SWING_PLAN_FORMAT(plan))
+
+
+def _v463_cryptostatus_text() -> str:
+    alloc = dynamic_portfolio_allocation_targets()
+    latest = load_latest_crypto_signal()
+    details = crypto_position_market_value_details()
+    gate = crypto_indicator_gate()
+    return (
+        "🪙 CRYPTO_ALPHA STATUS v4.6.3\n\n"
+        f"Enabled: {yes_no(CRYPTO_ALPHA_ENABLED)}\n"
+        f"Ledger enabled: {yes_no(CRYPTO_ALPHA_LEDGER_ENABLED)}\n"
+        f"Auto alerts: {yes_no(V463_CRYPTO_AUTO_CHECK_ENABLED)} | interval {V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN} min\n"
+        f"Target now: {alloc.get('crypto_alpha_pct')}% of account\n"
+        "Strategy: BTC/ETH/SOL hybrid major trend — 70% daily breakout + 30% 4h compression\n"
+        f"Universe: {', '.join(CRYPTO_ALPHA_UNIVERSE)}\n"
+        f"Daily BTC gate: {yes_no(bool(gate.get('btc_ok') or gate.get('ok')))}\n"
+        f"4h gate: {yes_no(bool(gate.get('gate2_ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200; required 2)\n"
+        f"Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+        f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+        "Commands:\n"
+        "cryptoplan — full tactical crypto plan now\n"
+        "cryptocheck — force the auto-check logic now\n"
+        "cryptobuy TICKER UNITS at PRICE\n"
+        "cryptosell TICKER UNITS at PRICE\n"
+        "cryptoportfolio | cryptopnl | cryptoexposure"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+_V463_FINAL_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower == "cryptostatus":
+        send(_v463_cryptostatus_text())
+        return
+    if text_lower == "cryptoplan":
+        send("🪙 Crypto tactical plan started. v4.6.3 scores BTC/ETH/SOL hybrid daily breakout + 4h compression modules.")
+        plan = compute_crypto_alpha_plan()
+        save_crypto_plan_signal(plan)
+        send(format_crypto_alpha_plan(plan))
+        return
+    return _V463_FINAL_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
 if __name__ == "__main__":
 
 
