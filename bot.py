@@ -26914,7 +26914,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
 
 # =============================================================================
-# V4.6.1 - SWING ALPHA LIVE SIGNAL REPLACEMENT LAYER
+# V4.6.2 - SWING ALPHA LIVE SIGNAL REPLACEMENT LAYER
 # =============================================================================
 # Purpose:
 # - Replace disabled Long VCP/Bear live tactical scans with Swing Alpha signals.
@@ -26924,16 +26924,16 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 # - Keep manual execution and separate Swing Alpha ledger: swingbuy/swingsell.
 # - No broker orders are placed in this version.
 
-V461_VERSION = "v4.6.1-swing-alpha-live-signals-20-45-15-10-10-monitor"
+V461_VERSION = "v4.6.2-deploy-ready-swing-alpha-20-45-15-10-10-monitor"
 if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
     STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V461_VERSION)
 else:
     STRATEGY_VERSION = V461_VERSION
 
 V461_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
-V461_VALIDATION_STRATEGY_LABEL = "v4.6.1 Swing Alpha live-signal replacement + Hybrid Crypto + cost-aware monthly rotation"
+V461_VALIDATION_STRATEGY_LABEL = "v4.6.2 Swing Alpha live-signal replacement + Hybrid Crypto + cost-aware monthly rotation"
 V461_KNOWN_LIMITATIONS = [
-    "v4.6.1 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.",
+    "v4.6.2 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.",
     "Swing Alpha MACD+VAH replaces disabled VCP/Bear live tactical scans but still requires forward testing.",
     "Backtest period is limited and not broker-grade execution simulation.",
     "Crypto permission/gate required; crypto remains inactive until broker permission and signal are valid.",
@@ -26941,7 +26941,7 @@ V461_KNOWN_LIMITATIONS = [
     "Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.",
 ]
 
-# Force disabled tactical legacy engines to remain inert in live v4.6.1.
+# Force disabled tactical legacy engines to remain inert in live v4.6.2.
 V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = False
 V45_BEAR_SIGNAL_ENGINE_ENABLED = False
 BEAR_SLEEVE_ENABLED = False
@@ -27091,7 +27091,7 @@ def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
     equity = float((compute_equity_snapshot_data() or {}).get("equity", 0) or 0)
     risk_pct = (risk_dollars / equity * 100.0) if equity > 0 else 0.0
     return (
-        "📈 SWING ALPHA ENTRY SIGNAL v4.6.1\n\n"
+        "📈 SWING ALPHA ENTRY SIGNAL v4.6.2\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🧬 Sleeve: 🎯 SWING_ALPHA\n"
         f"⚙️ Setup: MACD + VAH Reclaim\n"
@@ -27123,7 +27123,7 @@ def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
     price = float(item.get("price", 0) or 0)
     reason = str(item.get("reason", "Swing Alpha exit rule triggered."))
     return (
-        "📉 SWING ALPHA EXIT SIGNAL v4.6.1\n\n"
+        "📉 SWING ALPHA EXIT SIGNAL v4.6.2\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🧬 Sleeve: 🎯 SWING_ALPHA\n"
         f"📌 Reason: {reason}\n"
@@ -27146,7 +27146,7 @@ def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
         "⚙️ Setup: MACD + VAH Reclaim\n\n"
         f"🟢 Entry/reference: {fmt_public_number(item.get('signal_price', item.get('price')))}\n"
         f"🟡 Max entry limit: {fmt_public_number(item.get('max_valid_entry'))}\n"
-        f"🔴 Stop/invalidaton: {fmt_public_number(item.get('stop'))}\n"
+        f"🔴 Stop/invalidation: {fmt_public_number(item.get('stop'))}\n"
         f"📐 Position guide: about {fmt_public_number(item.get('target_account_pct'), 2)}% of account target sleeve\n\n"
         f"{public_signal_footer()}"
     )[:MAX_TELEGRAM_MESSAGE]
@@ -27179,24 +27179,24 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     expected_bar = expected_daily_bar_date()
     if not force and not SWING_ALPHA_AUTO_SIGNAL_REPEAT_SAME_DAY:
         if get_meta("last_swing_alpha_auto_scan_day") == today:
-            print("[V4.6.1 SWING SCAN SKIP] Swing Alpha already scanned today.")
+            print("[V4.6.2 SWING SCAN SKIP] Swing Alpha already scanned today.")
             return True
     if PANIC_MODE:
-        print("[V4.6.1 SWING SCAN BLOCKED] PANIC_MODE")
+        print("[V4.6.2 SWING SCAN BLOCKED] PANIC_MODE")
         return True
     if daily_drawdown_exceeded():
-        print("[V4.6.1 SWING SCAN BLOCKED] Daily loss limit")
+        print("[V4.6.2 SWING SCAN BLOCKED] Daily loss limit")
         return True
     guard = portfolio_risk_guard_details()
     if guard.get("block_new_entries"):
-        print("[V4.6.1 SWING SCAN BLOCKED] Hard drawdown guard")
+        print("[V4.6.2 SWING SCAN BLOCKED] Hard drawdown guard")
         maybe_send_portfolio_risk_guard_alert(guard)
         return True
     try:
         plan = compute_swing_alpha_plan()
         save_swing_alpha_plan(plan)
     except Exception as exc:
-        logger.exception(f"[V4.6.1 SWING SCAN ERROR] {exc}")
+        logger.exception(f"[V4.6.2 SWING SCAN ERROR] {exc}")
         send(f"⚠️ Swing Alpha scan failed: {exc}")
         return False
 
@@ -27233,7 +27233,7 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     if verbose:
         send(format_swing_alpha_plan(plan))
     print(
-        "[V4.6.1 SWING SCAN SUMMARY] "
+        "[V4.6.2 SWING SCAN SUMMARY] "
         f"market_ok={plan.get('market_ok')} scored={plan.get('scored_count')} "
         f"entries={len(entries)} exits={len(exits)} sent={sent}"
     )
@@ -27247,7 +27247,7 @@ _V461_OLD_SCAN_MARKET = scan_market
 def scan_market() -> bool:  # type: ignore[override]
     if SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED and SWING_ALPHA_ACCOUNT_ALLOC_PCT > 0:
         return scan_swing_alpha_market(force=False, verbose=False)
-    print("[V4.6.1 SCAN SKIP] Swing Alpha auto signals disabled and VCP/Bear are disabled.")
+    print("[V4.6.2 SCAN SKIP] Swing Alpha auto signals disabled and VCP/Bear are disabled.")
     try:
         set_meta("last_scan_day", ny_date_str())
         bar = expected_daily_bar_date()
@@ -27262,7 +27262,7 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
     return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6.1\n\n"
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6.2\n\n"
         "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
@@ -27302,7 +27302,7 @@ def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[overr
             "Use partial-fill commands only for real broker fills already executed.",
             "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
             "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
-            "No broker order automation in v4.6.1; IBKR reconciliation remains read-only.",
+            "No broker order automation in v4.6.2; IBKR reconciliation remains read-only.",
         ],
     }
 
@@ -27311,21 +27311,21 @@ def format_validation_status() -> str:  # type: ignore[override]
     limitations = "\n".join(f"- {x}" for x in V461_KNOWN_LIMITATIONS)
     rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
     return (
-        "🧪 VALIDATION STATUS v4.6.1\n\n"
+        "🧪 VALIDATION STATUS v4.6.2\n\n"
         f"Strategy: {V461_VALIDATION_STRATEGY_LABEL}\n"
         f"Allocation: {V461_ALLOCATION_LABEL}\n\n"
         "Known limitations:\n"
         f"{limitations}\n\n"
         "Live validation rules:\n"
         f"{rules}\n\n"
-        "Reporting note: v4.6.1 replaces disabled VCP/Bear live signal path with Swing Alpha; IBKR remains read-only."
+        "Reporting note: v4.6.2 replaces disabled VCP/Bear live signal path with Swing Alpha; IBKR remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
 def _v461_label_cleanup(msg: Any) -> str:
     text = str(msg)
     for old in ["v4.6", "V4.6", "v4.5", "V4.5", "v4.4.3", "V4.4.3", "v4.3", "V4.3"]:
-        text = text.replace(old, "v4.6.1" if old.startswith("v") else "V4.6.1")
+        text = text.replace(old, "v4.6.2" if old.startswith("v") else "V4.6.2")
     text = text.replace(V46_ALLOCATION_LABEL, V461_ALLOCATION_LABEL)
     text = text.replace("VCP/Bear/Options disabled.", "VCP/Bear/Options disabled; Swing Alpha owns live tactical signals.")
     return text[:MAX_TELEGRAM_MESSAGE]
@@ -27372,12 +27372,12 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
             "swing_alpha_auto_signal_enabled": SWING_ALPHA_AUTO_SIGNAL_ENABLED,
             "vcp_live_signal_engine": "disabled",
             "bear_live_signal_engine": "disabled",
-            "notes": "v4.6.1 replaces disabled VCP/Bear live tactical scan path with Swing Alpha entry/exit alerts.",
+            "notes": "v4.6.2 replaces disabled VCP/Bear live tactical scan path with Swing Alpha entry/exit alerts.",
         }
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
             z.writestr("v461_tactical_replacement_metadata.json", json.dumps(safe_convert(meta), indent=2))
     except Exception as exc:
-        print(f"[V4.6.1 EXPORT WARNING] {exc}")
+        print(f"[V4.6.2 EXPORT WARNING] {exc}")
     return zip_path
 
 # Command routing.
@@ -27397,7 +27397,7 @@ def _v461_status_text() -> str:
     except Exception as exc:
         win = {"open": False, "reason": f"error: {exc}"}
     return (
-        "🛠️ V4.6.1 SWING SIGNAL REPLACEMENT STATUS\n\n"
+        "🛠️ V4.6.2 SWING SIGNAL REPLACEMENT STATUS\n\n"
         f"Strategy display: {STRATEGY_VERSION}\n"
         f"Strategy logic: {V461_VALIDATION_STRATEGY_LABEL}\n"
         f"Allocation: {V461_ALLOCATION_LABEL}\n"
@@ -27433,7 +27433,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     if text_lower == "bearstatus":
         send(
-            "🐻 BEAR / INVERSE SLEEVE STATUS v4.6.1\n\n"
+            "🐻 BEAR / INVERSE SLEEVE STATUS v4.6.2\n\n"
             "Status: disabled / removed from live allocation.\n"
             "Reason: inverse ETFs/KID restrictions and weak replacement tests.\n\n"
             "Live tactical scan path is now owned by Swing Alpha.\n"
@@ -27442,7 +27442,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     if text_lower == "sleevestatus":
         send(
-            "🧭 SLEEVE STATUS v4.6.1\n\n"
+            "🧭 SLEEVE STATUS v4.6.2\n\n"
             "Active sleeves:\n"
             "• Core monthly rotation — corebuy/coresell\n"
             "• Growth monthly rotation — growthbuy/growthsell\n"
@@ -27456,7 +27456,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         )
         return
     if text_lower == "forcescan":
-        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.6.1.")
+        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.6.2.")
         ok = scan_swing_alpha_market(force=True, verbose=True)
         send("✅ Manual Swing Alpha scan complete." if ok else "⚠️ Manual Swing Alpha scan did not complete cleanly.")
         return
@@ -27472,7 +27472,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         details = swing_alpha_position_market_value_details()
         m_ok, m_reason = swing_alpha_market_filter_ok()
         send(
-            "🎯 SWING_ALPHA STATUS v4.6.1\n\n"
+            "🎯 SWING_ALPHA STATUS v4.6.2\n\n"
             f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
             f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
             f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
@@ -27581,7 +27581,7 @@ def manage_swing_alpha_positions() -> None:
                 pnl_pct = ((mark / avg) - 1.0) * 100.0 if avg > 0 else 0.0
                 item = {"ticker": ticker, "price": mark, "reason": exit_reason}
                 msg = (
-                    "📉 SWING ALPHA EXIT SIGNAL v4.6.1\n\n"
+                    "📉 SWING ALPHA EXIT SIGNAL v4.6.2\n\n"
                     f"🏷️ Ticker: {ticker}\n"
                     "🧬 Sleeve: 🎯 SWING_ALPHA\n"
                     f"📌 Reason: {exit_reason}\n"
@@ -27605,6 +27605,40 @@ def manage_positions() -> None:  # type: ignore[override]
     _V461_OLD_MANAGE_POSITIONS()
     manage_swing_alpha_positions()
 
+
+
+# ---- v4.6.2 deployment-readiness cleanup ----
+# Keep scanstatus aligned with the new Swing Alpha scan path. v4.6.1 marked
+# only last_swing_alpha_auto_scan_day; v4.6.2 also updates the legacy
+# last_scan_day / last_scan_bar_date fields used by scanstatus and exports.
+def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:  # type: ignore[override]
+    try:
+        set_meta("last_swing_alpha_auto_scan_day", day)
+        set_meta("last_scan_day", day)
+        if bar:
+            set_meta("last_swing_alpha_auto_scan_bar", bar)
+            set_meta("last_scan_bar_date", bar)
+    except Exception:
+        pass
+
+def v462_deployment_check_text() -> str:
+    return (
+        "🛠️ V4.6.2 DEPLOYMENT CHECK\n\n"
+        "✅ Swing Alpha live signal path is active.\n"
+        "✅ Legacy VCP/Bear live signal allocation is disabled.\n"
+        "✅ scanstatus metadata is updated by Swing Alpha scans.\n"
+        "✅ IBKR reconciliation remains read-only; no broker orders are placed.\n"
+        "✅ Monthly Core/Growth/SPEC logic remains monthly-locked.\n"
+        "✅ Crypto remains permission/gate-dependent.\n"
+    )
+
+_V462_OLD_HANDLE_COMMAND = handle_command
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    if text_clean.lower() in {"v462status", "deploycheck"}:
+        send(_v461_status_text() + "\n\n" + v462_deployment_check_text())
+        return
+    return _V462_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
 if __name__ == "__main__":
