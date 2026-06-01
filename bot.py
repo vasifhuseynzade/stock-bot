@@ -28143,8 +28143,414 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
 
 
+
+
+# =============================================================================
+# V4.7 - LIVE OUTPUT CLEANUP / ACTIVE-SLEEVE PORTFOLIO FIX
+# =============================================================================
+# Purpose:
+# - Fix portfolio header so Swing Alpha is included in the top summary.
+# - Remove disabled VCP/Bear/Options from live-facing allocation/equity/status outputs.
+# - Keep legacy DB/schema/helpers only for historical exports and backward-compatible
+#   state handling. No scoring/allocation/entry/exit logic changed.
+
+V47_VERSION = "v4.7-active-sleeve-cleanup-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
+    STRATEGY_VERSION = V47_VERSION
+
+V47_STRATEGY_LOGIC_LABEL = "v4.7 active-sleeve cleanup over v4.6.3 monthly dashboard + crypto alerts"
+V47_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10"
+
+
+def _v47_label_cleanup(text: Any) -> str:
+    out = str(text)
+    replacements = [
+        ("v4.6.3", "v4.7"), ("V4.6.3", "V4.7"),
+        ("v4.6.2", "v4.7"), ("V4.6.2", "V4.7"),
+        ("v4.6.1", "v4.7"), ("V4.6.1", "V4.7"),
+        ("v4.5", "v4.7"), ("V4.5", "V4.7"),
+    ]
+    for old, new in replacements:
+        out = out.replace(old, new)
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v47_rows_section(title: str, rows: List[Dict[str, Any]], include_stop: bool = False) -> str:
+    if not rows:
+        return ""
+    msg = f"\n{title}\n\n"
+    for row in rows:
+        try:
+            ticker = str(row.get("ticker", "?"))
+            shares = format_core_shares(row.get("shares", row.get("units", 0)))
+            avg = float(row.get("avg_entry_price", 0) or 0)
+            mark = float(row.get("mark_price", avg) or avg)
+            mv = float(row.get("market_value", 0) or 0)
+            pnl = float(row.get("unrealized_profit", 0) or 0)
+            pct = row.get("unrealized_pct")
+            msg += (
+                f"📦 {ticker}\n"
+                f"Shares: {shares}\n"
+                f"Avg: {round(avg, 4)} | Now: {round(mark, 4)}\n"
+                f"Value: {format_money(mv)}\n"
+                f"P/L: {format_money(pnl)} ({format_pct(pct)})\n"
+            )
+            if include_stop and row.get("stop") is not None:
+                msg += f"Stop: {round(float(row.get('stop')), 4)} | High: {round(float(row.get('highest') or mark), 4)}\n"
+            msg += "\n"
+        except Exception as exc:
+            msg += f"📦 {row.get('ticker', '?')} — row format error: {exc}\n\n"
+    return msg
+
+
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    snapshot = compute_equity_snapshot_data()
+    cash = float(snapshot.get("cash", 0) or 0)
+    legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
+    core_value = float(snapshot.get("core_positions_value", 0) or 0)
+    growth_value = float(snapshot.get("growth_alpha_positions_value", 0) or 0)
+    spec_value = float(snapshot.get("spec_positions_value", 0) or 0)
+    swing_alpha_value = float(snapshot.get("swing_alpha_positions_value", 0) or 0)
+    crypto_value = float(snapshot.get("crypto_alpha_positions_value", 0) or 0)
+    total_positions = float(snapshot.get("positions_value", 0) or 0)
+    equity = float(snapshot.get("equity", 0) or 0)
+
+    msg = (
+        "📋 PORTFOLIO v4.7\n\n"
+        f"💵 Cash: {format_money(cash)}\n"
+        f"🏛️ Core value: {format_money(core_value)}\n"
+        f"🚀 Growth Alpha value: {format_money(growth_value)}\n"
+        f"⚡ SPEC_ALPHA value: {format_money(spec_value)}\n"
+        f"🎯 Swing Alpha value: {format_money(swing_alpha_value)}\n"
+        f"🪙 Crypto Alpha value: {format_money(crypto_value)}\n"
+        f"📦 Total active bot positions: {format_money(total_positions)}\n"
+        f"🏦 Total equity: {format_money(equity)}\n"
+    )
+    if legacy_value > 0.01:
+        msg += f"\n⚠️ Legacy tactical value: {format_money(legacy_value)} — inactive compatibility ledger; use cleanup/manual review.\n"
+    msg += "\n"
+
+    try:
+        msg += _v47_rows_section("🏛️ CORE WEALTH POSITIONS", core_position_market_value_details().get("rows", []))
+    except Exception as exc:
+        msg += f"\n🏛️ CORE WEALTH POSITIONS\nCore section error: {exc}\n\n"
+    try:
+        msg += _v47_rows_section("🚀 GROWTH_ALPHA POSITIONS", growth_position_market_value_details().get("rows", []))
+    except Exception as exc:
+        msg += f"\n🚀 GROWTH_ALPHA POSITIONS\nGrowth section error: {exc}\n\n"
+    try:
+        msg += _v47_rows_section("⚡ SPEC_ALPHA POSITIONS", spec_position_market_value_details().get("rows", []))
+    except Exception as exc:
+        msg += f"\n⚡ SPEC_ALPHA POSITIONS\nSPEC section error: {exc}\n\n"
+    try:
+        msg += _v47_rows_section("🎯 SWING_ALPHA POSITIONS", swing_alpha_position_market_value_details().get("rows", []), include_stop=True)
+    except Exception as exc:
+        msg += f"\n🎯 SWING_ALPHA POSITIONS\nSwing Alpha section error: {exc}\n\n"
+    try:
+        msg += _v47_rows_section("🪙 CRYPTO_ALPHA POSITIONS", crypto_position_market_value_details().get("rows", []))
+    except Exception as exc:
+        msg += f"\n🪙 CRYPTO_ALPHA POSITIONS\nCrypto section error: {exc}\n\n"
+
+    if total_positions <= 0.01:
+        msg += "No open active bot-managed positions.\n"
+    return msg
+
+
+_V47_OLD_OPEN_RISK_DETAILS = open_risk_details
+
+def open_risk_details() -> Dict[str, float]:  # type: ignore[override]
+    details = _V47_OLD_OPEN_RISK_DETAILS()
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0) or 0)
+    swing_initial = 0.0
+    swing_current = 0.0
+    try:
+        rows = swing_alpha_position_market_value_details().get("rows", []) if SWING_ALPHA_LEDGER_ENABLED else []
+        for row in rows:
+            shares = float(row.get("shares", 0) or 0)
+            avg = float(row.get("avg_entry_price", 0) or 0)
+            mark = float(row.get("mark_price", avg) or avg)
+            stop = row.get("stop")
+            if stop is None:
+                continue
+            stop_f = float(stop)
+            swing_initial += max(0.0, avg - stop_f) * shares
+            swing_current += max(0.0, mark - stop_f) * shares
+    except Exception:
+        pass
+    old_initial = float(details.get("initial_risk_dollars", 0) or 0)
+    old_current = float(details.get("current_stop_risk_dollars", 0) or 0)
+    total_initial = old_initial + swing_initial
+    total_current = old_current + swing_current
+    details["equity"] = round(equity, 2)
+    details["initial_risk_dollars"] = round(total_initial, 2)
+    details["current_stop_risk_dollars"] = round(total_current, 2)
+    details["initial_risk_pct"] = 0.0 if equity <= 0 else total_initial / equity
+    details["current_stop_risk_pct"] = 0.0 if equity <= 0 else total_current / equity
+    details["swing_alpha_risk_dollars"] = round(swing_current, 2)
+    details["swing_alpha_value"] = float(snapshot.get("swing_alpha_positions_value", 0) or 0)
+    return details
+
+
+def _v47_equity_text() -> str:
+    snapshot = compute_equity_snapshot_data()
+    legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
+    lines = [
+        "💼 ACCOUNT EQUITY v4.7",
+        "",
+        f"💵 Cash: {format_money(snapshot['cash'])}",
+        f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
+        f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}",
+        f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}",
+        f"🎯 Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}",
+        f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}",
+        f"📦 Total active bot positions: {format_money(snapshot['positions_value'])}",
+        f"🏦 Total Equity: {format_money(snapshot['equity'])}",
+    ]
+    if legacy_value > 0.01:
+        lines.insert(3, f"⚠️ Legacy tactical positions: {format_money(legacy_value)}")
+    return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v47_openrisk_text() -> str:
+    details = open_risk_details()
+    return (
+        "🛡️ OPEN RISK v4.7\n\n"
+        f"💼 Equity: {format_money(details['equity'])}\n"
+        f"⚠️ Initial open risk: {format_money(details['initial_risk_dollars'])} "
+        f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
+        f"📉 Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
+        f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\n"
+        f"🎯 Swing Alpha stop risk: {format_money(details.get('swing_alpha_risk_dollars', 0))}\n"
+        f"🚦 Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v47_scanstatus_text() -> str:
+    refresh_portfolio()
+    last_scan_day = get_meta("last_scan_day")
+    last_scan_bar = get_meta("last_scan_bar_date")
+    details = open_risk_details()
+    legacy_count = len(portfolio.get("positions", {}) or {})
+    try:
+        swing_count = len(load_swing_alpha_positions()) if SWING_ALPHA_LEDGER_ENABLED else 0
+    except Exception:
+        swing_count = 0
+    return (
+        "🧭 SCAN STATUS v4.7\n\n"
+        f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
+        f"📅 Last tactical scan day/bar: {last_scan_day} / {last_scan_bar}\n"
+        f"🎯 Swing Alpha positions: {swing_count}/{SWING_ALPHA_MAX_OPEN_POSITIONS}\n"
+        f"💵 Cash: {format_money(portfolio['cash'])}\n"
+        f"💼 Equity: {format_money(details['equity'])}\n"
+        f"⚠️ Initial open risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
+        f"🛡️ Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
+        f"🕯️ Fresh candle required: {yes_no(REQUIRE_FRESH_DAILY_CANDLE)}\n"
+        f"🚨 Panic mode: {yes_no(PANIC_MODE)}"
+        + (f"\n⚠️ Legacy inactive tactical positions: {legacy_count}" if legacy_count else "")
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v47_status_text() -> str:
+    try:
+        win = _v44_monthly_rebalance_window_info()
+        win_txt = f"{yes_no(bool(win.get('open')))} — {win.get('reason')}"
+    except Exception:
+        win_txt = "n/a"
+    return (
+        "🛠️ V4.7 ACTIVE-SLEEVE CLEANUP STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        "Strategy logic: v4.6.3 monthly dashboard + crypto alerts + Swing Alpha live signals\n"
+        f"Allocation: {V47_ALLOCATION_LABEL}\n"
+        f"Monthly dashboard enabled: {yes_no(V463_MONTHLY_DASHBOARD_ENABLED)}\n"
+        f"Crypto auto-check enabled: {yes_no(V463_CRYPTO_AUTO_CHECK_ENABLED)}\n"
+        f"Swing Alpha live signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
+        f"Monthly rebalance window: {win_txt}\n\n"
+        "Live active sleeves:\n"
+        "• Core monthly rotation\n"
+        "• Growth Alpha monthly rotation\n"
+        "• SPEC_ALPHA monthly rotation\n"
+        "• Swing Alpha tactical signals\n"
+        "• Crypto Alpha tactical signals\n\n"
+        "Cleanup/fix:\n"
+        "• Portfolio header now includes Swing Alpha value.\n"
+        "• Equity/openrisk/scanstatus use active-sleeve wording.\n"
+        "• Disabled VCP/Bear/Options removed from live-facing outputs.\n"
+        "• Legacy tables/helpers remain only for historical compatibility and safe exports.\n"
+        "• IBKR reconciliation remains read-only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+_V47_OLD_FORMAT_ALLOCATION = format_portfolio_allocation_plan
+_V47_OLD_FORMAT_VALIDATION = format_validation_status
+_V47_OLD_FORMAT_INSTITUTIONAL = format_institutional_status
+_V47_OLD_FORMAT_DATAHEALTH = format_datahealth_status
+_V47_OLD_FORMAT_RISK = format_riskmatrix_status
+_V47_OLD_FORMAT_STRESS = format_stress_status
+_V47_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V47_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V47_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ ACTIVE ALLOCATION PLAN v4.7\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action', 'Normal risk mode.')}\n\n"
+        "Target active account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
+        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
+        "• IBKR reconciliation is read-only; no broker orders are placed.\n"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    return (
+        "🧪 VALIDATION STATUS v4.7\n\n"
+        "Strategy: v4.7 active-sleeve cleanup over v4.6.3 logic\n"
+        f"Allocation: {V47_ALLOCATION_LABEL}\n\n"
+        "Known limitations:\n"
+        "- Strategy remains aggressive and growth/swing/crypto-led.\n"
+        "- Swing Alpha requires forward testing; backtests are not broker-grade execution simulation.\n"
+        "- Crypto permission/gate required; no crypto action without valid signal.\n"
+        "- Manual execution and read-only IBKR reconciliation are still required.\n"
+        "- Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.\n\n"
+        "Live validation rules:\n"
+        "• Core/Growth/SPEC stay monthly rotation sleeves; daily checks are monitoring unless monthly-lock allows action.\n"
+        "• Swing Alpha uses swingbuy/swingsell only.\n"
+        "• Crypto uses cryptobuy/cryptosell only.\n"
+        "• Use brokerreconcile/brokersyncpreview after manual fills.\n"
+        "• Do not treat external legacy IBKR positions as bot-managed strategy positions.\n"
+        "• Disabled VCP/Bear/Options are not active live sleeves.\n"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_INSTITUTIONAL()).replace("v4.6.3", "v4.7")[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_DATAHEALTH())
+
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_RISK())
+
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_STRESS())
+
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERSTATUS())
+
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERRECONCILE())
+
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERSYNCPREVIEW())
+
+
+def _v47_sleevestatus_text() -> str:
+    snapshot = compute_equity_snapshot_data()
+    alloc = dynamic_portfolio_allocation_targets()
+    equity = float(snapshot.get("equity", 0) or 0)
+    def pct(value: Any) -> float:
+        try:
+            return 0.0 if equity <= 0 else float(value or 0) / equity * 100.0
+        except Exception:
+            return 0.0
+    return (
+        "🧭 ACTIVE SLEEVE STATUS v4.7\n\n"
+        f"💼 Equity: {format_money(equity)}\n"
+        f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n\n"
+        f"🏛️ Core: {format_money(snapshot.get('core_positions_value', 0))} / target {alloc.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha: {format_money(snapshot.get('growth_alpha_positions_value', 0))} / target {alloc.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA: {format_money(snapshot.get('spec_positions_value', 0))} / target {alloc.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha: {format_money(snapshot.get('swing_alpha_positions_value', 0))} / target {alloc.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha: {format_money(snapshot.get('crypto_alpha_positions_value', 0))} / target {alloc.get('crypto_alpha_pct')}%\n\n"
+        "Disabled live strategies:\n"
+        "• Long VCP: 0% — replaced by Swing Alpha.\n"
+        "• Bear/inverse: 0% — disabled.\n"
+        "• Options: 0% — research-only, not live."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+_V47_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V47_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("v47_active_sleeve_cleanup.json", json.dumps(safe_convert({
+                "version": V47_VERSION,
+                "strategy_logic": V47_STRATEGY_LOGIC_LABEL,
+                "allocation": V47_ALLOCATION_LABEL,
+                "portfolio_header_fix": "active Swing Alpha value included in top portfolio summary",
+                "disabled_live_sleeves": ["LONG_VCP", "BEAR_INVERSE", "OPTIONS"],
+                "compatibility_note": "Legacy tables/helpers retained only for historical state/export safety; live outputs use active sleeves.",
+                "no_strategy_logic_changed": True,
+            }), indent=2))
+    except Exception as exc:
+        print(f"[V4.7 EXPORT WARNING] {exc}")
+    return zip_path
+
+
+_V47_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v47status", "cleanupstatus", "activelevers", "activeledgers"}:
+        send(_v47_status_text())
+        return
+    if text_lower == "equity":
+        send(_v47_equity_text())
+        return
+    if text_lower == "openrisk":
+        send(_v47_openrisk_text())
+        return
+    if text_lower == "scanstatus":
+        send(_v47_scanstatus_text())
+        return
+    if text_lower == "sleevestatus":
+        send(_v47_sleevestatus_text())
+        return
+    if text_lower in {"help", "/help"}:
+        send(
+            "Commands v4.7:\n"
+            "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus | v47status | sleevestatus\n"
+            "wealthplan | corestatus | coreportfolio | corepnl | coreexposure | corebuy | coresell\n"
+            "growthplan | growthstatus | growthportfolio | growthpnl | growthexposure | growthbuy | growthsell\n"
+            "specplan | specstatus | specportfolio | specpnl | specexposure | specbuy | specsell\n"
+            "swingstatus | swingplan | swingportfolio | swingpnl | swingexposure | swingbuy | swingsell | forcescan\n"
+            "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptopnl | cryptoexposure | cryptobuy | cryptosell\n"
+            "brokerstatus | brokerreconcile | brokerpositions | brokerexternal | brokersyncpreview | brokersyncapply CONFIRM\n"
+            "monthlydashboard | download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume"
+        )
+        return
+    if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
+        send("ℹ️ v4.7: Legacy VCP/Bear/Options sleeves are not active live strategies. Swing Alpha replaced the tactical stock signal path. No VCP/Bear action is available.")
+        return
+    if text_lower == "portfolio":
+        send(format_combined_portfolio_report())
+        return
+    return _V47_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
 if __name__ == "__main__":
-
-
-
     main()
