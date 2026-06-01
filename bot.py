@@ -25143,6 +25143,2470 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     return _V443_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+
+# =============================================================================
+# V4.5 HYBRID CRYPTO + GROWTH / CORE / SPEC CANDIDATE
+# =============================================================================
+# Research-backed candidate based on the 2026-05-31 execution-aware and crypto
+# intraday tests.
+#
+# Intentional changes versus v4.4.3:
+# - Allocation target becomes Core 20 / Growth 50 / SPEC 20 / Crypto 10.
+# - Long VCP and Bear/Inverse allocation are set to 0 and their signal scans are
+#   suppressed by default to avoid disabled-strategy noise.
+# - Old alt-only crypto sleeve is replaced with BTC/ETH/SOL hybrid trend logic:
+#     70% of crypto sleeve: daily 20-day breakout, BTC MA200 gate.
+#     30% of crypto sleeve: 4h compression breakout, 2-of-3 MA200 gate.
+# - Cost-aware execution, monthly-lock, partial-fill tools, manual ledger repair,
+#   read-only IBKR reconciliation, and external legacy handling remain unchanged.
+#
+# This patch is not broker automation. No IBKR orders are placed.
+
+V45_VERSION = "v4.5-hybrid-crypto-growth-core-spec-20-50-20-0-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V45_VERSION)
+else:
+    STRATEGY_VERSION = V45_VERSION
+
+# Allocation / sleeve policy.
+V45_CORE_ALLOC = float(os.getenv("V45_CORE_ALLOC", "20"))
+V45_GROWTH_ALLOC = float(os.getenv("V45_GROWTH_ALLOC", "50"))
+V45_SPEC_ALLOC = float(os.getenv("V45_SPEC_ALLOC", "20"))
+V45_LONG_VCP_ALLOC = float(os.getenv("V45_LONG_VCP_ALLOC", "0"))
+V45_CRYPTO_ALLOC = float(os.getenv("V45_CRYPTO_ALLOC", "10"))
+V45_BEAR_ALLOC = float(os.getenv("V45_BEAR_ALLOC", "0"))
+V45_CASH_ALLOC = max(0.0, 100.0 - V45_CORE_ALLOC - V45_GROWTH_ALLOC - V45_SPEC_ALLOC - V45_LONG_VCP_ALLOC - V45_CRYPTO_ALLOC - V45_BEAR_ALLOC)
+
+# Suppress disabled tactical systems by default. Legacy functions remain in the
+# file for backward compatibility with old state/exports, but they do not create
+# new signals unless explicitly re-enabled.
+V45_SUPPRESS_DISABLED_TACTICAL_SCANS = os.getenv("V45_SUPPRESS_DISABLED_TACTICAL_SCANS", "1") != "0"
+V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = os.getenv("V45_LONG_VCP_SIGNAL_ENGINE_ENABLED", "0") != "0"
+V45_BEAR_SIGNAL_ENGINE_ENABLED = os.getenv("V45_BEAR_SIGNAL_ENGINE_ENABLED", "0") != "0"
+BEAR_SLEEVE_ENABLED = BEAR_SLEEVE_ENABLED and V45_BEAR_SIGNAL_ENGINE_ENABLED and V45_BEAR_ALLOC > 0
+try:
+    if not V45_LONG_VCP_SIGNAL_ENGINE_ENABLED or V45_LONG_VCP_ALLOC <= 0:
+        V2_MAX_SIGNALS_PER_SCAN = 0
+        V2_ALLOW_VCP = False
+        V2_ALLOW_BREAKOUTS = False
+        V2_ALLOW_PULLBACKS = False
+        V2_ALLOW_MEDIUM = False
+        V2_ALLOW_WEAK = False
+    if not BEAR_SLEEVE_ENABLED:
+        BEAR_MAX_SIGNALS_PER_SCAN = 0
+except Exception:
+    pass
+
+# Make the live allocation variables reflect v4.5 where old code reads them.
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = V45_CORE_ALLOC / 100.0
+WEALTH_CORE_ALLOC_BULL = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_UNCERTAIN = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_BEAR = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_RISK_OFF = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_TACTICAL_LONG_ALLOC_BULL = V45_LONG_VCP_ALLOC / 100.0
+WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = 0.0
+WEALTH_TACTICAL_LONG_ALLOC_BEAR = 0.0
+WEALTH_BEAR_ALLOC_BULL = 0.0
+WEALTH_BEAR_ALLOC_UNCERTAIN = 0.0
+WEALTH_BEAR_ALLOC_BEAR = 0.0
+try:
+    GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = V45_GROWTH_ALLOC / 100.0
+    SPEC_ALPHA_ACCOUNT_ALLOC_PCT = V45_SPEC_ALLOC / 100.0
+    CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT = V45_CRYPTO_ALLOC / 100.0
+except Exception:
+    pass
+
+# Crypto v4.5 configuration.
+CRYPTO_ALPHA_STRATEGY_VERSION = "crypto_alpha_hybrid_major_trend_70_30_v4_5"
+CRYPTO_ALPHA_INDICATORS = ["BTCUSD", "ETHUSD", "SOLUSD"]
+CRYPTO_ALPHA_UNIVERSE = ["BTCUSD", "ETHUSD", "SOLUSD"]
+CRYPTO_ALPHA_ALL_SYMBOLS = list(dict.fromkeys(CRYPTO_ALPHA_INDICATORS + CRYPTO_ALPHA_UNIVERSE))
+CRYPTO_ALPHA_MAX_OPEN_POSITIONS = int(os.getenv("CRYPTO_ALPHA_MAX_OPEN_POSITIONS", "2"))
+CRYPTO_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("CRYPTO_ALPHA_MIN_TRADE_DOLLARS", "75"))
+CRYPTO_ALPHA_BREAKOUT_DAYS = int(os.getenv("CRYPTO_ALPHA_BREAKOUT_DAYS", "20"))
+CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200 = 1  # daily module uses BTC MA200; 4h module uses 2-of-3 internally.
+V45_CRYPTO_DAILY_WEIGHT = float(os.getenv("V45_CRYPTO_DAILY_WEIGHT", "0.70"))
+V45_CRYPTO_4H_WEIGHT = float(os.getenv("V45_CRYPTO_4H_WEIGHT", "0.30"))
+V45_CRYPTO_4H_ENABLED = os.getenv("V45_CRYPTO_4H_ENABLED", "1") != "0"
+V45_CRYPTO_4H_COMPRESSION_LOOKBACK = int(os.getenv("V45_CRYPTO_4H_COMPRESSION_LOOKBACK", "120"))
+V45_CRYPTO_4H_BREAKOUT_BARS = int(os.getenv("V45_CRYPTO_4H_BREAKOUT_BARS", "60"))
+V45_CRYPTO_4H_BB_RATIO_MAX = float(os.getenv("V45_CRYPTO_4H_BB_RATIO_MAX", "0.75"))
+V45_CRYPTO_MAX_EXTENSION_EMA20 = float(os.getenv("V45_CRYPTO_MAX_EXTENSION_EMA20", "0.50"))
+V45_CRYPTO_ATR_STOP_MULT = float(os.getenv("V45_CRYPTO_ATR_STOP_MULT", "2.5"))
+V45_CRYPTO_TRAIL_ATR_MULT = float(os.getenv("V45_CRYPTO_TRAIL_ATR_MULT", "3.5"))
+V45_CRYPTO_LIVE_SOURCE = os.getenv("V45_CRYPTO_LIVE_SOURCE", "fmp_daily_binance_4h")
+
+V45_VALIDATION_STRATEGY_LABEL = "v4.5 hybrid crypto/growth-core-spec"
+V45_ALLOCATION_LABEL = "Core 20 / Growth 50 / SPEC 20 / Crypto 10 / Long VCP 0 / Bear 0 / Options 0"
+V45_KNOWN_LIMITATIONS = [
+    "v4.5 is aggressive and growth-led",
+    "crypto logic uses Binance 4h data for the compression sub-strategy and FMP daily data for daily module/quotes",
+    "crypto permission/gate required before live crypto trades",
+    "manual execution and read-only IBKR reconciliation still required",
+    "Core UCITS fee drag controlled by cost-aware execution",
+    "Long VCP and Bear signal engines are disabled by default in this candidate",
+]
+
+
+def _v45_map_crypto_to_binance(ticker: str) -> Optional[str]:
+    mapping = {
+        "BTCUSD": "BTCUSDT",
+        "ETHUSD": "ETHUSDT",
+        "SOLUSD": "SOLUSDT",
+    }
+    return mapping.get(str(ticker).upper())
+
+
+def _v45_binance_klines(symbol: str, interval: str = "4h", limit: int = 500) -> Optional[pd.DataFrame]:
+    try:
+        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={int(limit)}"
+        data = request_json(url, timeout=(3, 10), context=f"binance {symbol} {interval}", retries=1)
+        if not isinstance(data, list) or not data:
+            return None
+        rows = []
+        for item in data:
+            if not isinstance(item, list) or len(item) < 6:
+                continue
+            rows.append({
+                "date": pd.to_datetime(int(item[0]), unit="ms", utc=True),
+                "Open": float(item[1]),
+                "High": float(item[2]),
+                "Low": float(item[3]),
+                "Close": float(item[4]),
+                "Volume": float(item[5]),
+            })
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return None
+        return df.sort_values("date").reset_index(drop=True)
+    except Exception as exc:
+        print(f"[V4.5 BINANCE ERROR] {symbol} {interval}: {exc}")
+        return None
+
+
+def _v45_ema(series: pd.Series, span: int) -> pd.Series:
+    return series.ewm(span=span, adjust=False).mean()
+
+
+def _v45_crypto_daily_btc_gate() -> Dict[str, Any]:
+    rows = []
+    ok_count_2of3 = 0
+    btc_ok = False
+    for sym in CRYPTO_ALPHA_INDICATORS:
+        df = get_historical(sym, limit=280)
+        if df is None or len(df) < 220:
+            rows.append({"ticker": sym, "ok": False, "reason": "no_data"})
+            continue
+        close = df["Close"].dropna()
+        price = float(close.iloc[-1])
+        ma50 = float(close.rolling(50).mean().iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        ok = price > ma200
+        if ok:
+            ok_count_2of3 += 1
+        if sym == "BTCUSD":
+            btc_ok = ok
+        rows.append({"ticker": sym, "price": round(price, 6), "ma50": round(ma50, 6), "ma200": round(ma200, 6), "ok": ok})
+    return {"ok": btc_ok, "btc_ok": btc_ok, "ok_count": ok_count_2of3, "required": 1, "required_4h": 2, "gate2_ok": ok_count_2of3 >= 2, "rows": rows}
+
+
+def crypto_indicator_gate() -> Dict[str, Any]:  # type: ignore[override]
+    return _v45_crypto_daily_btc_gate()
+
+
+def _v45_crypto_daily_score(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    try:
+        df = get_historical(ticker, limit=300)
+        if df is None or len(df) < 220:
+            return None
+        close = df["Close"].dropna()
+        price = float(close.iloc[-1])
+        high = df["High"]
+        ma20 = float(_v45_ema(close, 20).iloc[-1])
+        ma50 = float(_v45_ema(close, 50).iloc[-1])
+        ma200 = float(close.rolling(200).mean().iloc[-1])
+        roc7 = pct_change_last(df, 7)
+        roc21 = pct_change_last(df, 21)
+        roc63 = pct_change_last(df, 63) or 0.0
+        roc126 = pct_change_last(df, 126) or 0.0
+        atr_series = atr(df, 14)
+        atr_val = float(atr_series.iloc[-1])
+        atr_pct = atr_val / price if price > 0 else 0.0
+        rsi_val = float(rsi(close, 14).iloc[-1])
+        prior_high = float(close.shift(1).rolling(CRYPTO_ALPHA_BREAKOUT_DAYS).max().iloc[-1])
+        if not (price > ma50 and price > ma200):
+            return None
+        if roc7 is None or roc21 is None or roc7 <= 0 or roc21 <= 0:
+            return None
+        if not (0.02 <= atr_pct <= 0.40):
+            return None
+        if rsi_val > 88:
+            return None
+        if price > ma20 * (1 + V45_CRYPTO_MAX_EXTENSION_EMA20):
+            return None
+        if price <= prior_high:
+            return None
+        rel = roc63 - float(gate_ref_ret or 0.0)
+        score = (0.38 * roc126) + (0.32 * roc63) + (0.20 * roc21) + (0.10 * rel) - (0.08 * atr_pct)
+        stop = max(0.000001, price - (V45_CRYPTO_ATR_STOP_MULT * atr_val))
+        trail = max(0.000001, price - (V45_CRYPTO_TRAIL_ATR_MULT * atr_val))
+        return {
+            "ticker": ticker,
+            "sub_strategy": "DAILY_MAJOR_BREAKOUT20",
+            "price": round(price, 8),
+            "ma20": round(ma20, 8),
+            "ma50": round(ma50, 8),
+            "ma200": round(ma200, 8),
+            "prior_high": round(prior_high, 8),
+            "roc_1m_pct": round(roc21 * 100, 2),
+            "roc_3m_pct": round(roc63 * 100, 2),
+            "roc_6m_pct": round(roc126 * 100, 2),
+            "atr": round(atr_val, 8),
+            "atr_pct": round(atr_pct * 100, 2),
+            "rsi": round(rsi_val, 2),
+            "score": round(score, 6),
+            "stop": round(stop, 8),
+            "trail_reference": round(trail, 8),
+            "max_valid_entry": round(price * (1 + MAX_ENTRY_EXTENSION_PCT), 8),
+        }
+    except Exception as exc:
+        print(f"[V4.5 CRYPTO DAILY SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def _v45_crypto_4h_compression_score(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    try:
+        symbol = _v45_map_crypto_to_binance(ticker)
+        if not symbol:
+            return None
+        df = _v45_binance_klines(symbol, interval="4h", limit=500)
+        if df is None or len(df) < 220:
+            return None
+        close = df["Close"].dropna()
+        price = float(close.iloc[-1])
+        ema20 = float(_v45_ema(close, 20).iloc[-1])
+        ema50 = float(_v45_ema(close, 50).iloc[-1])
+        ema200 = float(_v45_ema(close, 200).iloc[-1])
+        ma20 = close.rolling(20).mean()
+        sd20 = close.rolling(20).std()
+        bb_width = ((ma20 + 2 * sd20) - (ma20 - 2 * sd20)) / ma20
+        width_now = float(bb_width.iloc[-1])
+        width_ref = float(bb_width.tail(V45_CRYPTO_4H_COMPRESSION_LOOKBACK).median())
+        if not math.isfinite(width_now) or not math.isfinite(width_ref) or width_ref <= 0:
+            return None
+        compressed = width_now <= width_ref * V45_CRYPTO_4H_BB_RATIO_MAX
+        prior_high = float(close.shift(1).rolling(V45_CRYPTO_4H_BREAKOUT_BARS).max().iloc[-1])
+        roc7 = (price / float(close.iloc[-43]) - 1) if len(close) > 44 else None  # about 7 days on 4h bars
+        roc21 = (price / float(close.iloc[-127]) - 1) if len(close) > 128 else None
+        atr_series = atr(df, 14)
+        atr_val = float(atr_series.iloc[-1])
+        atr_pct = atr_val / price if price > 0 else 0.0
+        rsi_val = float(rsi(close, 14).iloc[-1])
+        if not (price > ema50 and price > ema200):
+            return None
+        if roc7 is None or roc21 is None or roc7 <= 0 or roc21 <= 0:
+            return None
+        if not compressed:
+            return None
+        if price <= prior_high:
+            return None
+        if not (0.015 <= atr_pct <= 0.40):
+            return None
+        if rsi_val > 88:
+            return None
+        if price > ema20 * (1 + V45_CRYPTO_MAX_EXTENSION_EMA20):
+            return None
+        score = (0.45 * roc21) + (0.35 * roc7) - (0.10 * atr_pct) - (0.10 * (width_now / width_ref))
+        stop = max(0.000001, price - (V45_CRYPTO_ATR_STOP_MULT * atr_val))
+        trail = max(0.000001, price - (V45_CRYPTO_TRAIL_ATR_MULT * atr_val))
+        return {
+            "ticker": ticker,
+            "sub_strategy": "FOUR_HOUR_COMPRESSION_BREAKOUT",
+            "price": round(price, 8),
+            "ma20": round(ema20, 8),
+            "ma50": round(ema50, 8),
+            "ma200": round(ema200, 8),
+            "prior_high": round(prior_high, 8),
+            "bb_width_ratio": round(width_now / width_ref, 4),
+            "roc_1m_pct": round(roc7 * 100, 2),
+            "roc_3m_pct": round(roc21 * 100, 2),
+            "roc_6m_pct": None,
+            "atr": round(atr_val, 8),
+            "atr_pct": round(atr_pct * 100, 2),
+            "rsi": round(rsi_val, 2),
+            "score": round(score, 6),
+            "stop": round(stop, 8),
+            "trail_reference": round(trail, 8),
+            "max_valid_entry": round(price * (1 + MAX_ENTRY_EXTENSION_PCT), 8),
+        }
+    except Exception as exc:
+        print(f"[V4.5 CRYPTO 4H SCORE ERROR] {ticker}: {exc}")
+        return None
+
+
+def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:  # type: ignore[override]
+    return _v45_crypto_daily_score(ticker, gate_ref_ret=gate_ref_ret)
+
+
+def compute_crypto_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+    refresh_portfolio()
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0.0) or 0.0)
+    allocation = dynamic_portfolio_allocation_targets()
+    risk = allocation.get("risk_guard", {}) or {}
+    target_pct = float(allocation.get("crypto_alpha_pct", CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
+    target_value = equity * target_pct
+    gate = crypto_indicator_gate()
+
+    gate_ref_rets = []
+    for row in gate.get("rows", []):
+        sym = row.get("ticker")
+        df = get_historical(str(sym), limit=120)
+        ret = pct_change_last(df, 63) if df is not None else None
+        if ret is not None:
+            gate_ref_rets.append(ret)
+    gate_ref_ret = sum(gate_ref_rets) / len(gate_ref_rets) if gate_ref_rets else 0.0
+
+    positions = load_crypto_positions() if CRYPTO_ALPHA_LEDGER_ENABLED else {}
+    details = crypto_position_market_value_details() if CRYPTO_ALPHA_LEDGER_ENABLED else {"rows": [], "value": 0.0}
+    current_rows = {str(row.get("ticker", "")).upper(): row for row in details.get("rows", [])}
+    actions: List[Dict[str, Any]] = []
+    daily_scored: List[Dict[str, Any]] = []
+    h4_scored: List[Dict[str, Any]] = []
+
+    if CRYPTO_ALPHA_ENABLED and target_pct > 0 and not risk.get("hard_active"):
+        if gate.get("btc_ok"):
+            for ticker in CRYPTO_ALPHA_UNIVERSE:
+                item = _v45_crypto_daily_score(ticker, gate_ref_ret=gate_ref_ret)
+                if item is not None:
+                    daily_scored.append(item)
+        if V45_CRYPTO_4H_ENABLED and gate.get("gate2_ok"):
+            for ticker in CRYPTO_ALPHA_UNIVERSE:
+                item = _v45_crypto_4h_compression_score(ticker, gate_ref_ret=gate_ref_ret)
+                if item is not None:
+                    h4_scored.append(item)
+
+    daily_scored = sorted(daily_scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    h4_scored = sorted(h4_scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    selected_modules: List[Dict[str, Any]] = []
+    if daily_scored:
+        item = dict(daily_scored[0])
+        item["module_weight"] = V45_CRYPTO_DAILY_WEIGHT
+        selected_modules.append(item)
+    if h4_scored:
+        item = dict(h4_scored[0])
+        item["module_weight"] = V45_CRYPTO_4H_WEIGHT
+        selected_modules.append(item)
+
+    # Aggregate module targets by ticker so duplicate selections do not create ledger ambiguity.
+    agg: Dict[str, Dict[str, Any]] = {}
+    for item in selected_modules:
+        ticker = str(item["ticker"]).upper()
+        existing = agg.get(ticker)
+        if existing is None:
+            existing = dict(item)
+            existing["module_weight"] = 0.0
+            existing["sub_strategy"] = []
+            agg[ticker] = existing
+        existing["module_weight"] += float(item.get("module_weight", 0.0) or 0.0)
+        existing["sub_strategy"].append(str(item.get("sub_strategy", "UNKNOWN")))
+        existing["score"] = max(float(existing.get("score", -999)), float(item.get("score", -999)))
+
+    selected = sorted(agg.values(), key=lambda x: float(x.get("score", -999)), reverse=True)[:CRYPTO_ALPHA_MAX_OPEN_POSITIONS]
+    selected_tickers = {str(x.get("ticker", "")).upper() for x in selected}
+
+    for item in selected:
+        ticker = str(item["ticker"]).upper()
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        module_weight = float(item.get("module_weight", 0.0) or 0.0)
+        target_dollars = target_value * min(max(module_weight, 0.0), 1.0)
+        drift = target_dollars - current_value
+        action = "HOLD"
+        if current_value <= 0 and target_dollars >= CRYPTO_ALPHA_MIN_TRADE_DOLLARS:
+            action = "BUY"
+        elif drift > max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
+            action = "ADD"
+        elif drift < -max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
+            action = "TRIM"
+        actions.append({
+            **item,
+            "sub_strategy": "+".join(item.get("sub_strategy", [])) if isinstance(item.get("sub_strategy"), list) else item.get("sub_strategy"),
+            "action": action,
+            "target_account_pct": round(target_pct * module_weight * 100, 2),
+            "target_value": round(target_dollars, 2),
+            "current_value": round(current_value, 2),
+            "suggested_dollars": round(abs(drift), 2),
+            "drift_dollars": round(drift, 2),
+        })
+
+    # Exit/rotation candidates for current crypto holdings. v4.5 uses MA50/gate/ATR trail.
+    for ticker, row in current_rows.items():
+        mark = float(row.get("mark_price", row.get("avg_entry_price", 0)) or 0)
+        if ticker in selected_tickers:
+            df = get_historical(ticker, limit=90)
+            if df is not None and len(df) >= 60:
+                ma50 = float(_v45_ema(df["Close"], 50).iloc[-1])
+                atr_val = float(atr(df, 14).iloc[-1])
+                highest = max(float(row.get("highest") or mark), mark)
+                trail = highest - (V45_CRYPTO_TRAIL_ATR_MULT * atr_val)
+                stop = float(row.get("stop") or 0.0)
+                reason = None
+                if not gate.get("btc_ok"):
+                    reason = "BTC daily MA200 gate is off."
+                elif mark < ma50:
+                    reason = "Close/mark is below EMA50."
+                elif stop > 0 and mark <= stop:
+                    reason = "Initial stop hit."
+                elif mark <= trail:
+                    reason = "ATR trailing stop hit."
+                if reason:
+                    actions.append({"ticker": ticker, "action": "SELL", "price": mark, "target_account_pct": 0.0, "target_value": 0.0, "current_value": round(float(row.get("market_value", 0) or 0), 2), "suggested_dollars": round(float(row.get("market_value", 0) or 0), 2), "reason": reason})
+            continue
+        exit_reason = "Crypto gate is off or ticker is no longer selected by the v4.5 hybrid crypto model."
+        actions.append({"ticker": ticker, "action": "SELL", "price": mark, "target_account_pct": 0.0, "target_value": 0.0, "current_value": round(float(row.get("market_value", 0) or 0), 2), "suggested_dollars": round(float(row.get("market_value", 0) or 0), 2), "reason": exit_reason})
+
+    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
+    return {
+        "plan_id": uuid.uuid4().hex,
+        "strategy_version": CRYPTO_ALPHA_STRATEGY_VERSION,
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "account_equity": round(equity, 2),
+        "target_crypto_account_pct": round(target_pct * 100, 2),
+        "target_crypto_value": round(target_value, 2),
+        "current_crypto_value": round(float(details.get("value", 0.0) or 0.0), 2),
+        "current_crypto_unrealized_profit": round(float(details.get("unrealized_profit", 0.0) or 0.0), 2),
+        "allocation": allocation,
+        "risk_guard": risk,
+        "gate": gate,
+        "universe": CRYPTO_ALPHA_UNIVERSE,
+        "indicator_symbols": CRYPTO_ALPHA_INDICATORS,
+        "top": selected,
+        "actions": actions,
+        "actionable": actionable,
+        "daily_scored": daily_scored,
+        "h4_scored": h4_scored,
+        "all_scored": daily_scored + h4_scored,
+        "module_weights": {"daily_breakout": V45_CRYPTO_DAILY_WEIGHT, "four_hour_compression": V45_CRYPTO_4H_WEIGHT},
+    }
+
+
+def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:  # type: ignore[override]
+    ticker = ticker.upper()
+    for item in plan.get("actions", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker and str(item.get("action", "")).upper() in {"BUY", "ADD", "HOLD", "TRIM"}:
+            return item
+    for item in plan.get("top", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    gate = plan.get("gate", {}) or {}
+    risk = plan.get("risk_guard", {}) or {}
+    msg = (
+        "🪙 CRYPTO_ALPHA HYBRID MAJOR TREND PLAN v4.5\n\n"
+        "Private bot only. Execute in broker/exchange first, then record with cryptobuy/cryptosell.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🪙 Target crypto sleeve: {plan.get('target_crypto_account_pct')}% = {format_money(float(plan.get('target_crypto_value', 0) or 0))}\n"
+        f"📦 Current crypto value: {format_money(float(plan.get('current_crypto_value', 0) or 0))}\n"
+        f"📈 Crypto unrealized P/L: {format_money(float(plan.get('current_crypto_unrealized_profit', 0) or 0))}\n\n"
+        "Strategy modules:\n"
+        f"• 70% sleeve: BTC/ETH/SOL daily 20-day breakout, BTC MA200 gate.\n"
+        f"• 30% sleeve: BTC/ETH/SOL 4h compression breakout, 2-of-3 MA200 gate.\n\n"
+        f"🚦 Daily BTC gate: {yes_no(bool(gate.get('btc_ok')))}\n"
+        f"🚦 4h module gate: {yes_no(bool(gate.get('gate2_ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200; required 2)\n"
+    )
+    for row in gate.get("rows", []):
+        msg += f"• {row.get('ticker')}: price {row.get('price')} | MA200 {row.get('ma200')} | OK {yes_no(bool(row.get('ok')))}\n"
+    msg += "\n"
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "HOLD", "TRIM"}]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    if not actions:
+        msg += "No crypto action. If gates are off, crypto sleeve stays cash.\n"
+    if ranked:
+        msg += "🎯 Crypto candidates\n"
+        for i, item in enumerate(ranked, start=1):
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
+            msg += (
+                f"{i}) {verb} {item.get('ticker')} [{item.get('sub_strategy')}]\n"
+                f"   Price: {item.get('price')} | Max entry: {item.get('max_valid_entry')} | Stop: {item.get('stop')}\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
+                f"   1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | ATR {item.get('atr_pct')}% | Score {item.get('score')}\n"
+            )
+        msg += "\n"
+    if exits:
+        msg += "🔴 Crypto exit / rotation candidates\n"
+        for item in exits:
+            msg += f"SELL {item.get('ticker')} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'Exit condition')}\n"
+        msg += "\n"
+    msg += (
+        "How to execute after broker/exchange fill:\n"
+        "• cryptobuy TICKER UNITS at PRICE\n"
+        "• cryptosell TICKER UNITS at PRICE\n\n"
+        "Crypto rules:\n"
+        "• v4.5 trades BTC/ETH/SOL only; no cheap-alt default universe.\n"
+        "• No crypto trade unless the relevant gate is active.\n"
+        "• Do not use bought/sold, corebuy, growthbuy, or specbuy for crypto."
+    )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+_V45_OLD_DYNAMIC_TARGETS = dynamic_portfolio_allocation_targets
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
+    base = _V45_OLD_DYNAMIC_TARGETS()
+    market = str(base.get("market", "UNCERTAIN"))
+    risk = base.get("risk_guard", {}) or {}
+    if risk.get("hard_active"):
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    elif market == "BULL":
+        core, growth, spec, long_vcp, bear, crypto = V45_CORE_ALLOC, V45_GROWTH_ALLOC, V45_SPEC_ALLOC, V45_LONG_VCP_ALLOC, V45_BEAR_ALLOC, V45_CRYPTO_ALLOC
+    elif market == "BEAR":
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    else:
+        core, growth, spec, long_vcp, bear, crypto = 20.0, 25.0, 10.0, 0.0, 0.0, 5.0
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        growth *= 0.50
+        spec *= 0.50
+        crypto *= 0.50
+        long_vcp = 0.0
+        bear = 0.0
+    if not GROWTH_ALPHA_ENABLED:
+        growth = 0.0
+    if not SPEC_ALPHA_ENABLED:
+        spec = 0.0
+    if not CRYPTO_ALPHA_ENABLED:
+        crypto = 0.0
+    if not V45_LONG_VCP_SIGNAL_ENGINE_ENABLED:
+        long_vcp = 0.0
+    if not BEAR_SLEEVE_ENABLED:
+        bear = 0.0
+    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear - crypto)
+    base["strategy_version"] = "v4_5_hybrid_crypto_growth_core_spec_20_50_20_0_10_dynamic_allocation"
+    base["core_wealth_pct"] = round(core, 2)
+    base["growth_alpha_pct"] = round(growth, 2)
+    base["spec_alpha_pct"] = round(spec, 2)
+    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
+    base["bear_inverse_tactical_pct"] = round(bear, 2)
+    base["crypto_alpha_pct"] = round(crypto, 2)
+    base["cash_reserve_pct"] = round(cash, 2)
+    return base
+
+
+# Suppress tactical scan noise when VCP/Bear allocations are intentionally 0.
+_V45_OLD_SCAN_MARKET = scan_market
+
+def scan_market() -> bool:  # type: ignore[override]
+    if V45_SUPPRESS_DISABLED_TACTICAL_SCANS and not V45_LONG_VCP_SIGNAL_ENGINE_ENABLED and not BEAR_SLEEVE_ENABLED:
+        print("[V4.5 SCAN SKIP] Long VCP and Bear signal engines are disabled in v4.5; no tactical scan run.")
+        try:
+            set_meta("last_scan_day", ny_date_str())
+            set_meta("last_scan_bar", ny_date_str())
+        except Exception:
+            pass
+        return True
+    return _V45_OLD_SCAN_MARKET()
+
+
+# Validation and reporting labels.
+def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
+    return {
+        "strategy_version": STRATEGY_VERSION,
+        "strategy": V45_VALIDATION_STRATEGY_LABEL,
+        "allocation": V45_ALLOCATION_LABEL,
+        "known_limitations": list(V45_KNOWN_LIMITATIONS),
+        "live_validation_rules": [
+            "Core/Growth/SPEC are monthly rotation sleeves; daily plan checks are monitoring unless monthly-lock allows action.",
+            "Crypto is a tactical separate ledger using BTC/ETH/SOL hybrid trend logic.",
+            "Long VCP and Bear tactical signal engines are disabled by default in v4.5.",
+            "Use partial-fill commands only for real broker fills that already happened.",
+            "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
+            "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
+            "Do not enable broker order automation in this version; IBKR reconciliation remains read-only.",
+        ],
+    }
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    limitations = "\n".join(f"- {x}" for x in V45_KNOWN_LIMITATIONS)
+    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
+    return (
+        "🧪 VALIDATION STATUS v4.5\n\n"
+        f"Strategy: {V45_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V45_ALLOCATION_LABEL}\n\n"
+        "Known limitations:\n"
+        f"{limitations}\n\n"
+        "Live validation rules:\n"
+        f"{rules}\n\n"
+        "Reporting note: v4.5 changes allocation and crypto logic; IBKR remains read-only and execution remains manual."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v45_label_cleanup(msg: Any) -> str:
+    text = _v443_label_cleanup(str(msg)) if '_v443_label_cleanup' in globals() else str(msg)
+    replacements = [
+        ("v4.4.3", "v4.5"),
+        ("V4.4.3", "V4.5"),
+        ("Core 20 / Growth 45 / SPEC 20 / Long VCP 5 / Crypto 10", V45_ALLOCATION_LABEL),
+        ("Core: 20%\nGrowth Alpha: 45%\nSPEC_ALPHA: 20%\n🐂 Long VCP tactical: 5.0%\n🪙 Crypto tactical swing: 10.0%", "Core: 20%\nGrowth Alpha: 50%\nSPEC_ALPHA: 20%\n🐂 Long VCP tactical: 0.0%\n🪙 Crypto tactical swing: 10.0%"),
+        ("v4.1.1-freeze-growth-crypto-swing-20-45-20-5-10-monitor", V45_VERSION),
+        ("v4.4.2 partial-fill/monthly-lock/cost-aware", V45_VALIDATION_STRATEGY_LABEL),
+        ("Crypto rules:\n• BTC/ETH/SOL are indicators; default buys use cheaper major crypto names.", "Crypto rules:\n• v4.5 trades BTC/ETH/SOL only using hybrid daily/4h trend logic."),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    text = text.replace("v4.5.3", "v4.5").replace("V4.5.3", "V4.5")
+    return text
+
+# Wrap key reports again for v4.5 labels.
+_V45_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
+_V45_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
+_V45_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
+_V45_OLD_FORMAT_STRESS_STATUS = format_stress_status
+_V45_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
+_V45_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V45_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V45_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+_V45_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
+_V45_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
+_V45_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
+
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_RISKMATRIX_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_STRESS_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    msg = _v45_label_cleanup(_V45_OLD_FORMAT_ALLOCATION_PLAN())
+    extra = (
+        "\n\n🧾 v4.5 allocation cleanup:\n"
+        "• Long VCP allocation is 0%; VCP/Bear tactical signal scans are suppressed by default.\n"
+        "• Crypto allocation uses BTC/ETH/SOL hybrid daily/4h trend logic, not old cheap-alt rotation.\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed."
+    )
+    return (msg + extra)[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
+
+def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_CORE_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_GROWTH_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v45_label_cleanup(_V45_OLD_FORMAT_SPEC_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
+
+# Status command.
+_V45_OLD_HANDLE_COMMAND = handle_command
+
+def _v45_status_text() -> str:
+    try:
+        market_ok, reason = growth_alpha_market_filter_ok()
+    except Exception as exc:
+        market_ok, reason = False, f"error: {exc}"
+    try:
+        win = _v44_monthly_rebalance_window_info()
+    except Exception as exc:
+        win = {"open": False, "reason": f"error: {exc}"}
+    return (
+        "🛠️ V4.5 HYBRID CRYPTO + GROWTH STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Allocation: {V45_ALLOCATION_LABEL}\n"
+        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+        f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+        "Execution controls:\n"
+        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
+        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
+        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+        "• Crypto: BTC/ETH/SOL hybrid major trend, 70% daily breakout + 30% 4h compression.\n"
+        f"• Long VCP signal engine: {yes_no(V45_LONG_VCP_SIGNAL_ENGINE_ENABLED)} | Bear signal engine: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed.\n\n"
+        "Removed/disabled from live plan:\n"
+        "• Old cheap-alt crypto universe is no longer used by default.\n"
+        "• Bear/inverse sleeve and Long VCP allocation are 0 by default in v4.5."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        send(_v45_status_text())
+        return
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+    return _V45_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+
+# =============================================================================
+# V4.6 FREEZE CANDIDATE - SWING ALPHA + HYBRID CRYPTO + MONTHLY ROTATION
+# =============================================================================
+# Final research candidate based on 2026-06-01 integrated swing/crypto tests.
+# Intentional changes versus v4.5:
+# - Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10.
+# - Long VCP and Bear/Inverse remain allocation 0 and scans suppressed.
+# - Swing Alpha replaces disabled VCP allocation with MACD + VAH reclaim logic.
+# - Crypto remains BTC/ETH/SOL hybrid major trend logic from v4.5.
+# - Cost-aware execution, monthly-lock, partial-fill tools, manual ledger repair,
+#   read-only IBKR reconciliation, and external legacy handling remain unchanged.
+# - No broker orders are placed in this version.
+
+V46_VERSION = "v4.6-freeze-swing-alpha-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V46_VERSION)
+else:
+    STRATEGY_VERSION = V46_VERSION
+
+# Allocation policy.
+V46_CORE_ALLOC = float(os.getenv("V46_CORE_ALLOC", "20"))
+V46_GROWTH_ALLOC = float(os.getenv("V46_GROWTH_ALLOC", "45"))
+V46_SPEC_ALLOC = float(os.getenv("V46_SPEC_ALLOC", "15"))
+V46_SWING_ALLOC = float(os.getenv("V46_SWING_ALLOC", "10"))
+V46_CRYPTO_ALLOC = float(os.getenv("V46_CRYPTO_ALLOC", "10"))
+V46_LONG_VCP_ALLOC = float(os.getenv("V46_LONG_VCP_ALLOC", "0"))
+V46_BEAR_ALLOC = float(os.getenv("V46_BEAR_ALLOC", "0"))
+V46_CASH_ALLOC = max(0.0, 100.0 - V46_CORE_ALLOC - V46_GROWTH_ALLOC - V46_SPEC_ALLOC - V46_SWING_ALLOC - V46_CRYPTO_ALLOC - V46_LONG_VCP_ALLOC - V46_BEAR_ALLOC)
+
+WEALTH_CORE_ACCOUNT_ALLOC_PCT = V46_CORE_ALLOC / 100.0
+WEALTH_CORE_ALLOC_BULL = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_UNCERTAIN = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_BEAR = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_CORE_ALLOC_RISK_OFF = WEALTH_CORE_ACCOUNT_ALLOC_PCT
+WEALTH_TACTICAL_LONG_ALLOC_BULL = 0.0
+WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = 0.0
+WEALTH_TACTICAL_LONG_ALLOC_BEAR = 0.0
+WEALTH_BEAR_ALLOC_BULL = 0.0
+WEALTH_BEAR_ALLOC_UNCERTAIN = 0.0
+WEALTH_BEAR_ALLOC_BEAR = 0.0
+GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = V46_GROWTH_ALLOC / 100.0
+SPEC_ALPHA_ACCOUNT_ALLOC_PCT = V46_SPEC_ALLOC / 100.0
+CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT = V46_CRYPTO_ALLOC / 100.0
+
+V45_LONG_VCP_ALLOC = 0.0
+V45_BEAR_ALLOC = 0.0
+V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = os.getenv("V45_LONG_VCP_SIGNAL_ENGINE_ENABLED", "0") != "0"
+V45_BEAR_SIGNAL_ENGINE_ENABLED = os.getenv("V45_BEAR_SIGNAL_ENGINE_ENABLED", "0") != "0"
+BEAR_SLEEVE_ENABLED = False
+try:
+    V2_MAX_SIGNALS_PER_SCAN = 0
+    V2_ALLOW_VCP = False
+    V2_ALLOW_BREAKOUTS = False
+    V2_ALLOW_PULLBACKS = False
+    V2_ALLOW_MEDIUM = False
+    V2_ALLOW_WEAK = False
+    BEAR_MAX_SIGNALS_PER_SCAN = 0
+except Exception:
+    pass
+
+V46_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V46_VALIDATION_STRATEGY_LABEL = "v4.6 Swing Alpha MACD+VAH + Hybrid Crypto + cost-aware monthly rotation"
+V46_KNOWN_LIMITATIONS = [
+    "v4.6 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.",
+    "Swing Alpha MACD+VAH is promising but winner/sector dependent and should be forward-tested.",
+    "Backtest period is limited and not broker-grade execution simulation.",
+    "Crypto permission/gate required; crypto remains disabled in practice until broker permission and signal are valid.",
+    "Manual execution and read-only IBKR reconciliation are still required; no broker orders are placed.",
+    "Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.",
+]
+
+# ---- Swing Alpha configuration ----
+SWING_ALPHA_ENABLED = os.getenv("SWING_ALPHA_ENABLED", "1") != "0"
+SWING_ALPHA_LEDGER_ENABLED = os.getenv("SWING_ALPHA_LEDGER_ENABLED", "1") != "0"
+SWING_ALPHA_STRATEGY_VERSION = os.getenv("SWING_ALPHA_STRATEGY_VERSION", "swing_alpha_macd_vah_reclaim_v1")
+SWING_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SWING_ALPHA_ACCOUNT_ALLOC_PCT", str(V46_SWING_ALLOC / 100.0)))
+SWING_ALPHA_MAX_OPEN_POSITIONS = int(os.getenv("SWING_ALPHA_MAX_OPEN_POSITIONS", "2"))
+SWING_ALPHA_MAX_PER_CLUSTER = int(os.getenv("SWING_ALPHA_MAX_PER_CLUSTER", "1"))
+SWING_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("SWING_ALPHA_MIN_TRADE_DOLLARS", "75"))
+SWING_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("SWING_ALPHA_QUOTE_DEVIATION_LIMIT", "0.06"))
+SWING_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("SWING_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
+SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
+SWING_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("SWING_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
+SWING_ALPHA_PLAN_VALID_DAYS = int(os.getenv("SWING_ALPHA_PLAN_VALID_DAYS", "3"))
+SWING_ALPHA_MIN_PRICE = float(os.getenv("SWING_ALPHA_MIN_PRICE", "8"))
+SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME", "25000000"))
+SWING_ALPHA_MIN_RET63 = float(os.getenv("SWING_ALPHA_MIN_RET63", "0.05"))
+SWING_ALPHA_MAX_ATR_PCT = float(os.getenv("SWING_ALPHA_MAX_ATR_PCT", "0.18"))
+SWING_ALPHA_MAX_RSI = float(os.getenv("SWING_ALPHA_MAX_RSI", "86"))
+SWING_ALPHA_ENTRY_BUFFER_PCT = float(os.getenv("SWING_ALPHA_ENTRY_BUFFER_PCT", "0.006"))
+SWING_ALPHA_ATR_STOP_MULT = float(os.getenv("SWING_ALPHA_ATR_STOP_MULT", "2.5"))
+SWING_ALPHA_ATR_TRAIL_MULT = float(os.getenv("SWING_ALPHA_ATR_TRAIL_MULT", "3.5"))
+SWING_ALPHA_TIME_STOP_DAYS = int(os.getenv("SWING_ALPHA_TIME_STOP_DAYS", "20"))
+SWING_ALPHA_TIME_STOP_MIN_PCT = float(os.getenv("SWING_ALPHA_TIME_STOP_MIN_PCT", "0.08"))
+SWING_ALPHA_AVOID_GROWTH_SPEC_DUPLICATES = os.getenv("SWING_ALPHA_AVOID_GROWTH_SPEC_DUPLICATES", "1") != "0"
+SWING_ALPHA_SCORE_SLEEP_SEC = float(os.getenv("SWING_ALPHA_SCORE_SLEEP_SEC", "0.0"))
+
+# Use the expanded growth/strong universe but remove ETFs and obvious non-common-stock proxies.
+_V46_ETF_LIKE = {"SPY","QQQ","IWM","DIA","SMH","SOXX","XLK","IGV","XLF","KRE","XLE","XOP","XLV","IBB","XLI","IYT","XLP","XLY","XLC","XLB","XLU","XLRE","ITB"}
+try:
+    _v46_base_universe = list(dict.fromkeys(list(GROWTH_ALPHA_UNIVERSE) + list(WATCHLIST)))
+except Exception:
+    _v46_base_universe = list(dict.fromkeys(list(WATCHLIST)))
+SWING_ALPHA_UNIVERSE = [t for t in _v46_base_universe if t not in _V46_ETF_LIKE]
+# Keep universe sane in live bot. Research used a broader offline universe; live uses liquid leaders in the bot file.
+SWING_ALPHA_UNIVERSE = list(dict.fromkeys(SWING_ALPHA_UNIVERSE))
+
+def _v46_cluster(ticker: str) -> str:
+    ticker = ticker.upper()
+    if 'GROWTH_ALPHA_CLUSTER_MAP' in globals() and ticker in GROWTH_ALPHA_CLUSTER_MAP:
+        return GROWTH_ALPHA_CLUSTER_MAP.get(ticker, "other")
+    if ticker in WEALTH_ASSET_CLUSTERS:
+        return WEALTH_ASSET_CLUSTERS.get(ticker, "other")
+    return "other"
+
+# ---- DB tables ----
+_V46_OLD_INIT_DB = init_db
+
+def init_db() -> None:  # type: ignore[override]
+    _V46_OLD_INIT_DB()
+    conn = db_connect()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS swing_alpha_positions (
+                ticker TEXT PRIMARY KEY,
+                swing_position_id TEXT NOT NULL UNIQUE,
+                strategy_version TEXT NOT NULL,
+                shares REAL NOT NULL CHECK (shares > 0),
+                avg_entry_price REAL NOT NULL CHECK (avg_entry_price > 0),
+                cost_basis REAL NOT NULL CHECK (cost_basis >= 0),
+                entry_time REAL NOT NULL,
+                last_update_time REAL NOT NULL,
+                highest REAL,
+                stop REAL,
+                sleeve TEXT NOT NULL DEFAULT 'SWING_ALPHA',
+                target_account_pct REAL,
+                last_plan_id TEXT,
+                notes TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS swing_alpha_trades (
+                id TEXT PRIMARY KEY,
+                swing_position_id TEXT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+                shares REAL NOT NULL CHECK (shares > 0),
+                price REAL NOT NULL CHECK (price > 0),
+                amount REAL NOT NULL,
+                realized_profit REAL,
+                time REAL NOT NULL,
+                strategy_version TEXT NOT NULL,
+                plan_id TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_swing_alpha_trades_ticker ON swing_alpha_trades(ticker);
+            CREATE INDEX IF NOT EXISTS idx_swing_alpha_trades_time ON swing_alpha_trades(time);
+            CREATE TABLE IF NOT EXISTS swing_alpha_signals (
+                id TEXT PRIMARY KEY,
+                time REAL NOT NULL,
+                plan_date TEXT NOT NULL,
+                account_equity REAL NOT NULL,
+                swing_target_pct REAL NOT NULL,
+                plan_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+            );
+            CREATE INDEX IF NOT EXISTS idx_swing_alpha_signals_time ON swing_alpha_signals(time);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_swing_alpha_positions() -> Dict[str, Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM swing_alpha_positions ORDER BY ticker").fetchall()
+        out: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            out[r["ticker"]] = {
+                "ticker": r["ticker"],
+                "swing_position_id": r["swing_position_id"],
+                "strategy_version": r["strategy_version"],
+                "shares": float(r["shares"]),
+                "avg_entry_price": float(r["avg_entry_price"]),
+                "cost_basis": float(r["cost_basis"]),
+                "entry_time": float(r["entry_time"]),
+                "last_update_time": float(r["last_update_time"]),
+                "highest": None if r["highest"] is None else float(r["highest"]),
+                "stop": None if r["stop"] is None else float(r["stop"]),
+                "sleeve": r["sleeve"],
+                "target_account_pct": None if r["target_account_pct"] is None else float(r["target_account_pct"]),
+                "last_plan_id": r["last_plan_id"],
+                "notes": r["notes"],
+            }
+        return out
+    finally:
+        conn.close()
+
+
+def load_swing_alpha_trades() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM swing_alpha_trades ORDER BY time ASC, created_at ASC").fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _v46_ema(series: pd.Series, span: int) -> pd.Series:
+    return series.ewm(span=span, adjust=False).mean()
+
+
+def _v46_macd_hist(close: pd.Series) -> pd.Series:
+    macd = _v46_ema(close, 12) - _v46_ema(close, 26)
+    sig = _v46_ema(macd, 9)
+    return macd - sig
+
+
+def _v46_vah_val_proxy(df: pd.DataFrame, window: int = 20) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    try:
+        tmp = df.tail(window).copy()
+        if len(tmp) < max(10, window // 2):
+            return None, None, None
+        typical = (tmp["High"] + tmp["Low"] + tmp["Close"]) / 3.0
+        vol = tmp["Volume"].clip(lower=0).fillna(0)
+        if float(vol.sum()) <= 0:
+            return None, None, None
+        order = typical.argsort()
+        vals = typical.iloc[order].astype(float).to_numpy()
+        weights = vol.iloc[order].astype(float).to_numpy()
+        cdf = weights.cumsum() / weights.sum()
+        def wq(q: float) -> float:
+            idx = int((cdf >= q).argmax())
+            return float(vals[min(max(idx, 0), len(vals)-1)])
+        poc_idx = int(vol.values.argmax())
+        poc = float(typical.iloc[poc_idx])
+        return poc, wq(0.85), wq(0.15)
+    except Exception:
+        return None, None, None
+
+
+def swing_alpha_position_market_value_details() -> Dict[str, Any]:
+    positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
+    prices = get_prices_batch(list(positions.keys()))
+    rows: List[Dict[str, Any]] = []
+    value = 0.0
+    cost = 0.0
+    for ticker, pos in positions.items():
+        mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or 0)
+        shares = float(pos.get("shares", 0) or 0)
+        mv = mark * shares
+        cb = float(pos.get("cost_basis", shares * float(pos.get("avg_entry_price", 0) or 0)) or 0)
+        pnl = mv - cb
+        pct = None if cb <= 0 else (pnl / cb) * 100
+        value += mv
+        cost += cb
+        rows.append({
+            **pos,
+            "mark_price": round(mark, 4),
+            "market_value": round(mv, 2),
+            "unrealized_profit": round(pnl, 2),
+            "unrealized_pct": pct,
+            "cluster": _v46_cluster(ticker),
+        })
+    realized = round(sum(float(t.get("realized_profit") or 0.0) for t in load_swing_alpha_trades() if str(t.get("side")).upper() == "SELL"), 2)
+    return {"rows": rows, "value": round(value, 2), "cost_basis": round(cost, 2), "unrealized_profit": round(value - cost, 2), "realized_profit": realized, "total_profit": round((value - cost) + realized, 2)}
+
+
+def _v46_position_symbols_in_monthly_ledgers() -> set:
+    out = set()
+    try:
+        out.update(load_growth_positions().keys())
+    except Exception:
+        pass
+    try:
+        out.update(load_spec_positions().keys())
+    except Exception:
+        pass
+    return {str(x).upper() for x in out}
+
+
+def swing_alpha_market_filter_ok() -> Tuple[bool, str]:
+    try:
+        frames = {s: get_historical(s, limit=260) for s in ["SPY", "QQQ"]}
+        for s, df in frames.items():
+            if df is None or len(df) < 220:
+                return False, f"{s} data unavailable"
+            close = df["Close"].dropna()
+            ma200 = close.rolling(200).mean().iloc[-1]
+            if pd.isna(ma200) or float(close.iloc[-1]) <= float(ma200):
+                return False, f"{s} below MA200"
+        return True, "SPY and QQQ above MA200"
+    except Exception as exc:
+        return False, f"market filter error: {exc}"
+
+
+def _v46_score_swing_candidate(ticker: str) -> Optional[Dict[str, Any]]:
+    df = get_historical(ticker, limit=260)
+    if df is None or len(df) < 220:
+        return None
+    close = df["Close"].astype(float)
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+    volume = df["Volume"].astype(float)
+    price = float(close.iloc[-1])
+    if price < SWING_ALPHA_MIN_PRICE:
+        return None
+    avg_dv = float((close * volume).tail(50).mean())
+    if avg_dv < SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME:
+        return None
+    ema20 = float(_v46_ema(close, 20).iloc[-1])
+    ema50 = float(_v46_ema(close, 50).iloc[-1])
+    ema200 = float(_v46_ema(close, 200).iloc[-1])
+    if not (price > ema50 > ema200):
+        return None
+    ret20 = pct_change_over(close, 20)
+    ret63 = pct_change_over(close, 63)
+    ret126 = pct_change_over(close, 126)
+    if ret63 is None or ret63 < SWING_ALPHA_MIN_RET63:
+        return None
+    atr_series = atr(df, 14)
+    atr_val = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else 0.0
+    if atr_val <= 0:
+        return None
+    atr_pct = atr_val / price
+    if atr_pct <= 0 or atr_pct > SWING_ALPHA_MAX_ATR_PCT:
+        return None
+    rsi_val = float(rsi(close, 14).iloc[-1]) if not pd.isna(rsi(close, 14).iloc[-1]) else 50.0
+    if rsi_val > SWING_ALPHA_MAX_RSI:
+        return None
+    hist = _v46_macd_hist(close)
+    if len(hist.dropna()) < 5:
+        return None
+    h0, h1, h2 = float(hist.iloc[-1]), float(hist.iloc[-2]), float(hist.iloc[-3])
+    macd_turn = (h0 > h1 and h1 <= h2) or (h0 > 0 and h0 > h1)
+    if not macd_turn:
+        return None
+    poc, vah, val = _v46_vah_val_proxy(df.iloc[:-1], window=20)
+    if vah is None or price <= float(vah):
+        return None
+    # Avoid buying obviously extended candles while still allowing opportunistic leaders.
+    if price > ema20 * 1.18:
+        return None
+    stop = max(price - SWING_ALPHA_ATR_STOP_MULT * atr_val, ema20 * 0.985)
+    if stop >= price:
+        stop = price - SWING_ALPHA_ATR_STOP_MULT * atr_val
+    max_entry = price * (1.0 + SWING_ALPHA_ENTRY_BUFFER_PCT)
+    score = ((ret63 or 0) * 2.0) + ((ret20 or 0) * 1.2) + ((ret126 or 0) * 0.7) + (h0 * 5.0 / max(price, 1.0)) - (atr_pct * 0.8)
+    return {
+        "ticker": ticker,
+        "price": round(price, 4),
+        "signal_price": round(price, 4),
+        "max_valid_entry": round(max_entry, 4),
+        "stop": round(stop, 4),
+        "ema20": round(ema20, 4),
+        "ema50": round(ema50, 4),
+        "ema200": round(ema200, 4),
+        "vah_proxy": round(float(vah), 4),
+        "poc_proxy": None if poc is None else round(float(poc), 4),
+        "val_proxy": None if val is None else round(float(val), 4),
+        "atr": round(atr_val, 4),
+        "atr_pct": round(atr_pct * 100, 2),
+        "rsi": round(rsi_val, 2),
+        "ret20_pct": None if ret20 is None else round(ret20 * 100, 2),
+        "ret63_pct": round(ret63 * 100, 2),
+        "ret126_pct": None if ret126 is None else round(ret126 * 100, 2),
+        "macd_hist": round(h0, 6),
+        "score": round(score, 6),
+        "cluster": _v46_cluster(ticker),
+        "strategy_sleeve": "SWING_ALPHA",
+        "setup_type": "macd_vah_reclaim",
+        "strategy_version": SWING_ALPHA_STRATEGY_VERSION,
+    }
+
+
+def compute_swing_alpha_plan() -> Dict[str, Any]:
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0) or 0)
+    allocation = dynamic_portfolio_allocation_targets()
+    target_pct = float(allocation.get("swing_alpha_pct", SWING_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0) / 100.0
+    target_value = equity * target_pct
+    positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
+    details = swing_alpha_position_market_value_details()
+    current_rows = {r["ticker"]: r for r in details.get("rows", [])}
+    market_ok, market_reason = swing_alpha_market_filter_ok()
+    risk = portfolio_risk_guard_details() if PORTFOLIO_RISK_GUARD_ENABLED else {"hard_active": False, "soft_active": False, "recommended_action": "Normal risk mode."}
+    duplicates = _v46_position_symbols_in_monthly_ledgers() if SWING_ALPHA_AVOID_GROWTH_SPEC_DUPLICATES else set()
+    scored: List[Dict[str, Any]] = []
+    actions: List[Dict[str, Any]] = []
+    if SWING_ALPHA_ENABLED and target_pct > 0 and market_ok and not risk.get("hard_active"):
+        cluster_counts: Dict[str, int] = {}
+        for idx, ticker in enumerate(SWING_ALPHA_UNIVERSE, start=1):
+            if ticker in duplicates and ticker not in positions:
+                continue
+            item = _v46_score_swing_candidate(ticker)
+            if item is None:
+                continue
+            cluster = item.get("cluster", "other")
+            if cluster_counts.get(cluster, 0) >= SWING_ALPHA_MAX_PER_CLUSTER and ticker not in positions:
+                continue
+            scored.append(item)
+            cluster_counts[cluster] = cluster_counts.get(cluster, 0) + 1
+            if SWING_ALPHA_SCORE_SLEEP_SEC > 0 and idx % 40 == 0:
+                time.sleep(SWING_ALPHA_SCORE_SLEEP_SEC)
+    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
+    selected = scored[:max(SWING_ALPHA_MAX_OPEN_POSITIONS, 1)]
+    selected_tickers = {x["ticker"] for x in selected}
+    per_pos_target = 0.0 if SWING_ALPHA_MAX_OPEN_POSITIONS <= 0 else target_value / SWING_ALPHA_MAX_OPEN_POSITIONS
+    for item in selected:
+        ticker = item["ticker"]
+        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
+        drift = per_pos_target - current_value
+        if current_value <= 0 and per_pos_target >= SWING_ALPHA_MIN_TRADE_DOLLARS:
+            action = "BUY"
+        elif current_value > 0 and drift > max(SWING_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
+            action = "ADD"
+        else:
+            action = "HOLD"
+        actions.append({**item, "action": action, "target_account_pct": round((per_pos_target / equity) * 100 if equity > 0 else 0, 2), "target_value": round(per_pos_target, 2), "current_value": round(current_value, 2), "suggested_dollars": round(max(0.0, drift), 2), "reason": "MACD + VAH reclaim leader swing candidate."})
+    # Existing-position exits.
+    for ticker, pos in positions.items():
+        mark = float(current_rows.get(ticker, {}).get("mark_price", pos.get("avg_entry_price", 0)) or 0)
+        df = get_historical(ticker, limit=120)
+        reason = None
+        if not market_ok:
+            reason = f"Market filter off: {market_reason}"
+        elif df is not None and len(df) >= 60:
+            close = df["Close"].astype(float)
+            ema20 = float(_v46_ema(close, 20).iloc[-1])
+            atr_val = float(atr(df, 14).iloc[-1]) if not pd.isna(atr(df, 14).iloc[-1]) else 0.0
+            highest = max(float(pos.get("highest") or mark), mark)
+            trail = highest - SWING_ALPHA_ATR_TRAIL_MULT * atr_val if atr_val > 0 else 0.0
+            entry_time = float(pos.get("entry_time") or now_ts())
+            days_held = max(0.0, (now_ts() - entry_time) / 86400.0)
+            avg = float(pos.get("avg_entry_price", mark) or mark)
+            gain = (mark / avg - 1.0) if avg > 0 else 0.0
+            stop = float(pos.get("stop") or 0.0)
+            if mark < ema20:
+                reason = "Close/mark below EMA20 swing exit."
+            elif stop > 0 and mark <= stop:
+                reason = "Initial stop hit."
+            elif trail > 0 and mark <= trail:
+                reason = "ATR trailing stop hit."
+            elif days_held >= SWING_ALPHA_TIME_STOP_DAYS and gain < SWING_ALPHA_TIME_STOP_MIN_PCT:
+                reason = f"Time stop: {int(days_held)} days held without +{int(SWING_ALPHA_TIME_STOP_MIN_PCT*100)}% progress."
+        if ticker not in selected_tickers and reason is None:
+            # Do not auto-sell only because it is not selected today; sell only on actual exit rules.
+            continue
+        if reason:
+            actions.append({"ticker": ticker, "action": "SELL", "price": mark, "target_account_pct": 0.0, "target_value": 0.0, "current_value": float(current_rows.get(ticker, {}).get("market_value", 0) or 0), "suggested_dollars": float(current_rows.get(ticker, {}).get("market_value", 0) or 0), "reason": reason})
+    return {"plan_id": uuid.uuid4().hex, "strategy_version": SWING_ALPHA_STRATEGY_VERSION, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "account_equity": round(equity,2), "target_swing_pct": round(target_pct*100,2), "target_swing_value": round(target_value,2), "current_swing_value": float(details.get("value",0) or 0), "current_swing_unrealized_profit": float(details.get("unrealized_profit",0) or 0), "market_ok": market_ok, "market_reason": market_reason, "risk_guard": risk, "universe_size": len(SWING_ALPHA_UNIVERSE), "scored_count": len(scored), "top": selected, "actions": actions, "actionable": [a for a in actions if str(a.get("action")).upper() in {"BUY","ADD","SELL","TRIM"}], "allocation": allocation}
+
+
+def save_swing_alpha_plan(plan: Dict[str, Any]) -> None:
+    if not SWING_ALPHA_LEDGER_ENABLED:
+        return
+    with db_tx() as conn:
+        conn.execute("UPDATE swing_alpha_signals SET status='INACTIVE' WHERE status='ACTIVE'")
+        conn.execute("INSERT INTO swing_alpha_signals(id, time, plan_date, account_equity, swing_target_pct, plan_json, status) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')", (plan.get("plan_id", uuid.uuid4().hex), now_ts(), ny_date_str(), float(plan.get("account_equity",0) or 0), float(plan.get("target_swing_pct",0) or 0), json_dumps(plan)))
+
+
+def load_latest_swing_alpha_signal() -> Optional[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        row = conn.execute("SELECT * FROM swing_alpha_signals WHERE status='ACTIVE' ORDER BY time DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        return json_loads_dict(row["plan_json"])
+    finally:
+        conn.close()
+
+
+def swing_alpha_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
+    ticker = ticker.upper()
+    for item in plan.get("actions", []) or []:
+        if str(item.get("ticker", "")).upper() == ticker:
+            return item
+    return None
+
+
+def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:
+    risk = plan.get("risk_guard", {}) or {}
+    msg = (
+        "🎯 SWING_ALPHA PLAN v4.6 — MACD + VAH RECLAIM\n\n"
+        "Private bot only. Execute in broker first, then record with swingbuy/swingsell.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"🌎 Market filter: {yes_no(bool(plan.get('market_ok')))} — {plan.get('market_reason')}\n"
+        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
+        f"🎯 Target Swing sleeve: {plan.get('target_swing_pct')}% = {format_money(float(plan.get('target_swing_value', 0) or 0))}\n"
+        f"📦 Current Swing value: {format_money(float(plan.get('current_swing_value', 0) or 0))}\n"
+        f"📈 Swing unrealized P/L: {format_money(float(plan.get('current_swing_unrealized_profit', 0) or 0))}\n"
+        f"🧪 Universe/scored: {plan.get('universe_size')} / {plan.get('scored_count')}\n"
+        f"🎚️ Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n\n"
+    )
+    actions = plan.get("actions", []) or []
+    ranked = [a for a in actions if str(a.get("action")).upper() in {"BUY","ADD","HOLD"}]
+    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
+    if ranked:
+        msg += "🎯 Ranked Swing Alpha candidates\n"
+        for i, item in enumerate(ranked, start=1):
+            action = str(item.get("action", "HOLD")).upper()
+            verb = {"BUY":"🟢 BUY", "ADD":"🟢 ADD", "HOLD":"🟡 HOLD"}.get(action, action)
+            price = float(item.get("price",0) or 0)
+            suggested = float(item.get("suggested_dollars",0) or 0)
+            est_qty = suggested / price if price > 0 else 0.0
+            msg += (
+                f"{i}) {verb} {item.get('ticker')} ({item.get('cluster')})\n"
+                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value',0) or 0))}\n"
+                f"   Current: {format_money(float(item.get('current_value',0) or 0))} | Action size: ~{format_money(suggested)}\n"
+                f"   Plan price: {item.get('price')} | Max limit guide: {item.get('max_valid_entry')} | Stop: {item.get('stop')}\n"
+                f"   Est. qty: ~{round(est_qty, 4)} | RSI {item.get('rsi')} | ATR {item.get('atr_pct')}% | Score {item.get('score')}\n"
+                f"   Command after fill: swingbuy {item.get('ticker')} ACTUAL_SHARES at ACTUAL_FILL_PRICE\n"
+            )
+        msg += "\n"
+    else:
+        msg += "No Swing Alpha buy/add candidates now.\n\n"
+    if exits:
+        msg += "🔴 Swing Alpha exit candidates\n"
+        for item in exits:
+            msg += f"SELL {item.get('ticker')} — current {format_money(float(item.get('current_value',0) or 0))}\nReason: {item.get('reason')}\nCommand after fill: swingsell {item.get('ticker')} ACTUAL_SHARES at ACTUAL_FILL_PRICE\n"
+        msg += "\n"
+    msg += (
+        "Swing Alpha rules:\n"
+        "• Daily tactical swing sleeve, not monthly rotation.\n"
+        "• Uses MACD histogram turn/reclaim + daily VAH proxy reclaim on strong leaders.\n"
+        "• Max 2 positions, cluster cap active, no old VCP/bear signals.\n"
+        "• Do not chase above max limit guide.\n"
+        "• Separate Swing Alpha ledger; do not use corebuy/growthbuy/specbuy/cryptobuy."
+    )
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_swing_alpha_portfolio_report() -> str:
+    details = swing_alpha_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = (f"🎯 SWING_ALPHA PORTFOLIO\n\n"
+           f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
+           f"🎯 Swing value: {format_money(float(details.get('value', 0) or 0))}\n"
+           f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+           f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+           f"✅ Realized Swing Alpha P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+           f"💼 Total equity: {format_money(snapshot['equity'])}\n\n")
+    if not rows:
+        return msg + "No Swing Alpha positions recorded yet. Use swingplan, then swingbuy after broker execution."
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Shares: {format_core_shares(row['shares'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 4)} | Now: {round(float(row['mark_price']), 4)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
+                f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_swing_alpha_pnl_report() -> str:
+    details = swing_alpha_position_market_value_details()
+    trades = load_swing_alpha_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return (f"🎯 SWING_ALPHA P/L\n\n"
+            f"🎯 Swing value: {format_money(float(details.get('value',0) or 0))}\n"
+            f"📏 Cost basis: {format_money(float(details.get('cost_basis',0) or 0))}\n"
+            f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit',0) or 0))}\n"
+            f"✅ Realized P/L: {format_money(float(details.get('realized_profit',0) or 0))}\n"
+            f"Buy records: {len(buys)}\nSell records: {len(sells)}")
+
+
+def format_swing_alpha_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    details = swing_alpha_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    alloc = dynamic_portfolio_allocation_targets()
+    target_pct = float(alloc.get("swing_alpha_pct", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    return (f"🎯 SWING_ALPHA EXPOSURE\n\n"
+            f"💼 Total equity: {format_money(equity)}\n"
+            f"🎯 Swing value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"🎯 Target Swing: {round(target_pct, 2)}% of account\n"
+            f"📊 Actual Swing: {round(actual_pct, 2)}% of account\n"
+            f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
+            "Use swingplan for BUY/HOLD/SELL actions.")
+
+
+def _v46_validate_swing_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
+    if not SWING_ALPHA_REQUIRE_LIVE_QUOTE:
+        return True, "OK", None
+    quote = get_prices_batch([ticker]).get(ticker)
+    if quote is None or quote <= 0:
+        return False, f"No valid live quote for {ticker}.", None
+    deviation = abs(price - quote) / quote
+    if deviation > SWING_ALPHA_QUOTE_DEVIATION_LIMIT:
+        return False, f"Swing Alpha trade rejected: your price is too far from live quote. Live quote: {round(quote,4)} | Your price: {round(price,4)} | Max deviation: {round(SWING_ALPHA_QUOTE_DEVIATION_LIMIT*100,2)}%", quote
+    return True, "OK", quote
+
+
+def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:
+    if not SWING_ALPHA_LEDGER_ENABLED:
+        return False, "Swing Alpha ledger is disabled."
+    ticker = normalize_ticker(ticker or "")
+    if ticker is None:
+        return False, "Invalid ticker."
+    if ticker not in SWING_ALPHA_UNIVERSE:
+        return False, f"{ticker} is not in the Swing Alpha universe."
+    if shares <= 0 or price <= 0 or not math.isfinite(shares) or not math.isfinite(price):
+        return False, "Shares and price must be positive finite numbers."
+    if (not SWING_ALPHA_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
+        return False, "Fractional Swing Alpha shares are disabled."
+    amount = shares * price
+    if amount < SWING_ALPHA_MIN_TRADE_DOLLARS and not partial_ok:
+        return False, f"Swing Alpha buy rejected: order {format_money(amount)} is below minimum {format_money(SWING_ALPHA_MIN_TRADE_DOLLARS)}. Use 'partial' only for real broker partial fills already filled."
+    latest = load_latest_swing_alpha_signal()
+    target = swing_alpha_target_for_ticker(latest or {}, ticker) if latest else None
+    if SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY and target is None:
+        return False, "No active Swing Alpha plan target for this ticker. Run swingplan first."
+    if target is not None:
+        max_entry = float(target.get("max_valid_entry", 0) or 0)
+        if max_entry > 0 and price > max_entry and not partial_ok:
+            return False, f"Entry above max limit guide. Max {round(max_entry,4)}, your price {round(price,4)}."
+    ok, msg, quote = _v46_validate_swing_quote(ticker, price)
+    if not ok:
+        return False, msg
+    with db_tx() as conn:
+        cash = get_cash(conn)
+        if amount > cash * CASH_USAGE_BUFFER:
+            return False, f"Not enough cash. Need {format_money(amount)}, available with buffer {format_money(cash * CASH_USAGE_BUFFER)}."
+        row = conn.execute("SELECT * FROM swing_alpha_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row:
+            old_shares = float(row["shares"])
+            old_cost = float(row["cost_basis"])
+            new_shares = old_shares + shares
+            new_cost = old_cost + amount
+            avg = new_cost / new_shares
+            pos_id = row["swing_position_id"]
+            highest = max(float(row["highest"] or price), float(quote or price), price)
+            stop = float(row["stop"] or 0) or float((target or {}).get("stop", price * 0.92) or price * 0.92)
+            conn.execute("""UPDATE swing_alpha_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=?, highest=?, stop=?, target_account_pct=?, last_plan_id=? WHERE ticker=?""", (round(new_shares, 8), round(avg, 8), round(new_cost, 6), now_ts(), highest, stop, None if target is None else float(target.get("target_account_pct", 0) or 0), None if latest is None else latest.get("plan_id"), ticker))
+        else:
+            pos_id = f"SWING_{ticker}_{int(now_ts())}_{uuid.uuid4().hex[:8]}"
+            highest = float(quote or price)
+            stop = float((target or {}).get("stop", price * 0.92) or price * 0.92)
+            conn.execute("""INSERT INTO swing_alpha_positions(ticker, swing_position_id, strategy_version, shares, avg_entry_price, cost_basis, entry_time, last_update_time, highest, stop, sleeve, target_account_pct, last_plan_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SWING_ALPHA', ?, ?, ?)""", (ticker, pos_id, SWING_ALPHA_STRATEGY_VERSION, round(shares,8), round(price,8), round(amount,6), now_ts(), now_ts(), highest, stop, None if target is None else float(target.get("target_account_pct", 0) or 0), None if latest is None else latest.get("plan_id"), "partial fill" if partial_ok else ""))
+        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares,8), round(price,8), round(amount,6), now_ts(), SWING_ALPHA_STRATEGY_VERSION, None if latest is None else latest.get("plan_id"), "broker_partial_fill" if partial_ok else "manual_broker_fill", now_ts()))
+        set_cash_tx(conn, cash - amount)
+        mark_update_processed_tx(conn, update_id, "swing_alpha_buy")
+    extra = "\n\n🧩 v4.6: recorded as broker partial fill below normal Swing Alpha minimum-order threshold." if partial_ok else ""
+    return True, (f"🎯 SWING_ALPHA BUY RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if target is None else target.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(load_portfolio()['cash'])}{extra}")
+
+
+def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    if not SWING_ALPHA_LEDGER_ENABLED:
+        return False, "Swing Alpha ledger is disabled."
+    ticker = normalize_ticker(ticker or "")
+    if ticker is None:
+        return False, "Invalid ticker."
+    if shares <= 0 or price <= 0 or not math.isfinite(shares) or not math.isfinite(price):
+        return False, "Shares and price must be positive finite numbers."
+    ok, msg, quote = _v46_validate_swing_quote(ticker, price)
+    if not ok:
+        return False, msg
+    with db_tx() as conn:
+        row = conn.execute("SELECT * FROM swing_alpha_positions WHERE ticker = ?", (ticker,)).fetchone()
+        if row is None:
+            return False, f"No Swing Alpha position found for {ticker}."
+        current_shares = float(row["shares"])
+        if shares > current_shares + 1e-8:
+            return False, f"Cannot sell {format_core_shares(shares)}; only {format_core_shares(current_shares)} shares recorded."
+        avg = float(row["avg_entry_price"])
+        cost_basis = float(row["cost_basis"])
+        proceeds = shares * price
+        cost_removed = cost_basis * (shares / current_shares)
+        realized = proceeds - cost_removed
+        remaining = current_shares - shares
+        pos_id = row["swing_position_id"]
+        if remaining <= 1e-8:
+            conn.execute("DELETE FROM swing_alpha_positions WHERE ticker=?", (ticker,))
+        else:
+            remaining_cost = cost_basis - cost_removed
+            conn.execute("UPDATE swing_alpha_positions SET shares=?, cost_basis=?, avg_entry_price=?, last_update_time=? WHERE ticker=?", (round(remaining,8), round(remaining_cost,6), round(remaining_cost/remaining,8), now_ts(), ticker))
+        cash = get_cash(conn)
+        set_cash_tx(conn, cash + proceeds)
+        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares,8), round(price,8), round(proceeds,6), round(realized,6), now_ts(), SWING_ALPHA_STRATEGY_VERSION, None, "manual_broker_exit", now_ts()))
+        mark_update_processed_tx(conn, update_id, "swing_alpha_sell")
+    pct = None if cost_removed <= 0 else (realized / cost_removed) * 100
+    return True, (f"🎯 SWING_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized Swing Alpha P/L: {format_money(realized)} ({format_pct(pct)})\n💵 Cash now: {format_money(load_portfolio()['cash'])}")
+
+# ---- Include Swing Alpha in equity and reports ----
+_V46_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
+
+def compute_equity_snapshot_data() -> Dict[str, float]:  # type: ignore[override]
+    snapshot = _V46_OLD_COMPUTE_EQUITY()
+    details = swing_alpha_position_market_value_details() if SWING_ALPHA_LEDGER_ENABLED else {"value": 0.0, "cost_basis": 0.0, "unrealized_profit": 0.0}
+    swing_value = float(details.get("value", 0) or 0)
+    snapshot["swing_alpha_positions_value"] = round(swing_value, 2)
+    snapshot["swing_alpha_cost_basis"] = round(float(details.get("cost_basis", 0) or 0), 2)
+    snapshot["swing_alpha_unrealized_profit"] = round(float(details.get("unrealized_profit", 0) or 0), 2)
+    snapshot["positions_value"] = round(float(snapshot.get("positions_value", 0) or 0) + swing_value, 2)
+    snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + swing_value, 2)
+    return snapshot
+
+_V46_OLD_REALIZED_PERF = realized_performance_all_time
+
+def realized_performance_all_time() -> Dict[str, Any]:  # type: ignore[override]
+    perf = _V46_OLD_REALIZED_PERF()
+    trades = load_swing_alpha_trades() if SWING_ALPHA_LEDGER_ENABLED else []
+    swing_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in trades if str(t.get("side")).upper() == "SELL"), 2)
+    perf["swing_alpha_realized_profit"] = swing_profit
+    perf["profit"] = round(float(perf.get("profit", 0) or 0) + swing_profit, 2)
+    base_cap = float(perf.get("base_capital", 0) or 0)
+    perf["pct"] = None if base_cap <= 0 else (perf["profit"] / base_cap) * 100
+    perf["swing_alpha_trade_records"] = len(trades)
+    perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(trades)
+    return perf
+
+_V46_OLD_FORMAT_COMBINED_PORTFOLIO = format_combined_portfolio_report
+
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    base = _V46_OLD_FORMAT_COMBINED_PORTFOLIO()
+    rows = swing_alpha_position_market_value_details().get("rows", []) if SWING_ALPHA_LEDGER_ENABLED else []
+    if not rows:
+        return base
+    msg = base + "\n\n🎯 SWING_ALPHA POSITIONS\n\n"
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Shares: {format_core_shares(row['shares'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 4)} | Now: {round(float(row['mark_price']), 4)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+# ---- Allocation and risk reports ----
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
+    try:
+        base = _V45_OLD_DYNAMIC_ALLOC()
+    except Exception:
+        base = {"ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "market": market_condition(), "market_score": None, "bear_score": None, "risk_guard": portfolio_risk_guard_details()}
+    risk = base.get("risk_guard", {}) or portfolio_risk_guard_details()
+    market = str(base.get("market", "UNCERTAIN")).upper()
+    if risk.get("hard_active"):
+        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    elif market == "BULL":
+        core, growth, spec, swing, crypto, long_vcp, bear = V46_CORE_ALLOC, V46_GROWTH_ALLOC, V46_SPEC_ALLOC, V46_SWING_ALLOC, V46_CRYPTO_ALLOC, 0.0, 0.0
+    elif market == "BEAR":
+        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    else:
+        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 20.0, 8.0, 5.0, 5.0, 0.0, 0.0
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        growth *= 0.50; spec *= 0.50; swing *= 0.50; crypto *= 0.50
+    if not GROWTH_ALPHA_ENABLED: growth = 0.0
+    if not SPEC_ALPHA_ENABLED: spec = 0.0
+    if not SWING_ALPHA_ENABLED: swing = 0.0
+    if not CRYPTO_ALPHA_ENABLED: crypto = 0.0
+    cash = max(0.0, 100.0 - core - growth - spec - swing - crypto - long_vcp - bear)
+    base["strategy_version"] = "v4_6_freeze_swing_alpha_dynamic_allocation"
+    base["core_wealth_pct"] = round(core, 2)
+    base["growth_alpha_pct"] = round(growth, 2)
+    base["spec_alpha_pct"] = round(spec, 2)
+    base["swing_alpha_pct"] = round(swing, 2)
+    base["crypto_alpha_pct"] = round(crypto, 2)
+    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
+    base["bear_inverse_tactical_pct"] = round(bear, 2)
+    base["cash_reserve_pct"] = round(cash, 2)
+    return base
+
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6 FREEZE CANDIDATE 20/45/15/10/10\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
+        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
+        f"🐻 Bear tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves with monthly-lock protection.\n"
+        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
+        "• Swing Alpha replaces disabled VCP allocation using MACD + VAH reclaim logic.\n"
+        "• Crypto uses BTC/ETH/SOL hybrid major trend logic.\n"
+        "• Bear/VCP/Options remain disabled.\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0) or 0)
+    ledgers = [
+        ("cash", float(snapshot.get("cash", 0) or 0)),
+        ("core", float(snapshot.get("core_positions_value", 0) or 0)),
+        ("growth", float(snapshot.get("growth_alpha_positions_value", 0) or 0)),
+        ("spec", float(snapshot.get("spec_positions_value", 0) or 0)),
+        ("swing_alpha", float(snapshot.get("swing_alpha_positions_value", 0) or 0)),
+        ("crypto", float(snapshot.get("crypto_alpha_positions_value", 0) or 0)),
+        ("legacy_swing", float(snapshot.get("swing_positions_value", 0) or 0)),
+    ]
+    rows = []
+    for src, fn in [("core", core_position_market_value_details), ("growth", growth_position_market_value_details), ("spec", spec_position_market_value_details), ("swing_alpha", swing_alpha_position_market_value_details), ("crypto", crypto_position_market_value_details)]:
+        try:
+            for r in fn().get("rows", []):
+                ticker = r.get("ticker")
+                mv = float(r.get("market_value", 0) or 0)
+                rows.append({"ticker": ticker, "ledger": src, "value": mv, "cluster": r.get("cluster") or _v46_cluster(str(ticker))})
+        except Exception:
+            pass
+    clusters: Dict[str, float] = {}
+    for r in rows:
+        clusters[str(r.get("cluster") or "other")] = clusters.get(str(r.get("cluster") or "other"), 0.0) + float(r.get("value", 0) or 0)
+    msg = f"🧮 RISK MATRIX v4.6 RECON\n\nStatus: ✅ OK\nTotal equity: {format_money(equity)}\n\nLedger exposure:\n"
+    for name, val in ledgers:
+        if abs(val) > 0.01:
+            pct = 0.0 if equity <= 0 else (val/equity)*100
+            msg += f"• {name}: {format_money(val)} ({round(pct,2)}%)\n"
+    msg += "\nTop clusters:\n"
+    for cluster, val in sorted(clusters.items(), key=lambda x: x[1], reverse=True)[:10]:
+        msg += f"• {cluster}: {format_money(val)} ({round((val/equity)*100 if equity>0 else 0,2)}%)\n"
+    msg += "\nTop positions:\n"
+    for r in sorted(rows, key=lambda x: x["value"], reverse=True)[:12]:
+        msg += f"• {r['ticker']} [{r['ledger']}]: {format_money(r['value'])} ({round((r['value']/equity)*100 if equity>0 else 0,2)}%)\n"
+    warnings = []
+    for r in rows:
+        if equity > 0 and r["value"]/equity > MAX_POSITION_EQUITY_PCT:
+            warnings.append(f"{r['ticker']} exceeds max position guide")
+    msg += "\n" + ("✅ No concentration warnings." if not warnings else "⚠️ Warnings:\n" + "\n".join(f"• {w}" for w in warnings))
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_stress_status() -> str:  # type: ignore[override]
+    snapshot = compute_equity_snapshot_data()
+    equity = float(snapshot.get("equity", 0) or 0)
+    core = float(snapshot.get("core_positions_value", 0) or 0)
+    growth = float(snapshot.get("growth_alpha_positions_value", 0) or 0)
+    spec = float(snapshot.get("spec_positions_value", 0) or 0)
+    swing = float(snapshot.get("swing_alpha_positions_value", 0) or 0)
+    crypto = float(snapshot.get("crypto_alpha_positions_value", 0) or 0)
+    scenarios = {
+        "broad_risk_off": -(0.10*core + 0.18*growth + 0.22*spec + 0.20*swing + 0.30*crypto),
+        "growth_swing_unwind": -(0.25*growth + 0.25*swing + 0.15*spec),
+        "semis_ai_shock": -(0.30*growth + 0.20*swing + 0.10*core),
+        "crypto_flush": -(0.45*crypto + 0.05*growth),
+    }
+    worst_name, worst_val = min(scenarios.items(), key=lambda x: x[1]) if scenarios else ("none", 0.0)
+    msg = f"🔥 STRESS STATUS v4.6 RECON\n\nStatus: ✅ OK\nEquity: {format_money(equity)}\nWorst scenario: {worst_name} {format_money(worst_val)} ({round((worst_val/equity)*100 if equity>0 else 0,2)}%)\n\n"
+    for k, v in scenarios.items():
+        msg += f"• {k}: {format_money(v)} ({round((v/equity)*100 if equity>0 else 0,2)}%)\n"
+    msg += "\nApproximate monitoring only. It does not block trades."
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+# Validation/reporting labels.
+def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
+    return {"strategy_version": STRATEGY_VERSION, "strategy": V46_VALIDATION_STRATEGY_LABEL, "allocation": V46_ALLOCATION_LABEL, "known_limitations": list(V46_KNOWN_LIMITATIONS), "live_validation_rules": ["Core/Growth/SPEC remain monthly rotation sleeves; daily plans are monitoring unless monthly-lock allows action.", "Swing Alpha is tactical and separate from monthly ledgers.", "Crypto is tactical and separate, using BTC/ETH/SOL hybrid trend logic.", "Do not chase above max limit guide.", "Use partial-fill commands only for real broker fills already executed.", "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.", "Do not treat external legacy IBKR positions as bot-managed strategy positions.", "No broker order automation in v4.6; IBKR reconciliation remains read-only."]}
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    limitations = "\n".join(f"- {x}" for x in V46_KNOWN_LIMITATIONS)
+    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
+    return ("🧪 VALIDATION STATUS v4.6\n\n"
+            f"Strategy: {V46_VALIDATION_STRATEGY_LABEL}\n"
+            f"Allocation: {V46_ALLOCATION_LABEL}\n\n"
+            "Known limitations:\n"
+            f"{limitations}\n\n"
+            "Live validation rules:\n"
+            f"{rules}\n\n"
+            "Reporting note: v4.6 adds Swing Alpha and changes allocation; IBKR remains read-only and execution remains manual.")[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v46_label_cleanup(msg: Any) -> str:
+    text = str(msg)
+    for old in ["v4.5", "V4.5", "v4.4.3", "V4.4.3", "v4.3", "V4.3"]:
+        text = text.replace(old, "v4.6" if old.startswith("v") else "V4.6")
+    text = text.replace("Core 20 / Growth 50 / SPEC 20 / Crypto 10 / Long VCP 0 / Bear 0 / Options 0", V46_ALLOCATION_LABEL)
+    text = text.replace("Core 20 / Growth 55 / SPEC 15 / Crypto 10 / Swing 0", V46_ALLOCATION_LABEL)
+    return text
+
+_V46_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
+_V46_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
+_V46_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V46_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V46_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v46_label_cleanup(_V46_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v46_label_cleanup(_V46_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
+
+# Export and reset integration.
+_V46_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V46_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("swing_alpha_positions.table.json", json.dumps(safe_convert(list(load_swing_alpha_positions().values())), indent=2))
+            z.writestr("swing_alpha_trades.table.json", json.dumps(safe_convert(load_swing_alpha_trades()), indent=2))
+            z.writestr("swing_alpha_latest_plan.json", json.dumps(safe_convert(load_latest_swing_alpha_signal() or {}), indent=2))
+    except Exception as exc:
+        print(f"[SWING ALPHA EXPORT WARNING] {exc}")
+    return zip_path
+
+_V46_OLD_RESET_ALL = reset_all_paper_state
+
+def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:  # type: ignore[override]
+    ok, msg, backup_path = _V46_OLD_RESET_ALL(update_id=update_id)
+    with db_tx() as conn:
+        conn.execute("DELETE FROM swing_alpha_positions")
+        conn.execute("DELETE FROM swing_alpha_trades")
+        conn.execute("DELETE FROM swing_alpha_signals")
+    return ok, msg + "\n✅ Swing Alpha positions/trades/signals cleared", backup_path
+
+# Command routing.
+_V46_OLD_HANDLE_COMMAND = handle_command
+
+def _v46_status_text() -> str:
+    try:
+        market_ok, swing_reason = swing_alpha_market_filter_ok()
+    except Exception as exc:
+        market_ok, swing_reason = False, f"error: {exc}"
+    try:
+        growth_ok, growth_reason = growth_alpha_market_filter_ok()
+    except Exception as exc:
+        growth_ok, growth_reason = False, f"error: {exc}"
+    try:
+        win = _v44_monthly_rebalance_window_info()
+    except Exception as exc:
+        win = {"open": False, "reason": f"error: {exc}"}
+    return (
+        "🛠️ V4.6 FREEZE CANDIDATE STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Strategy logic: {V46_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V46_ALLOCATION_LABEL}\n"
+        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+        f"Growth market filter: {yes_no(growth_ok)} — {growth_reason}\n"
+        f"Swing market filter: {yes_no(market_ok)} — {swing_reason}\n"
+        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
+        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+        "Execution controls:\n"
+        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
+        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
+        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+        f"• Swing Alpha max {SWING_ALPHA_MAX_OPEN_POSITIONS}, min order {format_money(SWING_ALPHA_MIN_TRADE_DOLLARS)}, cluster cap {SWING_ALPHA_MAX_PER_CLUSTER}\n"
+        "• Crypto: BTC/ETH/SOL hybrid major trend, 70% daily breakout + 30% 4h compression.\n"
+        "• VCP/Bear/Options disabled.\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v46status", "v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        send(_v46_status_text())
+        return
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+    if text_lower == "swingplan":
+        send("🎯 Swing Alpha plan started. This scans strong leaders for MACD + VAH reclaim swing setups.")
+        plan = compute_swing_alpha_plan()
+        save_swing_alpha_plan(plan)
+        send(format_swing_alpha_plan(plan))
+        return
+    if text_lower == "swingstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_swing_alpha_signal()
+        details = swing_alpha_position_market_value_details()
+        m_ok, m_reason = swing_alpha_market_filter_ok()
+        send("🎯 SWING_ALPHA STATUS v4.6\n\n" +
+             f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\nLedger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n" +
+             f"Target now: {alloc.get('swing_alpha_pct')}% of account\n" +
+             f"Strategy: MACD + VAH reclaim\nUniverse size: {len(SWING_ALPHA_UNIVERSE)}\n" +
+             f"Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n" +
+             f"Market filter: {yes_no(m_ok)} — {m_reason}\n" +
+             f"Swing value: {format_money(float(details.get('value',0) or 0))}\n" +
+             f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n" +
+             "Commands:\nswingplan\nswingbuy TICKER SHARES at PRICE\nswingsell TICKER SHARES at PRICE\nswingportfolio | swingpnl | swingexposure")
+        return
+    if text_lower == "swingportfolio":
+        send(format_swing_alpha_portfolio_report())
+        return
+    if text_lower == "swingpnl":
+        send(format_swing_alpha_pnl_report())
+        return
+    if text_lower == "swingexposure":
+        send(format_swing_alpha_exposure_report())
+        return
+    if text_lower == "equity":
+        snapshot = compute_equity_snapshot_data()
+        send(
+            "💼 ACCOUNT EQUITY\n\n"
+            f"💵 Cash: {format_money(snapshot['cash'])}\n"
+            f"⚡ Legacy swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
+            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
+            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
+            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
+            f"🎯 Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}\n"
+            f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}\n"
+            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
+            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
+        )
+        return
+    swing_cmd = re.fullmatch(r"(?i)\s*(swingbuy|swingsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+(partial))?\s*", text_clean)
+    if swing_cmd:
+        action = swing_cmd.group(1).lower()
+        ticker = normalize_ticker(swing_cmd.group(2))
+        shares = float(swing_cmd.group(3))
+        price = float(swing_cmd.group(4))
+        partial_ok = bool(swing_cmd.group(5))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "swingbuy":
+            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
+        else:
+            ok, msg = record_swing_alpha_sell(ticker, shares, price, update_id=update_id)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+    return _V46_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+# =============================================================================
+# V4.6.1 - SWING ALPHA LIVE SIGNAL REPLACEMENT LAYER
+# =============================================================================
+# Purpose:
+# - Replace disabled Long VCP/Bear live tactical scans with Swing Alpha signals.
+# - Keep old VCP/Bear internals inert for backward compatibility/export safety.
+# - Send actionable Swing Alpha entry/exit alerts during the existing near-close
+#   scan window, similar to the prior VCP entry-signal workflow.
+# - Keep manual execution and separate Swing Alpha ledger: swingbuy/swingsell.
+# - No broker orders are placed in this version.
+
+V461_VERSION = "v4.6.1-swing-alpha-live-signals-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
+    STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", V461_VERSION)
+else:
+    STRATEGY_VERSION = V461_VERSION
+
+V461_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V461_VALIDATION_STRATEGY_LABEL = "v4.6.1 Swing Alpha live-signal replacement + Hybrid Crypto + cost-aware monthly rotation"
+V461_KNOWN_LIMITATIONS = [
+    "v4.6.1 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.",
+    "Swing Alpha MACD+VAH replaces disabled VCP/Bear live tactical scans but still requires forward testing.",
+    "Backtest period is limited and not broker-grade execution simulation.",
+    "Crypto permission/gate required; crypto remains inactive until broker permission and signal are valid.",
+    "Manual execution and read-only IBKR reconciliation are still required; no broker orders are placed.",
+    "Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.",
+]
+
+# Force disabled tactical legacy engines to remain inert in live v4.6.1.
+V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = False
+V45_BEAR_SIGNAL_ENGINE_ENABLED = False
+BEAR_SLEEVE_ENABLED = False
+try:
+    V2_MAX_SIGNALS_PER_SCAN = 0
+    V2_ALLOW_VCP = False
+    V2_ALLOW_BREAKOUTS = False
+    V2_ALLOW_PULLBACKS = False
+    V2_ALLOW_MEDIUM = False
+    V2_ALLOW_WEAK = False
+    BEAR_MAX_SIGNALS_PER_SCAN = 0
+except Exception:
+    pass
+
+# Swing Alpha auto-signal controls.
+SWING_ALPHA_AUTO_SIGNAL_ENABLED = os.getenv("SWING_ALPHA_AUTO_SIGNAL_ENABLED", "1") != "0"
+SWING_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SWING_ALPHA_PUBLIC_SIGNAL_ENABLED", "0") == "1"
+SWING_ALPHA_MAX_SIGNALS_PER_SCAN = int(os.getenv("SWING_ALPHA_MAX_SIGNALS_PER_SCAN", str(SWING_ALPHA_MAX_OPEN_POSITIONS)))
+SWING_ALPHA_AUTO_SIGNAL_REPEAT_SAME_DAY = os.getenv("SWING_ALPHA_AUTO_SIGNAL_REPEAT_SAME_DAY", "0") == "1"
+
+# Use live synthetic daily candles near close for Swing Alpha scoring. This mirrors
+# the old VCP near-close scan behavior instead of using yesterday-only EOD data.
+def _v461_score_swing_candidate_live(ticker: str) -> Optional[Dict[str, Any]]:
+    df = get_signal_dataframe(ticker, limit=260)
+    if df is None or len(df) < 220:
+        return None
+    close = df["Close"].astype(float)
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+    volume = df["Volume"].astype(float)
+    price = float(close.iloc[-1])
+    if price < SWING_ALPHA_MIN_PRICE:
+        return None
+    avg_dv = float((close * volume).tail(50).mean())
+    if avg_dv < SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME:
+        return None
+    ema20 = float(_v46_ema(close, 20).iloc[-1])
+    ema50 = float(_v46_ema(close, 50).iloc[-1])
+    ema200 = float(_v46_ema(close, 200).iloc[-1])
+    if not (price > ema50 > ema200):
+        return None
+    ret20 = pct_change_over(close, 20)
+    ret63 = pct_change_over(close, 63)
+    ret126 = pct_change_over(close, 126)
+    if ret63 is None or ret63 < SWING_ALPHA_MIN_RET63:
+        return None
+    atr_series = atr(df, 14)
+    atr_val = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else 0.0
+    if atr_val <= 0:
+        return None
+    atr_pct = atr_val / price
+    if atr_pct <= 0 or atr_pct > SWING_ALPHA_MAX_ATR_PCT:
+        return None
+    rsi_series = rsi(close, 14)
+    rsi_val = float(rsi_series.iloc[-1]) if not pd.isna(rsi_series.iloc[-1]) else 50.0
+    if rsi_val > SWING_ALPHA_MAX_RSI:
+        return None
+    hist = _v46_macd_hist(close)
+    if len(hist.dropna()) < 5:
+        return None
+    h0, h1, h2 = float(hist.iloc[-1]), float(hist.iloc[-2]), float(hist.iloc[-3])
+    macd_turn = (h0 > h1 and h1 <= h2) or (h0 > 0 and h0 > h1)
+    if not macd_turn:
+        return None
+    # VAH proxy deliberately uses completed bars before current signal bar.
+    poc, vah, val = _v46_vah_val_proxy(df.iloc[:-1], window=20)
+    if vah is None or price <= float(vah):
+        return None
+    if price > ema20 * 1.18:
+        return None
+    stop = max(price - SWING_ALPHA_ATR_STOP_MULT * atr_val, ema20 * 0.985)
+    if stop >= price:
+        stop = price - SWING_ALPHA_ATR_STOP_MULT * atr_val
+    max_entry = price * (1.0 + SWING_ALPHA_ENTRY_BUFFER_PCT)
+    score = ((ret63 or 0) * 2.0) + ((ret20 or 0) * 1.2) + ((ret126 or 0) * 0.7) + (h0 * 5.0 / max(price, 1.0)) - (atr_pct * 0.8)
+    return {
+        "ticker": ticker,
+        "price": round(price, 4),
+        "signal_price": round(price, 4),
+        "max_valid_entry": round(max_entry, 4),
+        "stop": round(stop, 4),
+        "ema20": round(ema20, 4),
+        "ema50": round(ema50, 4),
+        "ema200": round(ema200, 4),
+        "vah_proxy": round(float(vah), 4),
+        "poc_proxy": None if poc is None else round(float(poc), 4),
+        "val_proxy": None if val is None else round(float(val), 4),
+        "atr": round(atr_val, 4),
+        "atr_pct": round(atr_pct * 100, 2),
+        "rsi": round(rsi_val, 2),
+        "ret20_pct": None if ret20 is None else round(ret20 * 100, 2),
+        "ret63_pct": round(ret63 * 100, 2),
+        "ret126_pct": None if ret126 is None else round(ret126 * 100, 2),
+        "macd_hist": round(h0, 6),
+        "score": round(score, 6),
+        "cluster": _v46_cluster(ticker),
+        "strategy_sleeve": "SWING_ALPHA",
+        "setup_type": "macd_vah_reclaim",
+        "strategy_version": SWING_ALPHA_STRATEGY_VERSION,
+        "signal_date_ny": ny_date_str(),
+        "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat() if "date" in df.columns else ny_date_str(),
+        "exit_params": {
+            "ema_exit": "EMA20",
+            "atr_stop_mult": SWING_ALPHA_ATR_STOP_MULT,
+            "atr_trail_mult": SWING_ALPHA_ATR_TRAIL_MULT,
+            "time_stop_days": SWING_ALPHA_TIME_STOP_DAYS,
+            "time_stop_min_pct": SWING_ALPHA_TIME_STOP_MIN_PCT,
+        },
+    }
+
+# Override the v4.6 scorer so manual swingplan and auto scans see the same live-aware data.
+_v46_score_swing_candidate = _v461_score_swing_candidate_live  # type: ignore[assignment]
+
+# Clearer labels for Swing Alpha public/private formatting.
+_V461_OLD_SLEEVE_LABEL = sleeve_label
+_V461_OLD_SLEEVE_SHORT_LABEL = sleeve_short_label
+_V461_OLD_SETUP_LABEL = setup_label
+
+def sleeve_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
+    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
+    if sleeve == "SWING_ALPHA":
+        return "🎯 SWING ALPHA"
+    return _V461_OLD_SLEEVE_LABEL(entry_data)
+
+def sleeve_short_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
+    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
+    if sleeve == "SWING_ALPHA":
+        return "SWING_ALPHA"
+    return _V461_OLD_SLEEVE_SHORT_LABEL(entry_data)
+
+def setup_label(setup_type: str) -> str:  # type: ignore[override]
+    setup = str(setup_type).lower()
+    if setup == "macd_vah_reclaim":
+        return "🎯 MACD + VAH Reclaim"
+    return _V461_OLD_SETUP_LABEL(setup_type)
+
+
+def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
+    ticker = str(item.get("ticker", "")).upper()
+    action = str(item.get("action", "BUY")).upper()
+    price = float(item.get("signal_price", item.get("price", 0)) or 0)
+    max_entry = float(item.get("max_valid_entry", price) or price)
+    stop = float(item.get("stop", 0) or 0)
+    dollars = float(item.get("suggested_dollars", item.get("target_value", 0)) or 0)
+    qty = 0.0 if price <= 0 else dollars / price
+    risk_dollars = max(0.0, (price - stop) * qty) if stop > 0 else 0.0
+    equity = float((compute_equity_snapshot_data() or {}).get("equity", 0) or 0)
+    risk_pct = (risk_dollars / equity * 100.0) if equity > 0 else 0.0
+    return (
+        "📈 SWING ALPHA ENTRY SIGNAL v4.6.1\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        f"🧬 Sleeve: 🎯 SWING_ALPHA\n"
+        f"⚙️ Setup: MACD + VAH Reclaim\n"
+        f"📌 Action: {action}\n\n"
+        f"🟢 ENTRY / SIGNAL PRICE: {round(price, 4)}\n"
+        f"🟡 MAX ENTRY LIMIT: {round(max_entry, 4)}\n"
+        f"🔴 STOP / INVALIDATION: {round(stop, 4)}\n"
+        f"💵 Suggested notional: {format_money(dollars)}\n"
+        f"📦 Estimated shares: {format_core_shares(qty)}\n"
+        f"⚠️ Est. trade risk: {format_money(risk_dollars)} ({round(risk_pct, 2)}% equity)\n\n"
+        f"📊 RSI: {item.get('rsi')} | ATR%: {item.get('atr_pct')}%\n"
+        f"📈 20d: {format_pct(item.get('ret20_pct'))} | 63d: {format_pct(item.get('ret63_pct'))}\n"
+        f"📍 VAH proxy: {item.get('vah_proxy')} | POC proxy: {item.get('poc_proxy')}\n"
+        f"🏅 Score: {item.get('score')} | Cluster: {item.get('cluster')}\n\n"
+        "How to execute after broker fill:\n"
+        f"• swingbuy {ticker} ACTUAL_SHARES at ACTUAL_FILL_PRICE\n\n"
+        "Rules:\n"
+        "• Do not chase above max entry.\n"
+        "• Use Swing Alpha ledger only; do not use bought/sold/corebuy/growthbuy/specbuy.\n"
+        "• This replaces the disabled VCP/Bear tactical entry path."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
+    ticker = str(item.get("ticker", "")).upper()
+    positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
+    pos = positions.get(ticker, {})
+    shares = float(pos.get("shares", 0) or 0)
+    price = float(item.get("price", 0) or 0)
+    reason = str(item.get("reason", "Swing Alpha exit rule triggered."))
+    return (
+        "📉 SWING ALPHA EXIT SIGNAL v4.6.1\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        f"🧬 Sleeve: 🎯 SWING_ALPHA\n"
+        f"📌 Reason: {reason}\n"
+        f"💵 Reference price: {round(price, 4)}\n"
+        f"📦 Bot-recorded shares: {format_core_shares(shares)}\n\n"
+        "How to execute after broker fill:\n"
+        f"• swingsell {ticker} ACTUAL_SHARES at ACTUAL_FILL_PRICE\n\n"
+        "Rules:\n"
+        "• This is a tactical Swing Alpha exit, not a monthly-rotation rebalance.\n"
+        "• Use Swing Alpha ledger only."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
+    ticker = str(item.get("ticker", "")).upper()
+    return (
+        "📈 SWING ALPHA ENTRY SIGNAL\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        "🧬 Sleeve: Swing Alpha\n"
+        "⚙️ Setup: MACD + VAH Reclaim\n\n"
+        f"🟢 Entry/reference: {fmt_public_number(item.get('signal_price', item.get('price')))}\n"
+        f"🟡 Max entry limit: {fmt_public_number(item.get('max_valid_entry'))}\n"
+        f"🔴 Stop/invalidaton: {fmt_public_number(item.get('stop'))}\n"
+        f"📐 Position guide: about {fmt_public_number(item.get('target_account_pct'), 2)}% of account target sleeve\n\n"
+        f"{public_signal_footer()}"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v461_public_swing_exit(item: Dict[str, Any]) -> str:
+    ticker = str(item.get("ticker", "")).upper()
+    return (
+        "📉 SWING ALPHA EXIT SIGNAL\n\n"
+        f"🏷️ Ticker: {ticker}\n"
+        "🧬 Sleeve: Swing Alpha\n"
+        f"📌 Reason: {item.get('reason', 'Exit rule triggered')}\n"
+        f"💵 Reference price: {fmt_public_number(item.get('price'))}\n\n"
+        f"{public_signal_footer()}"
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:
+    try:
+        set_meta("last_swing_alpha_auto_scan_day", day)
+        if bar:
+            set_meta("last_swing_alpha_auto_scan_bar", bar)
+    except Exception:
+        pass
+
+
+def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
+    """Run Swing Alpha as the live tactical scan engine."""
+    today = ny_date_str()
+    expected_bar = expected_daily_bar_date()
+    if not force and not SWING_ALPHA_AUTO_SIGNAL_REPEAT_SAME_DAY:
+        if get_meta("last_swing_alpha_auto_scan_day") == today:
+            print("[V4.6.1 SWING SCAN SKIP] Swing Alpha already scanned today.")
+            return True
+    if PANIC_MODE:
+        print("[V4.6.1 SWING SCAN BLOCKED] PANIC_MODE")
+        return True
+    if daily_drawdown_exceeded():
+        print("[V4.6.1 SWING SCAN BLOCKED] Daily loss limit")
+        return True
+    guard = portfolio_risk_guard_details()
+    if guard.get("block_new_entries"):
+        print("[V4.6.1 SWING SCAN BLOCKED] Hard drawdown guard")
+        maybe_send_portfolio_risk_guard_alert(guard)
+        return True
+    try:
+        plan = compute_swing_alpha_plan()
+        save_swing_alpha_plan(plan)
+    except Exception as exc:
+        logger.exception(f"[V4.6.1 SWING SCAN ERROR] {exc}")
+        send(f"⚠️ Swing Alpha scan failed: {exc}")
+        return False
+
+    actions = plan.get("actionable", []) or []
+    exits = [a for a in actions if str(a.get("action", "")).upper() in {"SELL", "TRIM"}]
+    entries_all = [a for a in actions if str(a.get("action", "")).upper() in {"BUY", "ADD"}]
+    positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
+    open_slots = max(0, SWING_ALPHA_MAX_OPEN_POSITIONS - len(positions))
+    entries: List[Dict[str, Any]] = []
+    for a in entries_all:
+        action = str(a.get("action", "")).upper()
+        ticker = str(a.get("ticker", "")).upper()
+        if action == "BUY" and ticker not in positions:
+            if open_slots <= 0:
+                continue
+            entries.append(a)
+            open_slots -= 1
+        else:
+            entries.append(a)
+        if len(entries) >= SWING_ALPHA_MAX_SIGNALS_PER_SCAN:
+            break
+
+    sent = 0
+    for item in exits:
+        send(_v461_swing_exit_message(item))
+        sent += 1
+        if PUBLIC_SIGNAL_ENABLED and SWING_ALPHA_PUBLIC_SIGNAL_ENABLED:
+            send_public_signal(_v461_public_swing_exit(item))
+    for item in entries:
+        send(_v461_swing_entry_message(item))
+        sent += 1
+        if PUBLIC_SIGNAL_ENABLED and SWING_ALPHA_PUBLIC_SIGNAL_ENABLED:
+            send_public_signal(_v461_public_swing_entry(item))
+    if verbose:
+        send(format_swing_alpha_plan(plan))
+    print(
+        "[V4.6.1 SWING SCAN SUMMARY] "
+        f"market_ok={plan.get('market_ok')} scored={plan.get('scored_count')} "
+        f"entries={len(entries)} exits={len(exits)} sent={sent}"
+    )
+    _v461_mark_swing_auto_scan_done(today, expected_bar)
+    return True
+
+# Replace the disabled VCP/Bear scan path with Swing Alpha. The legacy VCP/Bear
+# code remains inert for compatibility but no longer owns the tactical scan.
+_V461_OLD_SCAN_MARKET = scan_market
+
+def scan_market() -> bool:  # type: ignore[override]
+    if SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED and SWING_ALPHA_ACCOUNT_ALLOC_PCT > 0:
+        return scan_swing_alpha_market(force=False, verbose=False)
+    print("[V4.6.1 SCAN SKIP] Swing Alpha auto signals disabled and VCP/Bear are disabled.")
+    try:
+        set_meta("last_scan_day", ny_date_str())
+        bar = expected_daily_bar_date()
+        if bar:
+            set_meta("last_scan_bar_date", bar)
+    except Exception:
+        pass
+    return True
+
+# Remove disabled VCP/Bear clutter from the main allocation text.
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6.1\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
+        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
+        "Disabled / removed from live allocation:\n"
+        "• Long VCP tactical: 0% — replaced by Swing Alpha.\n"
+        "• Bear / inverse sleeve: 0% — disabled.\n"
+        "• Options: 0% — research-only.\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
+        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
+        "• Swing Alpha sends live entry/exit alerts during the tactical scan window.\n"
+        "• IBKR reconciliation is read-only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
+    return {
+        "strategy_version": STRATEGY_VERSION,
+        "strategy": V461_VALIDATION_STRATEGY_LABEL,
+        "allocation": V461_ALLOCATION_LABEL,
+        "known_limitations": list(V461_KNOWN_LIMITATIONS),
+        "live_validation_rules": [
+            "Core/Growth/SPEC remain monthly rotation sleeves; daily plans are monitoring unless monthly-lock allows action.",
+            "Swing Alpha replaces disabled VCP/Bear live tactical scans and uses its own ledger.",
+            "Swing Alpha entries/exits are signal alerts; execute in broker first, then record with swingbuy/swingsell.",
+            "Crypto is tactical and separate, using BTC/ETH/SOL hybrid trend logic.",
+            "Do not chase above max entry guide.",
+            "Use partial-fill commands only for real broker fills already executed.",
+            "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
+            "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
+            "No broker order automation in v4.6.1; IBKR reconciliation remains read-only.",
+        ],
+    }
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    limitations = "\n".join(f"- {x}" for x in V461_KNOWN_LIMITATIONS)
+    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
+    return (
+        "🧪 VALIDATION STATUS v4.6.1\n\n"
+        f"Strategy: {V461_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V461_ALLOCATION_LABEL}\n\n"
+        "Known limitations:\n"
+        f"{limitations}\n\n"
+        "Live validation rules:\n"
+        f"{rules}\n\n"
+        "Reporting note: v4.6.1 replaces disabled VCP/Bear live signal path with Swing Alpha; IBKR remains read-only."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v461_label_cleanup(msg: Any) -> str:
+    text = str(msg)
+    for old in ["v4.6", "V4.6", "v4.5", "V4.5", "v4.4.3", "V4.4.3", "v4.3", "V4.3"]:
+        text = text.replace(old, "v4.6.1" if old.startswith("v") else "V4.6.1")
+    text = text.replace(V46_ALLOCATION_LABEL, V461_ALLOCATION_LABEL)
+    text = text.replace("VCP/Bear/Options disabled.", "VCP/Bear/Options disabled; Swing Alpha owns live tactical signals.")
+    return text[:MAX_TELEGRAM_MESSAGE]
+
+# Wrap status/report labels.
+_V461_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
+_V461_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
+_V461_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
+_V461_OLD_FORMAT_STRESS_STATUS = format_stress_status
+_V461_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
+_V461_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
+_V461_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
+
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_INSTITUTIONAL_STATUS())
+
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_DATAHEALTH_STATUS())
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_RISKMATRIX_STATUS())
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_STRESS_STATUS())
+
+def format_brokerstatus() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERSTATUS())
+
+def format_brokerreconcile() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERRECONCILE())
+
+def format_brokersyncpreview() -> str:  # type: ignore[override]
+    return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERSYNCPREVIEW())
+
+# Export metadata for the tactical replacement layer.
+_V461_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V461_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        meta = {
+            "version": V461_VERSION,
+            "allocation": V461_ALLOCATION_LABEL,
+            "swing_alpha_auto_signal_enabled": SWING_ALPHA_AUTO_SIGNAL_ENABLED,
+            "vcp_live_signal_engine": "disabled",
+            "bear_live_signal_engine": "disabled",
+            "notes": "v4.6.1 replaces disabled VCP/Bear live tactical scan path with Swing Alpha entry/exit alerts.",
+        }
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("v461_tactical_replacement_metadata.json", json.dumps(safe_convert(meta), indent=2))
+    except Exception as exc:
+        print(f"[V4.6.1 EXPORT WARNING] {exc}")
+    return zip_path
+
+# Command routing.
+_V461_OLD_HANDLE_COMMAND = handle_command
+
+def _v461_status_text() -> str:
+    try:
+        market_ok, swing_reason = swing_alpha_market_filter_ok()
+    except Exception as exc:
+        market_ok, swing_reason = False, f"error: {exc}"
+    try:
+        growth_ok, growth_reason = growth_alpha_market_filter_ok()
+    except Exception as exc:
+        growth_ok, growth_reason = False, f"error: {exc}"
+    try:
+        win = _v44_monthly_rebalance_window_info()
+    except Exception as exc:
+        win = {"open": False, "reason": f"error: {exc}"}
+    return (
+        "🛠️ V4.6.1 SWING SIGNAL REPLACEMENT STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Strategy logic: {V461_VALIDATION_STRATEGY_LABEL}\n"
+        f"Allocation: {V461_ALLOCATION_LABEL}\n"
+        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+        f"Growth market filter: {yes_no(growth_ok)} — {growth_reason}\n"
+        f"Swing market filter: {yes_no(market_ok)} — {swing_reason}\n"
+        f"Swing live signal engine: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
+        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
+        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
+        "Execution controls:\n"
+        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
+        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
+        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
+        f"• Swing Alpha auto signals max {SWING_ALPHA_MAX_SIGNALS_PER_SCAN}; max positions {SWING_ALPHA_MAX_OPEN_POSITIONS}; min order {format_money(SWING_ALPHA_MIN_TRADE_DOLLARS)}\n"
+        "• Crypto: BTC/ETH/SOL hybrid major trend, 70% daily breakout + 30% 4h compression.\n"
+        "• Long VCP/Bear are disabled in live allocation and no longer own the scan path.\n"
+        "• Read-only IBKR reconciliation only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v461status", "v46status", "v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        send(_v461_status_text())
+        return
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+    if text_lower == "allocationplan":
+        send(format_portfolio_allocation_plan())
+        return
+    if text_lower == "bearstatus":
+        send(
+            "🐻 BEAR / INVERSE SLEEVE STATUS v4.6.1\n\n"
+            "Status: disabled / removed from live allocation.\n"
+            "Reason: inverse ETFs/KID restrictions and weak replacement tests.\n\n"
+            "Live tactical scan path is now owned by Swing Alpha.\n"
+            "Use swingstatus / swingplan / swingbuy / swingsell."
+        )
+        return
+    if text_lower == "sleevestatus":
+        send(
+            "🧭 SLEEVE STATUS v4.6.1\n\n"
+            "Active sleeves:\n"
+            "• Core monthly rotation — corebuy/coresell\n"
+            "• Growth monthly rotation — growthbuy/growthsell\n"
+            "• SPEC monthly rotation — specbuy/specsell\n"
+            "• Swing Alpha tactical — swingbuy/swingsell\n"
+            "• Crypto tactical — cryptobuy/cryptosell\n\n"
+            "Disabled live sleeves:\n"
+            "• Long VCP legacy scan path: replaced by Swing Alpha\n"
+            "• Bear/inverse: disabled\n"
+            "• Options: research-only"
+        )
+        return
+    if text_lower == "forcescan":
+        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.6.1.")
+        ok = scan_swing_alpha_market(force=True, verbose=True)
+        send("✅ Manual Swing Alpha scan complete." if ok else "⚠️ Manual Swing Alpha scan did not complete cleanly.")
+        return
+    if text_lower == "swingplan":
+        send("🎯 Swing Alpha plan started. This scans strong leaders for MACD + VAH reclaim swing setups. Live entries are also sent automatically during the tactical scan window.")
+        plan = compute_swing_alpha_plan()
+        save_swing_alpha_plan(plan)
+        send(format_swing_alpha_plan(plan))
+        return
+    if text_lower == "swingstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_swing_alpha_signal()
+        details = swing_alpha_position_market_value_details()
+        m_ok, m_reason = swing_alpha_market_filter_ok()
+        send(
+            "🎯 SWING_ALPHA STATUS v4.6.1\n\n"
+            f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
+            f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
+            f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
+            f"Target now: {alloc.get('swing_alpha_pct')}% of account\n"
+            "Strategy: MACD + VAH reclaim\n"
+            f"Universe size: {len(SWING_ALPHA_UNIVERSE)}\n"
+            f"Max signals per scan: {SWING_ALPHA_MAX_SIGNALS_PER_SCAN}\n"
+            f"Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n"
+            f"Market filter: {yes_no(m_ok)} — {m_reason}\n"
+            f"Swing value: {format_money(float(details.get('value',0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "swingplan — manual preview/plan\n"
+            "forcescan — manual Swing Alpha signal scan\n"
+            "swingbuy TICKER SHARES at PRICE\n"
+            "swingsell TICKER SHARES at PRICE\n"
+            "swingportfolio | swingpnl | swingexposure"
+        )
+        return
+    return _V461_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+# ---- Swing Alpha live position management / exit alerts ----
+def _v461_send_swing_exit_once(ticker: str, reason_key: str, message: str, public_item: Optional[Dict[str, Any]] = None) -> None:
+    today = ny_date_str()
+    key = f"swing_alpha_exit_alert_{ticker.upper()}_{reason_key}_{today}"
+    if get_meta(key) == "1":
+        return
+    set_meta(key, "1")
+    send(message[:MAX_TELEGRAM_MESSAGE])
+    if PUBLIC_SIGNAL_ENABLED and SWING_ALPHA_PUBLIC_SIGNAL_ENABLED and public_item is not None:
+        send_public_signal(_v461_public_swing_exit(public_item))
+
+
+def manage_swing_alpha_positions() -> None:
+    """Alert-only management for Swing Alpha positions.
+
+    This mirrors the old tactical/VCP idea operationally: the bot can alert an
+    exit condition, but the user still executes in the broker and records with
+    swingsell. No broker orders are placed here.
+    """
+    if not (SWING_ALPHA_ENABLED and SWING_ALPHA_LEDGER_ENABLED):
+        return
+    try:
+        positions = load_swing_alpha_positions()
+    except Exception:
+        return
+    if not positions:
+        return
+    prices = get_prices_batch(list(positions.keys()))
+    now = ny_now()
+    minutes = now.hour * 60 + now.minute
+    near_close = minutes >= (15 * 60 + 45)
+    for ticker, pos in positions.items():
+        try:
+            mark = float(prices.get(ticker, pos.get("avg_entry_price", 0)) or 0)
+            if mark <= 0:
+                continue
+            avg = float(pos.get("avg_entry_price", mark) or mark)
+            shares = float(pos.get("shares", 0) or 0)
+            if shares <= 0:
+                continue
+            old_highest = float(pos.get("highest") or avg or mark)
+            new_highest = max(old_highest, mark)
+            stored_stop = float(pos.get("stop") or 0.0)
+            df = get_signal_dataframe(ticker, limit=120) if near_close else get_historical(ticker, limit=120)
+            ema20 = None
+            atr_val = 0.0
+            if df is not None and len(df) >= 50:
+                close = df["Close"].astype(float)
+                ema20 = float(_v46_ema(close, 20).iloc[-1])
+                atr_series = atr(df, 14)
+                atr_val = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else 0.0
+            trail = new_highest - SWING_ALPHA_ATR_TRAIL_MULT * atr_val if atr_val > 0 else 0.0
+            effective_stop = max(stored_stop, trail) if trail > 0 else stored_stop
+            exit_key = None
+            exit_reason = None
+            if stored_stop > 0 and mark <= stored_stop:
+                exit_key = "initial_stop"
+                exit_reason = "Initial stop hit."
+            elif trail > 0 and mark <= trail:
+                exit_key = "atr_trail"
+                exit_reason = "ATR trailing stop hit."
+            elif near_close and ema20 is not None and mark < ema20:
+                exit_key = "ema20_exit"
+                exit_reason = "Close/mark below EMA20 swing exit."
+            else:
+                entry_time = float(pos.get("entry_time") or now_ts())
+                days_held = max(0.0, (now_ts() - entry_time) / 86400.0)
+                gain = (mark / avg - 1.0) if avg > 0 else 0.0
+                if near_close and days_held >= SWING_ALPHA_TIME_STOP_DAYS and gain < SWING_ALPHA_TIME_STOP_MIN_PCT:
+                    exit_key = "time_stop"
+                    exit_reason = f"Time stop: {int(days_held)} days held without +{int(SWING_ALPHA_TIME_STOP_MIN_PCT * 100)}% progress."
+            # Persist updated highest/stop so trailing logic is not lost across loops.
+            try:
+                if new_highest > old_highest or (effective_stop > 0 and effective_stop != stored_stop):
+                    with db_tx() as conn:
+                        conn.execute(
+                            "UPDATE swing_alpha_positions SET highest=?, stop=?, last_update_time=? WHERE ticker=?",
+                            (round(new_highest, 6), round(effective_stop, 6) if effective_stop > 0 else stored_stop, now_ts(), ticker),
+                        )
+            except Exception as exc:
+                print(f"[SWING ALPHA MANAGE UPDATE ERROR] {ticker}: {exc}")
+            if exit_key and exit_reason:
+                pnl_pct = ((mark / avg) - 1.0) * 100.0 if avg > 0 else 0.0
+                item = {"ticker": ticker, "price": mark, "reason": exit_reason}
+                msg = (
+                    "📉 SWING ALPHA EXIT SIGNAL v4.6.1\n\n"
+                    f"🏷️ Ticker: {ticker}\n"
+                    "🧬 Sleeve: 🎯 SWING_ALPHA\n"
+                    f"📌 Reason: {exit_reason}\n"
+                    f"📦 Bot-recorded shares: {format_core_shares(shares)}\n"
+                    f"💵 Reference exit price: {round(mark, 4)} ({format_pct(pnl_pct)})\n"
+                    f"🔴 Stored stop: {round(stored_stop, 4) if stored_stop else 'n/a'}\n"
+                    f"📈 Highest: {round(new_highest, 4)} | ATR trail: {round(trail, 4) if trail else 'n/a'}\n\n"
+                    "After broker fill, record with:\n"
+                    f"• swingsell {ticker} ACTUAL_SHARES at ACTUAL_FILL_PRICE\n\n"
+                    "No broker order was placed by the bot."
+                )
+                _v461_send_swing_exit_once(ticker, exit_key, msg, item)
+        except Exception as exc:
+            logger.exception(f"[SWING ALPHA MANAGE ERROR] {ticker}: {exc}")
+
+
+_V461_OLD_MANAGE_POSITIONS = manage_positions
+
+def manage_positions() -> None:  # type: ignore[override]
+    # Keep old manager for any legacy tactical/VCP positions, then manage Swing Alpha.
+    _V461_OLD_MANAGE_POSITIONS()
+    manage_swing_alpha_positions()
+
+
+
 if __name__ == "__main__":
 
 
