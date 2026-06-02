@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-
-
- 
-
-
-
 import json
 
 import math
@@ -38,91 +32,37 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from zoneinfo import ZoneInfo
 
- 
-
-
-
 import pandas as pd
-
-
 
 import requests
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # CONFIG
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 DATA_DIR = os.getenv("DATA_DIR", "/data")
 
-
-
 os.makedirs(DATA_DIR, exist_ok=True)
-
-
-
- 
-
-
 
 DB_FILE = os.getenv("DB_FILE", os.path.join(DATA_DIR, "bot_state.sqlite3"))
 
-
-
- 
-
-
-
 # Legacy JSON paths are only used for one-time migration if present.
-
-
 
 PORTFOLIO_FILE = os.path.join(DATA_DIR, "portfolio.json")
 
-
-
 SIGNALS_FILE = os.path.join(DATA_DIR, "signals.json")
-
-
 
 TRADES_FILE = os.path.join(DATA_DIR, "trades.json")
 
-
-
 UPDATES_FILE = os.path.join(DATA_DIR, "updates.json")
-
-
 
 EQUITY_FILE = os.path.join(DATA_DIR, "equity.json")
 
-
-
 HEARTBEAT_FILE = os.path.join(DATA_DIR, "heartbeat.txt")
 
-
-
-
-
 FMP_API_KEY = os.getenv("FMP_API_KEY")
-
-
 
 FMP_BASE = os.getenv(
 
@@ -132,33 +72,15 @@ FMP_BASE = os.getenv(
 
 )
 
-
-
 TOKEN = os.getenv("TOKEN")
-
-
-
- 
-
-
 
 try:
 
-
-
     CHAT_ID = int(os.getenv("CHAT_ID", "0"))
-
-
 
 except ValueError as exc:
 
-
-
     raise RuntimeError("CHAT_ID must be an integer") from exc
-
-
-
-
 
 try:
 
@@ -168,53 +90,21 @@ except ValueError:
 
     SIGNAL_CHANNEL_ID = 0
 
-
-
 PUBLIC_SIGNAL_ENABLED = os.getenv("PUBLIC_SIGNAL_ENABLED", "0").strip() == "1"
 
 PUBLIC_SIGNAL_SILENT = os.getenv("PUBLIC_SIGNAL_SILENT", "0").strip() == "1"
 
-
-
- 
-
-
-
 if not TOKEN or CHAT_ID == 0:
-
-
 
     raise RuntimeError("Missing TOKEN or CHAT_ID")
 
-
-
- 
-
-
-
 if not FMP_API_KEY:
-
-
 
     raise RuntimeError("Missing FMP_API_KEY")
 
-
-
- 
-
-
-
 SESSION = requests.Session()
 
-
-
 NY_TZ = ZoneInfo("America/New_York")
-
-
-
- 
-
-
 
 STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.8-aggressive-45-15-40-monitor")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
@@ -235,152 +125,34 @@ MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 # -----------------------------------------------------------------------------
 # Backtest synthesis direction:
 # - Pure weak/high-beta and broad pullbacks were rejected.
-# - Broad pullbacks, weak names, and ordinary RS breakouts were rejected.
-# - The most robust sleeve from testing was leader VCP/contraction breakout.
-# - This version keeps the broad liquid leader universe for opportunity,
-#   but allows only VCP-style breakout setups by default.
-# - Max signals per scan stays at 3 for paper/forward testing.
-# - V2.8 keeps v2.7 entries unchanged and only improves winner capture: later
-#   breakeven, later/smaller partial, and wider trailing stop.
-V2_MIN_MARKET_SCORE = int(os.getenv("V2_MIN_MARKET_SCORE", "5"))
-V2_MIN_SCORE = int(os.getenv("V2_MIN_SCORE", "80"))
-V2_BREAKOUT_MIN_SCORE = int(os.getenv("V2_BREAKOUT_MIN_SCORE", "999"))
-V2_VCP_MIN_SCORE = int(os.getenv("V2_VCP_MIN_SCORE", "86"))
-V2_PULLBACK_MIN_SCORE = int(os.getenv("V2_PULLBACK_MIN_SCORE", "999"))
-V2_WEAK_MIN_SCORE = int(os.getenv("V2_WEAK_MIN_SCORE", "999"))
-V2_MAX_SIGNALS_PER_SCAN = int(os.getenv("V2_MAX_SIGNALS_PER_SCAN", "3"))
-
-# Universe controls. V2.8 is leader-only and VCP-only by default. MEDIUM/WEAK
-# buckets and ordinary RS breakouts stay disabled because tests showed those
-# sleeves were more cost-sensitive and less robust.
-V2_ALLOW_BREAKOUTS = os.getenv("V2_ALLOW_BREAKOUTS", "0") != "0"
-V2_ALLOW_VCP = os.getenv("V2_ALLOW_VCP", "1") != "0"
-V2_ALLOW_MEDIUM = os.getenv("V2_ALLOW_MEDIUM", "0") != "0"
-V2_ALLOW_WEAK = os.getenv("V2_ALLOW_WEAK", "0") != "0"
-V2_ALLOW_PULLBACKS = os.getenv("V2_ALLOW_PULLBACKS", "0") != "0"
-
-# Liquidity / volatility filters.
-V2_MIN_PRICE = float(os.getenv("V2_MIN_PRICE", "12"))
-V2_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("V2_MIN_AVG_DOLLAR_VOLUME", "75000000"))
-V2_MIN_ATR_PCT = float(os.getenv("V2_MIN_ATR_PCT", "0.012"))
-V2_MAX_ATR_PCT = float(os.getenv("V2_MAX_ATR_PCT", "0.10"))
-V2_MAX_RISK_PER_SHARE_PCT = float(os.getenv("V2_MAX_RISK_PER_SHARE_PCT", "0.10"))
-
-# RS breakout behavior. Disabled by default in v2.8, kept only as an env-test option.
-V2_MIN_BREAKOUT_VOLUME_RATIO = float(os.getenv("V2_MIN_BREAKOUT_VOLUME_RATIO", "1.25"))
-V2_MIN_PULLBACK_VOLUME_RATIO = float(os.getenv("V2_MIN_PULLBACK_VOLUME_RATIO", "999"))
-V2_MAX_BREAKOUT_RSI = float(os.getenv("V2_MAX_BREAKOUT_RSI", "79"))
-V2_MAX_BREAKOUT_DAY_MOVE_PCT = float(os.getenv("V2_MAX_BREAKOUT_DAY_MOVE_PCT", "6.2"))
-V2_MAX_PULLBACK_DAY_MOVE_PCT = float(os.getenv("V2_MAX_PULLBACK_DAY_MOVE_PCT", "0"))
-
-# VCP/contraction breakout behavior. This is the active v2.8 setup family.
-V2_VCP_MAX_BASE_RANGE_PCT = float(os.getenv("V2_VCP_MAX_BASE_RANGE_PCT", "0.22"))
-V2_VCP_MAX_ATR_RATIO = float(os.getenv("V2_VCP_MAX_ATR_RATIO", "0.88"))
-V2_VCP_MAX_BB_WIDTH_RANK = float(os.getenv("V2_VCP_MAX_BB_WIDTH_RANK", "0.50"))
-V2_VCP_MIN_VOLUME_RATIO = float(os.getenv("V2_VCP_MIN_VOLUME_RATIO", "1.22"))
-V2_VCP_MIN_CLOSE_LOCATION = float(os.getenv("V2_VCP_MIN_CLOSE_LOCATION", "0.65"))
-V2_VCP_REQUIRE_MA200 = os.getenv("V2_VCP_REQUIRE_MA200", "1") != "0"
-
-# Leader breakout quality gates.
-V2_BREAKOUT_REQUIRE_POSITIVE_RS = os.getenv("V2_BREAKOUT_REQUIRE_POSITIVE_RS", "1") != "0"
-V2_BLOCK_PULLBACK_IN_UNCERTAIN = os.getenv("V2_BLOCK_PULLBACK_IN_UNCERTAIN", "1") != "0"
-V2_PULLBACK_REQUIRE_POSITIVE_RS = os.getenv("V2_PULLBACK_REQUIRE_POSITIVE_RS", "1") != "0"
-V2_BREAKOUT_MIN_CLOSE_LOCATION = float(os.getenv("V2_BREAKOUT_MIN_CLOSE_LOCATION", "0.62"))
-V2_BREAKOUT_MIN_RS_SCORE = int(os.getenv("V2_BREAKOUT_MIN_RS_SCORE", "12"))
-V2_BREAKOUT_REQUIRE_MA20_SLOPE = os.getenv("V2_BREAKOUT_REQUIRE_MA20_SLOPE", "1") != "0"
-V2_BREAKOUT_MIN_STOCK_RET_20 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_20", "-0.01"))
-V2_BREAKOUT_MIN_STOCK_RET_63 = float(os.getenv("V2_BREAKOUT_MIN_STOCK_RET_63", "-0.03"))
-V2_BREAKOUT_MIN_REL_20_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_20_SPY", "0.00"))
-V2_BREAKOUT_MIN_REL_63_SPY = float(os.getenv("V2_BREAKOUT_MIN_REL_63_SPY", "-0.02"))
-V2_BREAKOUT_MIN_REL_20_QQQ = float(os.getenv("V2_BREAKOUT_MIN_REL_20_QQQ", "-0.02"))
-V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS = os.getenv("V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS", "1") != "0"
-V2_BREAKOUT_STRONG_RS_20_SPY = float(os.getenv("V2_BREAKOUT_STRONG_RS_20_SPY", "0.04"))
-V2_BREAKOUT_MAX_BASE_RANGE_PCT = float(os.getenv("V2_BREAKOUT_MAX_BASE_RANGE_PCT", "0.34"))
-V2_BREAKOUT_MAX_EXTENSION_MA20 = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_MA20", "0.12"))
-V2_BREAKOUT_MAX_EXTENSION_ATR = float(os.getenv("V2_BREAKOUT_MAX_EXTENSION_ATR", "1.75"))
-
-# Major-index trend filters. These are the main defense against 2022-style long
-# fakeouts. Disable through env only if deliberately testing a looser paper mode.
-V2_REQUIRE_SPY_ABOVE_MA100 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA100", "0") != "0"
-V2_REQUIRE_QQQ_ABOVE_MA100 = os.getenv("V2_REQUIRE_QQQ_ABOVE_MA100", "1") != "0"
-V2_REQUIRE_SPY_ABOVE_MA200 = os.getenv("V2_REQUIRE_SPY_ABOVE_MA200", "1") != "0"
-V2_REQUIRE_QQQ_ABOVE_MA200 = os.getenv("V2_REQUIRE_QQQ_ABOVE_MA200", "0") != "0"
-
-# Stop model.
-V2_BREAKOUT_ATR_STOP_MULT = float(os.getenv("V2_BREAKOUT_ATR_STOP_MULT", "1.95"))
-V2_PULLBACK_ATR_STOP_MULT = float(os.getenv("V2_PULLBACK_ATR_STOP_MULT", "1.95"))
-V2_STOP_WIDER_OF_ATR_AND_STRUCTURE = os.getenv("V2_STOP_WIDER_OF_ATR_AND_STRUCTURE", "1") != "0"
-
-# Winner-capture / exit management.
-BREAKEVEN_R_TRIGGER = float(os.getenv("BREAKEVEN_R_TRIGGER", "1.00"))
-PARTIAL_TAKE_PROFIT_R = float(os.getenv("PARTIAL_TAKE_PROFIT_R", "1.25"))
-PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("PARTIAL_TAKE_PROFIT_PCT", "0.10"))
-PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
-TRAIL_MULT_EARLY = float(os.getenv("TRAIL_MULT_EARLY", "4.00"))
-TRAIL_MULT_LATE = float(os.getenv("TRAIL_MULT_LATE", "3.00"))
-TRAIL_TIGHTEN_PCT = float(os.getenv("TRAIL_TIGHTEN_PCT", "0.05"))
-
-# Risk boost disabled by default; selection quality should create edge, not leverage.
-V2_RISK_BOOST_ENABLED = os.getenv("V2_RISK_BOOST_ENABLED", "0") != "0"
-V2_A_PLUS_RISK_BOOST = float(os.getenv("V2_A_PLUS_RISK_BOOST", "1.08"))
-V2_A_RISK_BOOST = float(os.getenv("V2_A_RISK_BOOST", "1.03"))
-
-
 # -----------------------------------------------------------------------------
-# BEAR SLEEVE V1 - ROBUST 3X INVERSE VCP ENGINE
+# V4.8 ACTIVE-ONLY COMPATIBILITY FLAGS
 # -----------------------------------------------------------------------------
-# Research conclusion:
-# - Do NOT loosen the long VCP strategy to handle bear markets.
-# - Use a separate inverse-ETF sleeve only when market regime is truly risk-off.
-# - The more robust bear candidate was broad 3x inverse VCP, not aggressive 2x
-#   reclaim. It made less money in backtests but survived slippage/execution stress
-#   better and had materially lower drawdown.
-BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "0") != "0"
-BEAR_BLOCK_LONG_SIGNALS_IN_BEAR = os.getenv("BEAR_BLOCK_LONG_SIGNALS_IN_BEAR", "1") != "0"
-BEAR_STRATEGY_VERSION = os.getenv("BEAR_STRATEGY_VERSION", "bear_v1_robust_3x_vcp")
-
-# Broad 3x inverse ETFs only. Keep this tight until forward-tested.
-BEAR_WATCHLIST = [
-    "SPXU",  # 3x inverse S&P 500
-    "SQQQ",  # 3x inverse Nasdaq 100
-    "SDOW",  # 3x inverse Dow
-    "TZA",   # 3x inverse Russell 2000
-]
-
-# Bear regime score: max 60. Defaults mirror the tested 30/15 regime idea.
-BEAR_ENTRY_SCORE = int(os.getenv("BEAR_ENTRY_SCORE", "30"))
-BEAR_EXIT_SCORE = int(os.getenv("BEAR_EXIT_SCORE", "15"))
-BEAR_MAX_SIGNALS_PER_SCAN = int(os.getenv("BEAR_MAX_SIGNALS_PER_SCAN", "2"))
-BEAR_MAX_OPEN_POSITIONS = int(os.getenv("BEAR_MAX_OPEN_POSITIONS", "2"))
-
-# Bear VCP entry filters. These are deliberately not ultra-loose.
-BEAR_MIN_PRICE = float(os.getenv("BEAR_MIN_PRICE", "8"))
-BEAR_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("BEAR_MIN_AVG_DOLLAR_VOLUME", "30000000"))
-BEAR_MIN_ATR_PCT = float(os.getenv("BEAR_MIN_ATR_PCT", "0.015"))
-BEAR_MAX_ATR_PCT = float(os.getenv("BEAR_MAX_ATR_PCT", "0.18"))
-BEAR_VCP_MIN_SCORE = int(os.getenv("BEAR_VCP_MIN_SCORE", "78"))
-BEAR_VCP_MAX_BASE_RANGE_PCT = float(os.getenv("BEAR_VCP_MAX_BASE_RANGE_PCT", "0.34"))
-BEAR_VCP_MAX_ATR_RATIO = float(os.getenv("BEAR_VCP_MAX_ATR_RATIO", "1.02"))
-BEAR_VCP_MAX_BB_WIDTH_RANK = float(os.getenv("BEAR_VCP_MAX_BB_WIDTH_RANK", "0.70"))
-BEAR_VCP_MIN_VOLUME_RATIO = float(os.getenv("BEAR_VCP_MIN_VOLUME_RATIO", "1.05"))
-BEAR_VCP_MIN_CLOSE_LOCATION = float(os.getenv("BEAR_VCP_MIN_CLOSE_LOCATION", "0.58"))
-BEAR_MAX_RSI = float(os.getenv("BEAR_MAX_RSI", "86"))
-BEAR_MAX_DAY_MOVE_PCT = float(os.getenv("BEAR_MAX_DAY_MOVE_PCT", "12"))
-BEAR_MAX_RISK_PER_SHARE_PCT = float(os.getenv("BEAR_MAX_RISK_PER_SHARE_PCT", "0.16"))
-
-# Bear position sizing and exits. Kept separate from long v2.8 exits.
-BEAR_RISK_PCT = float(os.getenv("BEAR_RISK_PCT", "0.03"))
-BEAR_ATR_STOP_MULT = float(os.getenv("BEAR_ATR_STOP_MULT", "2.40"))
-BEAR_TRAIL_MULT_EARLY = float(os.getenv("BEAR_TRAIL_MULT_EARLY", "4.40"))
-BEAR_TRAIL_MULT_LATE = float(os.getenv("BEAR_TRAIL_MULT_LATE", "4.40"))
-BEAR_BREAKEVEN_R_TRIGGER = float(os.getenv("BEAR_BREAKEVEN_R_TRIGGER", "1.20"))
-BEAR_PARTIAL_TAKE_PROFIT_R = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_R", "1.20"))
-BEAR_PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_PCT", "0.10"))
-BEAR_PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_FRACTION", "0.40"))
-BEAR_TIME_STOP_DAYS = int(os.getenv("BEAR_TIME_STOP_DAYS", "10"))
-BEAR_TIME_STOP_MIN_R = float(os.getenv("BEAR_TIME_STOP_MIN_R", "0.25"))
-BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "30"))
-
+# Legacy VCP/Bear/Options strategies were removed from the live code path.
+# Minimal constants remain only so older helper/report paths cannot raise NameError.
+LEGACY_TACTICAL_REMOVED = True
+V2_MAX_SIGNALS_PER_SCAN = 0
+V2_ALLOW_BREAKOUTS = False
+V2_ALLOW_VCP = False
+V2_ALLOW_MEDIUM = False
+V2_ALLOW_WEAK = False
+V2_ALLOW_PULLBACKS = False
+V2_MIN_MARKET_SCORE = 999
+V2_MIN_SCORE = 999
+V2_BREAKOUT_MIN_SCORE = 999
+V2_VCP_MIN_SCORE = 999
+V2_PULLBACK_MIN_SCORE = 999
+V2_WEAK_MIN_SCORE = 999
+BEAR_SLEEVE_ENABLED = False
+BEAR_BLOCK_LONG_SIGNALS_IN_BEAR = False
+BEAR_STRATEGY_VERSION = "removed_in_v4_8"
+BEAR_WATCHLIST: List[str] = []
+BEAR_ENTRY_SCORE = 999
+BEAR_EXIT_SCORE = 0
+BEAR_MAX_SIGNALS_PER_SCAN = 0
+BEAR_MAX_OPEN_POSITIONS = 0
+BEAR_RISK_PCT = 0.0
+BEAR_MAX_HOLDING_DAYS = 0
 
 # -----------------------------------------------------------------------------
 # V3.6 PRIVATE WEALTH SLEEVE - CORE ETF ROTATION + CORE LEDGER
@@ -413,7 +185,6 @@ WEALTH_CORE_UNIVERSE = [
 
 WEALTH_CASH_LIKE = {"BIL", "SGOV", "SHY"}
 WEALTH_DEFENSIVE_ALLOWED = {"BIL", "SGOV", "SHY", "IEF", "TLT", "GLD", "IAU", "XLP", "XLV", "XLU"}
-
 
 # -----------------------------------------------------------------------------
 # V3.5 INSTITUTIONAL PORTFOLIO INTELLIGENCE LAYER
@@ -476,7 +247,6 @@ WEALTH_ASSET_CLUSTERS = {
     "BIL": "cash_like", "SGOV": "cash_like", "SHY": "short_bonds", "IEF": "intermediate_bonds", "TLT": "long_bonds",
 }
 
-
 # Manual buy protection.
 
 # These prevent typo buys like UBST when the real signal was UPST.
@@ -487,81 +257,51 @@ REQUIRE_BUY_TICKER_IN_WATCHLIST = os.getenv("REQUIRE_BUY_TICKER_IN_WATCHLIST", "
 
 REQUIRE_LIVE_QUOTE_FOR_BUY = os.getenv("REQUIRE_LIVE_QUOTE_FOR_BUY", "1") != "0"
 
-
-
 # Reject manual buy price if it is too far from current quote.
 
 # This protects against typo prices too.
 
 BUY_QUOTE_DEVIATION_LIMIT = float(os.getenv("BUY_QUOTE_DEVIATION_LIMIT", "0.05"))
 
-
-
 # Withdrawal / profit distribution controls.
 
 WITHDRAWAL_REVIEW_DAYS = int(os.getenv("WITHDRAWAL_REVIEW_DAYS", "90"))
-
-
 
 # Below this equity, withdraw less to protect compounding.
 
 WITHDRAWAL_BUILD_PHASE_EQUITY = float(os.getenv("WITHDRAWAL_BUILD_PHASE_EQUITY", "10000"))
 
-
-
 # Small-account phase withdrawal rate.
 
 WITHDRAWAL_BUILD_PHASE_RATE = float(os.getenv("WITHDRAWAL_BUILD_PHASE_RATE", "0.10"))
-
-
 
 # Normal withdrawal rate from new profits above high-water mark.
 
 WITHDRAWAL_PROFIT_RATE = float(os.getenv("WITHDRAWAL_PROFIT_RATE", "0.25"))
 
-
-
 # Minimum profit above high-water mark required before withdrawal alert.
 
 WITHDRAWAL_MIN_PROFIT = float(os.getenv("WITHDRAWAL_MIN_PROFIT", "500"))
-
-
 
 # Minimum withdrawal amount worth alerting.
 
 WITHDRAWAL_MIN_AMOUNT = float(os.getenv("WITHDRAWAL_MIN_AMOUNT", "100"))
 
-
-
 # Keep this cash inside the bot after withdrawal.
 
 WITHDRAWAL_MIN_CASH_AFTER = float(os.getenv("WITHDRAWAL_MIN_CASH_AFTER", "500"))
-
-
 
 # If you ignore a withdrawal signal, remind again after this many days.
 
 WITHDRAWAL_ALERT_REPEAT_DAYS = int(os.getenv("WITHDRAWAL_ALERT_REPEAT_DAYS", "7"))
 
- 
-
-
-
 # Data / calendar controls.
-
-
 
 REQUIRE_FRESH_DAILY_CANDLE = os.getenv("REQUIRE_FRESH_DAILY_CANDLE", "1") != "0"
 
-
-
 FAIL_CLOSED_ON_EARNINGS_UNKNOWN = os.getenv("FAIL_CLOSED_ON_EARNINGS_UNKNOWN", "1") != "0"
 
-
-
 MANAGE_ONLY_REGULAR_HOURS = os.getenv("MANAGE_ONLY_REGULAR_HOURS", "1") != "0"
-
-
 
 PRICE_MISSING_ALERT_THRESHOLD = int(os.getenv("PRICE_MISSING_ALERT_THRESHOLD", "3"))
 
@@ -569,23 +309,9 @@ PRICE_MISSING_ALERT_THRESHOLD = int(os.getenv("PRICE_MISSING_ALERT_THRESHOLD", "
 # but you can raise it to 10 if you want stricter earnings avoidance.
 EARNINGS_LOOKAHEAD_DAYS = int(os.getenv("EARNINGS_LOOKAHEAD_DAYS", "7"))
 
-
-
- 
-
-
-
 # Telegram safety.
 
-
-
 MAX_TELEGRAM_MESSAGE = 3900
-
-
-
- 
-
-
 
 # -----------------------------------------------------------------------------
 # WATCHLIST
@@ -693,214 +419,86 @@ WEAK: List[str] = []
 WATCHLIST = list(dict.fromkeys(STRONG))
 
 # Manual buys may come from either the long VCP watchlist or the bear inverse sleeve.
-ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
+ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # -----------------------------------------------------------------------------
 # GENERAL HELPERS
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def safe_convert(obj: Any) -> Any:
 
-
-
     """Convert numpy/pandas scalar values to JSON-serializable Python values."""
-
-
 
     if isinstance(obj, dict):
 
-
-
         return {k: safe_convert(v) for k, v in obj.items()}
-
-
 
     if isinstance(obj, list):
 
-
-
         return [safe_convert(v) for v in obj]
-
-
 
     if hasattr(obj, "item"):
 
-
-
         return obj.item()
-
-
 
     return obj
 
-
-
- 
-
-
-
- 
-
-
-
 def json_dumps(data: Any) -> str:
-
-
 
     return json.dumps(safe_convert(data), separators=(",", ":"), allow_nan=False)
 
-
-
- 
-
-
-
- 
-
-
-
 def json_loads_dict(raw: Optional[str]) -> Dict[str, Any]:
-
-
 
     if not raw:
 
-
-
         return {}
-
-
 
     try:
 
-
-
         data = json.loads(raw)
-
-
 
         return data if isinstance(data, dict) else {}
 
-
-
     except Exception:
-
-
 
         return {}
 
-
-
- 
-
-
-
- 
-
-
-
 def json_loads_list(raw: Optional[str]) -> List[Any]:
-
-
 
     if not raw:
 
-
-
         return []
-
-
 
     try:
 
-
-
         data = json.loads(raw)
-
-
 
         return data if isinstance(data, list) else []
 
-
-
     except Exception:
-
-
 
         return []
 
-
-
- 
-
-
-
- 
-
-
-
 def is_finite_positive(value: float) -> bool:
-
-
 
     return math.isfinite(value) and value > 0
 
-
-
- 
-
-
-
- 
-
-
-
 def normalize_ticker(ticker: str) -> Optional[str]:
-
-
 
     ticker = ticker.strip().upper()
 
-
-
     # Allows normal US tickers plus dash/dot variants like BRK.B or BRK-B.
-
-
 
     if re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]{0,14}", ticker):
 
-
-
         return ticker
 
-
-
     return None
-
-
-
- 
-
-
-
- 
 
 def now_ts() -> float:
 
     return time.time()
-
-
-
-
 
 portfolio: Dict[str, Any] = {"cash": INITIAL_CASH, "positions": {}}
 
@@ -908,69 +506,31 @@ last_signals: Dict[str, Any] = {}
 
 missing_price_counts: Dict[str, int] = {}
 
-
-
 PANIC_MODE = False
 
 LAST_HEARTBEAT = now_ts()
 
 LAST_SCAN_ATTEMPT = 0
 
-
-
 NYSE = mcal.get_calendar("NYSE")
-
- 
-
-
-
- 
-
-
 
 def ny_now() -> datetime:
 
-
-
     return datetime.now(NY_TZ)
-
-
-
- 
-
-
-
- 
-
-
 
 def ny_date_str(ts: Optional[float] = None) -> str:
 
-
-
     dt = datetime.fromtimestamp(ts if ts is not None else now_ts(), NY_TZ)
-
-
 
     return dt.date().isoformat()
 
-
-
- 
-
 AUDIT_LOG = os.path.join(DATA_DIR, "audit.log")
 
-
-
 LOG_FILE = os.path.join(DATA_DIR, "bot.log")
-
-
 
 logger = logging.getLogger("trading_bot")
 
 logger.setLevel(logging.INFO)
-
-
 
 handler = RotatingFileHandler(
 
@@ -982,25 +542,17 @@ handler = RotatingFileHandler(
 
 )
 
-
-
 formatter = logging.Formatter(
 
     "%(asctime)s | %(levelname)s | %(message)s"
 
 )
 
-
-
 handler.setFormatter(formatter)
-
-
 
 if not logger.handlers:
 
     logger.addHandler(handler)
-
-
 
 def audit(event: str, details: str = "") -> None:
 
@@ -1008,37 +560,23 @@ def audit(event: str, details: str = "") -> None:
 
         ts = ny_now().strftime("%Y-%m-%d %H:%M:%S %Z")
 
-
-
         line = f"{ts} | {event}"
-
-
 
         if details:
 
             line += f" | {details}"
 
-
-
         with open(AUDIT_LOG, "a", encoding="utf-8") as f:
 
             f.write(line + "\n")
-
-
 
     except Exception as exc:
 
         print(f"[AUDIT ERROR] {exc}")
 
-
-
-
-
 def format_money(value: float) -> str:
 
     return f"${round(value, 2)}"
-
-
 
 def pct_from_entry(entry_price: Any, exit_price: Any) -> Optional[float]:
 
@@ -1048,25 +586,15 @@ def pct_from_entry(entry_price: Any, exit_price: Any) -> Optional[float]:
 
         exit_ = float(exit_price)
 
-
-
         if entry <= 0:
 
             return None
 
-
-
         return ((exit_ - entry) / entry) * 100
-
-
 
     except Exception:
 
         return None
-
-
-
-
 
 def format_pct(value: Optional[float]) -> str:
 
@@ -1074,21 +602,15 @@ def format_pct(value: Optional[float]) -> str:
 
         return "n/a"
 
-
-
     sign = "+" if value >= 0 else ""
 
     return f"{sign}{round(value, 2)}%"
-
-
 
 def format_plain_pct(value: Any, decimals: int = 0) -> str:
 
     """
 
     Format a normal percent without plus/minus sign.
-
-
 
     Used for position-size guide like:
 
@@ -1102,37 +624,23 @@ def format_plain_pct(value: Any, decimals: int = 0) -> str:
 
             return "n/a"
 
-
-
         value_float = float(value)
-
-
 
         if decimals <= 0:
 
             return f"{int(round(value_float))}%"
 
-
-
         return f"{round(value_float, decimals)}%"
-
-
 
     except Exception:
 
         return "n/a"
-
-
-
-
 
 def get_performance_base_capital() -> float:
 
     """
 
     Base capital used for realized P/L percentage.
-
-
 
     Priority:
 
@@ -1144,33 +652,21 @@ def get_performance_base_capital() -> float:
 
     value = get_meta("performance_base_capital")
 
-
-
     if value is not None:
 
         try:
 
             base = float(value)
 
-
-
             if math.isfinite(base) and base > 0:
 
                 return base
-
-
 
         except ValueError:
 
             pass
 
-
-
     return INITIAL_CASH if math.isfinite(INITIAL_CASH) and INITIAL_CASH > 0 else 0.0
-
-
-
-
 
 def maybe_set_performance_base_from_cash_tx(
 
@@ -1184,8 +680,6 @@ def maybe_set_performance_base_from_cash_tx(
 
     Sets performance base capital after clean reset + setcash.
 
-
-
     It only auto-sets if:
 
     - base is missing
@@ -1193,8 +687,6 @@ def maybe_set_performance_base_from_cash_tx(
     - no positions exist
 
     - no trades exist
-
-
 
     This prevents accidental baseline changes during normal paper/live trading.
 
@@ -1204,21 +696,15 @@ def maybe_set_performance_base_from_cash_tx(
 
         return
 
-
-
     existing = conn.execute(
 
         "SELECT value FROM meta WHERE key = 'performance_base_capital'"
 
     ).fetchone()
 
-
-
     if existing is not None:
 
         return
-
-
 
     pos_count = conn.execute(
 
@@ -1226,15 +712,11 @@ def maybe_set_performance_base_from_cash_tx(
 
     ).fetchone()["n"]
 
-
-
     trade_count = conn.execute(
 
         "SELECT COUNT(*) AS n FROM trades"
 
     ).fetchone()["n"]
-
-
 
     core_pos_count = conn.execute(
         "SELECT COUNT(*) AS n FROM core_positions"
@@ -1253,10 +735,6 @@ def maybe_set_performance_base_from_cash_tx(
             (str(round(amount, 2)),),
 
         )
-
-
-
-
 
 def realized_performance_all_time() -> Dict[str, Any]:
     """
@@ -1290,7 +768,6 @@ def realized_performance_all_time() -> Dict[str, Any]:
         "core_trade_records": len(core_trades),
     }
 
-
 def market_label(market: str) -> str:
 
     labels = {
@@ -1304,10 +781,6 @@ def market_label(market: str) -> str:
     }
 
     return labels.get(str(market).upper(), f"⚪ {market}")
-
-
-
-
 
 def setup_label(setup_type: str) -> str:
     setup = str(setup_type).lower()
@@ -1329,7 +802,6 @@ def setup_label(setup_type: str) -> str:
 
     return f"⚙️ {setup_type}"
 
-
 def sleeve_label(entry_data: Dict[str, Any]) -> str:
     sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
 
@@ -1340,7 +812,6 @@ def sleeve_label(entry_data: Dict[str, Any]) -> str:
         return "🐂 BULL / LONG VCP SLEEVE"
 
     return f"⚙️ {sleeve}"
-
 
 def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
     sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
@@ -1353,12 +824,9 @@ def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
 
     return sleeve
 
-
 def yes_no(value: bool) -> str:
 
     return "✅ Yes" if value else "❌ No"
-
-
 
 def heartbeat() -> None:
 
@@ -1372,459 +840,201 @@ def heartbeat() -> None:
 
         print(f"[HEARTBEAT ERROR] {exc}")
 
-
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # SQLITE PERSISTENCE
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def db_connect() -> sqlite3.Connection:
 
-
-
     conn = sqlite3.connect(DB_FILE, timeout=30, check_same_thread=False)
-
-
 
     conn.row_factory = sqlite3.Row
 
-
-
     conn.execute("PRAGMA foreign_keys = ON")
-
-
 
     conn.execute("PRAGMA busy_timeout = 30000")
 
-
-
     return conn
-
-
-
- 
-
-
-
- 
-
-
 
 @contextmanager
 
-
-
 def db_tx() -> Iterable[sqlite3.Connection]:
-
-
 
     conn = db_connect()
 
-
-
     try:
-
-
 
         conn.execute("BEGIN IMMEDIATE")
 
-
-
         yield conn
-
-
 
         conn.commit()
 
-
-
     except Exception:
-
-
 
         conn.rollback()
 
-
-
         raise
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def init_db() -> None:
 
-
-
     conn = db_connect()
-
-
 
     try:
 
-
-
         conn.execute("PRAGMA journal_mode = WAL")
-
-
 
         conn.execute("PRAGMA synchronous = FULL")
 
-
-
         conn.executescript(
-
-
 
             """
 
-
-
             CREATE TABLE IF NOT EXISTS meta (
-
-
 
                 key TEXT PRIMARY KEY,
 
-
-
                 value TEXT NOT NULL
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS account (
 
-
-
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-
-
 
                 cash REAL NOT NULL CHECK (cash >= 0)
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS positions (
 
-
-
                 ticker TEXT PRIMARY KEY,
-
-
 
                 position_id TEXT NOT NULL UNIQUE,
 
-
-
                 strategy_version TEXT NOT NULL,
 
-
-
                 shares INTEGER NOT NULL CHECK (shares > 0),
-
-
 
                 entry_price REAL NOT NULL CHECK (entry_price > 0),
 
-
-
                 initial_stop REAL NOT NULL CHECK (initial_stop > 0),
-
-
 
                 stop REAL NOT NULL CHECK (stop > 0),
 
-
-
                 highest REAL NOT NULL CHECK (highest > 0),
-
-
 
                 partial_taken INTEGER NOT NULL DEFAULT 0 CHECK (partial_taken IN (0,1)),
 
-
-
                 entry_time REAL NOT NULL,
-
-
 
                 atr REAL,
 
-
-
                 risk_per_share REAL,
-
-
 
                 entry_data_json TEXT NOT NULL DEFAULT '{}'
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS trades (
 
-
-
                 id TEXT PRIMARY KEY,
-
-
 
                 position_id TEXT,
 
-
-
                 strategy_version TEXT,
-
-
 
                 ticker TEXT NOT NULL,
 
-
-
                 entry_price REAL NOT NULL,
-
-
 
                 exit_price REAL NOT NULL,
 
-
-
                 shares INTEGER NOT NULL CHECK (shares > 0),
-
-
 
                 profit REAL NOT NULL,
 
-
-
                 entry_time REAL NOT NULL,
-
-
 
                 exit_time REAL NOT NULL,
 
-
-
                 duration_sec INTEGER NOT NULL,
-
-
 
                 exit_reason TEXT NOT NULL,
 
-
-
                 entry_data_json TEXT NOT NULL DEFAULT '{}',
-
-
 
                 risk_per_share REAL,
 
-
-
                 r_multiple REAL,
-
-
 
                 created_at REAL NOT NULL,
 
-
-
                 UNIQUE(position_id, exit_time, exit_reason)
 
-
-
-
-
             );
-
-
-
- 
-
-
 
             CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker);
 
-
-
             CREATE INDEX IF NOT EXISTS idx_trades_position_id ON trades(position_id);
-
-
 
             CREATE INDEX IF NOT EXISTS idx_trades_exit_time ON trades(exit_time);
 
-
-
- 
-
-
-
             CREATE TABLE IF NOT EXISTS signals (
-
-
 
                 ticker TEXT PRIMARY KEY,
 
-
-
                 time REAL NOT NULL,
-
-
 
                 entry_data_json TEXT NOT NULL DEFAULT '{}'
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS equity_snapshots (
 
-
-
                 snapshot_date TEXT PRIMARY KEY,
-
-
 
                 time REAL NOT NULL,
 
-
-
                 equity REAL NOT NULL,
-
-
 
                 cash REAL NOT NULL,
 
-
-
                 positions_value REAL NOT NULL
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS processed_updates (
 
-
-
                 update_id INTEGER PRIMARY KEY,
-
-
 
                 processed_at REAL NOT NULL,
 
-
-
                 status TEXT NOT NULL
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS cooldowns (
 
-
-
                 ticker TEXT PRIMARY KEY,
-
-
 
                 time REAL NOT NULL
 
-
-
             );
-
-
-
- 
-
-
 
             CREATE TABLE IF NOT EXISTS breakout_memory (
 
-
-
                 ticker TEXT PRIMARY KEY,
-
-
 
                 levels_json TEXT NOT NULL DEFAULT '[]'
 
-
-
             );
-
-
 
             CREATE TABLE IF NOT EXISTS withdrawals (
 
@@ -1934,2017 +1144,877 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_core_signals_time ON core_signals(time);
 
-
-
             """
 
-
-
         )
-
-
 
         row = conn.execute("SELECT cash FROM account WHERE id = 1").fetchone()
 
-
-
         if row is None:
-
-
 
             conn.execute("INSERT INTO account(id, cash) VALUES (1, ?)", (INITIAL_CASH,))
 
-
-
         conn.commit()
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def get_meta(key: str, default: Optional[str] = None) -> Optional[str]:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
 
-
-
         return row["value"] if row else default
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def set_meta(key: str, value: str) -> None:
 
-
-
     with db_tx() as conn:
 
-
-
         conn.execute(
-
-
 
             "INSERT INTO meta(key, value) VALUES (?, ?) "
 
-
-
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-
-
 
             (key, value),
 
-
-
         )
-
-
-
- 
-
-
-
- 
-
-
 
 def get_cash(conn: sqlite3.Connection) -> float:
 
-
-
     row = conn.execute("SELECT cash FROM account WHERE id = 1").fetchone()
-
-
 
     if row is None:
 
-
-
         raise RuntimeError("Account row missing")
-
-
 
     return float(row["cash"])
 
-
-
- 
-
-
-
- 
-
-
-
 def set_cash_tx(conn: sqlite3.Connection, cash: float) -> None:
-
-
 
     if not math.isfinite(cash) or cash < 0:
 
-
-
         raise ValueError("Cash must be finite and non-negative")
-
-
 
     conn.execute("UPDATE account SET cash = ? WHERE id = 1", (round(cash, 6),))
 
-
-
- 
-
-
-
- 
-
-
-
 def row_to_position(row: sqlite3.Row) -> Dict[str, Any]:
-
-
 
     return {
 
-
-
         "position_id": row["position_id"],
-
-
 
         "strategy_version": row["strategy_version"],
 
-
-
         "shares": int(row["shares"]),
-
-
 
         "price": float(row["entry_price"]),
 
-
-
         "initial_stop": float(row["initial_stop"]),
-
-
 
         "stop": float(row["stop"]),
 
-
-
         "highest": float(row["highest"]),
-
-
 
         "partial_taken": bool(row["partial_taken"]),
 
-
-
         "entry_time": float(row["entry_time"]),
-
-
 
         "atr": None if row["atr"] is None else float(row["atr"]),
 
-
-
         "risk_per_share": None if row["risk_per_share"] is None else float(row["risk_per_share"]),
-
-
 
         "entry_data": json_loads_dict(row["entry_data_json"]),
 
-
-
     }
-
-
-
- 
-
-
-
- 
-
-
 
 def load_portfolio() -> Dict[str, Any]:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         cash = get_cash(conn)
 
-
-
         rows = conn.execute("SELECT * FROM positions ORDER BY ticker").fetchall()
-
-
 
         positions = {row["ticker"]: row_to_position(row) for row in rows}
 
-
-
         return {"cash": cash, "positions": positions}
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def refresh_portfolio() -> None:
 
-
-
     global portfolio
-
-
 
     portfolio = load_portfolio()
 
-
-
- 
-
-
-
- 
-
-
-
 def upsert_position_tx(conn: sqlite3.Connection, ticker: str, pos: Dict[str, Any]) -> None:
-
-
 
     entry_data_json = json_dumps(pos.get("entry_data", {}))
 
-
-
     conn.execute(
 
-
-
         """
-
-
 
         INSERT INTO positions(
 
-
-
             ticker, position_id, strategy_version, shares, entry_price,
-
-
 
             initial_stop, stop, highest, partial_taken, entry_time,
 
-
-
             atr, risk_per_share, entry_data_json
-
-
 
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
-
-
         ON CONFLICT(ticker) DO UPDATE SET
-
-
 
             position_id = excluded.position_id,
 
-
-
             strategy_version = excluded.strategy_version,
-
-
 
             shares = excluded.shares,
 
-
-
             entry_price = excluded.entry_price,
-
-
 
             initial_stop = excluded.initial_stop,
 
-
-
             stop = excluded.stop,
-
-
 
             highest = excluded.highest,
 
-
-
             partial_taken = excluded.partial_taken,
-
-
 
             entry_time = excluded.entry_time,
 
-
-
             atr = excluded.atr,
-
-
 
             risk_per_share = excluded.risk_per_share,
 
-
-
             entry_data_json = excluded.entry_data_json
-
-
 
         """,
 
-
-
         (
-
-
 
             ticker,
 
-
-
             pos["position_id"],
-
-
 
             pos.get("strategy_version", STRATEGY_VERSION),
 
-
-
             int(pos["shares"]),
-
-
 
             float(pos["price"]),
 
-
-
             float(pos["initial_stop"]),
-
-
 
             float(pos["stop"]),
 
-
-
             float(pos["highest"]),
-
-
 
             1 if pos.get("partial_taken") else 0,
 
-
-
             float(pos["entry_time"]),
-
-
 
             None if pos.get("atr") is None else float(pos["atr"]),
 
-
-
             None if pos.get("risk_per_share") is None else float(pos["risk_per_share"]),
-
-
 
             entry_data_json,
 
-
-
         ),
 
-
-
     )
-
-
-
- 
-
-
-
- 
-
-
 
 def delete_position_tx(conn: sqlite3.Connection, ticker: str) -> None:
 
-
-
     conn.execute("DELETE FROM positions WHERE ticker = ?", (ticker,))
-
-
-
- 
-
-
-
- 
-
-
 
 def load_trades() -> List[Dict[str, Any]]:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         rows = conn.execute("SELECT * FROM trades ORDER BY exit_time ASC, created_at ASC").fetchall()
 
-
-
         return [row_to_trade(row) for row in rows]
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def row_to_trade(row: sqlite3.Row) -> Dict[str, Any]:
 
-
-
     return {
-
-
 
         "id": row["id"],
 
-
-
         "position_id": row["position_id"],
-
-
 
         "strategy_version": row["strategy_version"],
 
-
-
         "ticker": row["ticker"],
-
-
 
         "entry_price": float(row["entry_price"]),
 
-
-
         "exit_price": float(row["exit_price"]),
-
-
 
         "shares": int(row["shares"]),
 
-
-
         "profit": float(row["profit"]),
-
-
 
         "entry_time": float(row["entry_time"]),
 
-
-
         "exit_time": float(row["exit_time"]),
-
-
 
         "duration_sec": int(row["duration_sec"]),
 
-
-
         "exit_reason": row["exit_reason"],
-
-
 
         "entry_data": json_loads_dict(row["entry_data_json"]),
 
-
-
         "risk_per_share": None if row["risk_per_share"] is None else float(row["risk_per_share"]),
-
-
 
         "r_multiple": None if row["r_multiple"] is None else float(row["r_multiple"]),
 
-
-
     }
-
-
-
- 
-
-
-
- 
-
-
 
 def insert_trade_tx(conn: sqlite3.Connection, trade: Dict[str, Any]) -> None:
 
-
-
     conn.execute(
-
-
 
         """
 
-
-
         INSERT INTO trades(
-
-
 
             id, position_id, strategy_version, ticker, entry_price, exit_price,
 
-
-
             shares, profit, entry_time, exit_time, duration_sec, exit_reason,
-
-
 
             entry_data_json, risk_per_share, r_multiple, created_at
 
-
-
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
-
 
         """,
 
-
-
         (
-
-
 
             trade["id"],
 
-
-
             trade.get("position_id"),
-
-
 
             trade.get("strategy_version"),
 
-
-
             trade["ticker"],
-
-
 
             float(trade["entry_price"]),
 
-
-
             float(trade["exit_price"]),
-
-
 
             int(trade["shares"]),
 
-
-
             float(trade["profit"]),
-
-
 
             float(trade["entry_time"]),
 
-
-
             float(trade["exit_time"]),
-
-
 
             int(trade["duration_sec"]),
 
-
-
             trade["exit_reason"],
-
-
 
             json_dumps(trade.get("entry_data", {})),
 
-
-
             None if trade.get("risk_per_share") is None else float(trade["risk_per_share"]),
-
-
 
             None if trade.get("r_multiple") is None else float(trade["r_multiple"]),
 
-
-
             now_ts(),
-
-
 
         ),
 
-
-
     )
-
-
-
- 
-
-
-
- 
-
-
 
 def load_signals() -> Dict[str, Any]:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         rows = conn.execute("SELECT * FROM signals").fetchall()
 
-
-
         return {
-
-
 
             row["ticker"]: {
 
-
-
                 "time": float(row["time"]),
-
-
 
                 "entry_data": json_loads_dict(row["entry_data_json"]),
 
-
-
             }
-
-
 
             for row in rows
 
-
-
         }
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def save_signal(ticker: str, signal_time: float, entry_data: Dict[str, Any]) -> None:
 
-
-
     global last_signals
-
-
 
     with db_tx() as conn:
 
-
-
         conn.execute(
-
-
 
             "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?) "
 
-
-
             "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time, entry_data_json = excluded.entry_data_json",
-
-
 
             (ticker, signal_time, json_dumps(entry_data)),
 
-
-
         )
-
-
 
     last_signals = load_signals()
 
-
-
- 
-
-
-
- 
-
-
-
 def save_signals() -> None:
-
-
 
     """Compatibility function: persist current in-memory last_signals dict."""
 
-
-
     with db_tx() as conn:
 
-
-
         conn.execute("DELETE FROM signals")
-
-
 
         for ticker, signal in last_signals.items():
 
-
-
             if isinstance(signal, dict):
-
-
 
                 signal_time = float(signal.get("time", 0))
 
-
-
                 entry_data = signal.get("entry_data", {})
-
-
 
             else:
 
-
-
                 signal_time = float(signal)
-
-
 
                 entry_data = {}
 
-
-
             conn.execute(
-
-
 
                 "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?)",
 
-
-
                 (ticker, signal_time, json_dumps(entry_data)),
 
-
-
             )
-
-
-
- 
-
-
-
- 
-
-
 
 def clear_signals() -> None:
 
-
-
     global last_signals
 
-
-
     with db_tx() as conn:
-
-
 
         conn.execute("DELETE FROM signals")
 
-
-
     last_signals = {}
-
-
-
- 
-
-
-
- 
-
-
 
 def get_cooldowns() -> Dict[str, float]:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         rows = conn.execute("SELECT ticker, time FROM cooldowns").fetchall()
 
-
-
         return {row["ticker"]: float(row["time"]) for row in rows}
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def set_cooldown(ticker: str, timestamp: float) -> None:
 
-
-
     with db_tx() as conn:
 
-
-
         conn.execute(
-
-
 
             "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
 
-
-
             "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
-
-
 
             (ticker, timestamp),
 
-
-
         )
-
-
-
- 
-
-
-
- 
-
-
 
 def get_breakout_levels(ticker: str) -> set:
 
-
-
     conn = db_connect()
 
-
-
     try:
-
-
 
         row = conn.execute("SELECT levels_json FROM breakout_memory WHERE ticker = ?", (ticker,)).fetchone()
 
-
-
         if not row:
-
-
 
             return set()
 
-
-
         return set(int(x) for x in json_loads_list(row["levels_json"]))
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def set_breakout_levels(ticker: str, levels: set) -> None:
 
-
-
     with db_tx() as conn:
 
-
-
         conn.execute(
-
-
 
             "INSERT INTO breakout_memory(ticker, levels_json) VALUES (?, ?) "
 
-
-
             "ON CONFLICT(ticker) DO UPDATE SET levels_json = excluded.levels_json",
-
-
 
             (ticker, json_dumps(sorted(levels))),
 
-
-
         )
-
-
-
- 
-
-
-
- 
-
-
 
 def clear_breakout_levels(ticker: str) -> None:
 
-
-
     with db_tx() as conn:
-
-
 
         conn.execute("DELETE FROM breakout_memory WHERE ticker = ?", (ticker,))
 
-
-
- 
-
-
-
- 
-
-
-
 def load_update_id() -> Optional[int]:
-
-
 
     value = get_meta("last_update_id")
 
-
-
     if value is None:
-
-
 
         # One-time import from legacy updates.json if present.
 
-
-
         try:
-
-
 
             if os.path.exists(UPDATES_FILE):
 
-
-
                 with open(UPDATES_FILE, "r", encoding="utf-8") as f:
-
-
 
                     data = json.load(f)
 
-
-
                     if isinstance(data, dict) and data.get("last_update_id") is not None:
-
-
 
                         return int(data["last_update_id"])
 
-
-
         except Exception:
-
-
 
             return None
 
-
-
         return None
 
-
-
     try:
-
-
 
         return int(value)
 
-
-
     except ValueError:
-
-
 
         return None
 
-
-
- 
-
-
-
- 
-
-
-
 def save_update_id(update_id: int) -> None:
-
-
 
     set_meta("last_update_id", str(int(update_id)))
 
-
-
- 
-
-
-
- 
-
-
-
 def is_update_processed(update_id: int) -> bool:
-
-
 
     conn = db_connect()
 
-
-
     try:
-
-
 
         row = conn.execute("SELECT 1 FROM processed_updates WHERE update_id = ?", (int(update_id),)).fetchone()
 
-
-
         return row is not None
-
-
 
     finally:
 
-
-
         conn.close()
-
-
-
- 
-
-
-
- 
-
-
 
 def mark_update_processed_tx(conn: sqlite3.Connection, update_id: Optional[int], status: str) -> None:
 
-
-
     if update_id is None:
-
-
 
         return
 
-
-
     conn.execute(
-
-
 
         "INSERT OR IGNORE INTO processed_updates(update_id, processed_at, status) VALUES (?, ?, ?)",
 
-
-
         (int(update_id), now_ts(), status),
 
-
-
     )
-
-
 
     conn.execute(
 
-
-
         "INSERT INTO meta(key, value) VALUES ('last_update_id', ?) "
-
-
 
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
 
-
-
         (str(int(update_id)),),
-
-
 
     )
 
-
-
- 
-
-
-
- 
-
-
-
 def mark_update_processed(update_id: int, status: str) -> None:
 
-
-
     with db_tx() as conn:
-
-
 
         mark_update_processed_tx(conn, update_id, status)
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # LEGACY JSON MIGRATION
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def try_load_json(path: str, default: Any) -> Any:
 
-
-
     try:
-
-
 
         if not os.path.exists(path):
 
-
-
             return default
-
-
 
         with open(path, "r", encoding="utf-8") as f:
 
-
-
             return json.load(f)
 
-
-
     except Exception as exc:
-
-
 
         print(f"[MIGRATION JSON ERROR] {path}: {exc}")
 
-
-
         return default
-
-
-
- 
-
-
-
- 
-
-
 
 def migrate_legacy_json_once() -> None:
 
-
-
     if get_meta("legacy_json_migration_done") == "1":
-
-
 
         return
 
-
-
- 
-
-
-
     with db_tx() as conn:
-
-
 
         pos_count = conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"]
 
-
-
         trade_count = conn.execute("SELECT COUNT(*) AS n FROM trades").fetchone()["n"]
-
-
 
         signal_count = conn.execute("SELECT COUNT(*) AS n FROM signals").fetchone()["n"]
 
-
-
- 
-
-
-
         if os.path.exists(PORTFOLIO_FILE) and pos_count == 0:
-
-
 
             legacy_portfolio = try_load_json(PORTFOLIO_FILE, {})
 
-
-
             if isinstance(legacy_portfolio, dict):
-
-
 
                 legacy_cash = legacy_portfolio.get("cash")
 
-
-
                 if isinstance(legacy_cash, (int, float)) and math.isfinite(float(legacy_cash)) and float(legacy_cash) >= 0:
-
-
 
                     set_cash_tx(conn, float(legacy_cash))
 
-
-
                 legacy_positions = legacy_portfolio.get("positions", {})
-
-
 
                 if isinstance(legacy_positions, dict):
 
-
-
                     for ticker, pos in legacy_positions.items():
-
-
 
                         nticker = normalize_ticker(str(ticker))
 
-
-
                         if nticker is None or not isinstance(pos, dict):
 
-
-
                             continue
-
-
 
                         try:
 
-
-
                             entry = float(pos.get("price"))
-
-
 
                             shares = int(pos.get("shares"))
 
-
-
                             stop = float(pos.get("stop", entry * 0.95))
-
-
 
                             initial_stop = float(pos.get("initial_stop", stop))
 
-
-
                             highest = float(pos.get("highest", entry))
-
-
 
                             risk_per_share = pos.get("risk_per_share")
 
-
-
                             if risk_per_share is None:
-
-
 
                                 risk_per_share = entry - initial_stop
 
-
-
                             risk_per_share = float(risk_per_share)
-
-
 
                             if not (shares > 0 and entry > 0 and stop > 0 and initial_stop > 0 and highest > 0):
 
-
-
                                 continue
-
-
 
                             new_pos = {
 
-
-
                                 "position_id": pos.get("position_id") or f"{nticker}_{int(time.time())}_{uuid.uuid4().hex[:8]}",
-
-
 
                                 "strategy_version": pos.get("strategy_version") or STRATEGY_VERSION,
 
-
-
                                 "shares": shares,
-
-
 
                                 "price": entry,
 
-
-
                                 "initial_stop": initial_stop,
-
-
 
                                 "stop": stop,
 
-
-
                                 "highest": max(highest, entry),
-
-
 
                                 "partial_taken": bool(pos.get("partial_taken", False)),
 
-
-
                                 "entry_time": float(pos.get("entry_time", now_ts())),
-
-
 
                                 "atr": pos.get("atr"),
 
-
-
                                 "risk_per_share": risk_per_share if risk_per_share > 0 else None,
-
-
 
                                 "entry_data": pos.get("entry_data", {}),
 
-
-
                             }
-
-
 
                             upsert_position_tx(conn, nticker, new_pos)
 
-
-
                         except Exception as exc:
-
-
 
                             print(f"[MIGRATION POSITION SKIP] {ticker}: {exc}")
 
-
-
- 
-
-
-
         if os.path.exists(TRADES_FILE) and trade_count == 0:
-
-
 
             legacy_trades = try_load_json(TRADES_FILE, [])
 
-
-
             if isinstance(legacy_trades, list):
-
-
 
                 for item in legacy_trades:
 
-
-
                     if not isinstance(item, dict):
-
-
 
                         continue
 
-
-
                     try:
-
-
 
                         ticker = normalize_ticker(str(item.get("ticker", "")))
 
-
-
                         if ticker is None:
 
-
-
                             continue
-
-
 
                         shares = int(item.get("shares"))
 
-
-
                         entry = float(item.get("entry_price"))
-
-
 
                         exit_price = float(item.get("exit_price"))
 
-
-
                         profit = float(item.get("profit", (exit_price - entry) * shares))
-
-
 
                         if not (shares > 0 and entry > 0 and exit_price > 0 and math.isfinite(profit)):
 
-
-
                             continue
-
-
 
                         risk_per_share = item.get("risk_per_share")
 
-
-
                         r_multiple = item.get("r_multiple")
-
-
 
                         if risk_per_share is not None:
 
-
-
                             risk_per_share = float(risk_per_share)
-
-
 
                             if risk_per_share <= 0:
 
-
-
                                 risk_per_share = None
-
-
 
                         if r_multiple is None and risk_per_share:
 
-
-
                             r_multiple = (exit_price - entry) / risk_per_share
-
-
 
                         trade = {
 
-
-
                             "id": str(item.get("id") or uuid.uuid4().hex),
-
-
 
                             "position_id": item.get("position_id"),
 
-
-
                             "strategy_version": item.get("strategy_version") or STRATEGY_VERSION,
-
-
 
                             "ticker": ticker,
 
-
-
                             "entry_price": entry,
-
-
 
                             "exit_price": exit_price,
 
-
-
                             "shares": shares,
-
-
 
                             "profit": round(profit, 2),
 
-
-
                             "entry_time": float(item.get("entry_time", now_ts())),
-
-
 
                             "exit_time": float(item.get("exit_time", now_ts())),
 
-
-
                             "duration_sec": int(item.get("duration_sec", 0)),
-
-
 
                             "exit_reason": item.get("exit_reason", "legacy"),
 
-
-
                             "entry_data": item.get("entry_data", {}),
-
-
 
                             "risk_per_share": risk_per_share,
 
-
-
                             "r_multiple": None if r_multiple is None else round(float(r_multiple), 4),
-
-
 
                         }
 
-
-
                         insert_trade_tx(conn, trade)
 
-
-
                     except Exception as exc:
-
-
 
                         print(f"[MIGRATION TRADE SKIP] {exc}")
 
-
-
- 
-
-
-
         if os.path.exists(SIGNALS_FILE) and signal_count == 0:
-
-
 
             legacy_signals = try_load_json(SIGNALS_FILE, {})
 
-
-
             if isinstance(legacy_signals, dict):
-
-
 
                 for ticker, signal in legacy_signals.items():
 
-
-
                     nticker = normalize_ticker(str(ticker))
-
-
 
                     if nticker is None:
 
-
-
                         continue
-
-
 
                     try:
 
-
-
                         if isinstance(signal, dict):
-
-
 
                             signal_time = float(signal.get("time", 0))
 
-
-
                             entry_data = signal.get("entry_data", {})
-
-
 
                         else:
 
-
-
                             signal_time = float(signal)
-
-
 
                             entry_data = {}
 
-
-
                         conn.execute(
-
-
 
                             "INSERT OR REPLACE INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?)",
 
-
-
                             (nticker, signal_time, json_dumps(entry_data)),
-
-
 
                         )
 
-
-
                     except Exception as exc:
-
-
 
                         print(f"[MIGRATION SIGNAL SKIP] {ticker}: {exc}")
 
-
-
- 
-
-
-
         conn.execute(
-
-
 
             "INSERT INTO meta(key, value) VALUES ('legacy_json_migration_done', '1') "
 
-
-
             "ON CONFLICT(key) DO UPDATE SET value = '1'"
-
-
 
         )
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # TELEGRAM
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def send(msg: Any) -> None:
 
-
-
     text = str(msg)
-
-
 
     if not text:
 
-
-
         text = " "
-
-
-
- 
-
-
 
     chunks = [text[i:i + MAX_TELEGRAM_MESSAGE] for i in range(0, len(text), MAX_TELEGRAM_MESSAGE)]
 
-
-
     for chunk in chunks:
-
-
 
         try:
 
-
-
             res = SESSION.post(
-
-
 
                 f"https://api.telegram.org/bot{TOKEN}/sendMessage",
 
-
-
                 data={"chat_id": CHAT_ID, "text": chunk},
-
-
 
                 timeout=5,
 
-
-
             )
-
-
 
             if res.status_code >= 400:
 
-
-
                 print(f"[TELEGRAM SEND HTTP ERROR] {res.status_code}: {res.text[:500]}")
-
-
 
                 continue
 
-
-
             payload = res.json()
-
-
 
             if not payload.get("ok", False):
 
-
-
                 print(f"[TELEGRAM SEND API ERROR] {payload}")
-
-
 
         except Exception as exc:
 
-
-
             print(f"[TELEGRAM SEND ERROR] {exc}")
-
-
-
- 
-
-
-
- 
-
-
 
 def send_document(path: str, caption: str = "") -> None:
 
-
-
     try:
-
-
 
         with open(path, "rb") as f:
 
-
-
             res = SESSION.post(
-
-
 
                 f"https://api.telegram.org/bot{TOKEN}/sendDocument",
 
-
-
                 files={"document": f},
-
-
 
                 data={"chat_id": CHAT_ID, "caption": caption},
 
-
-
                 timeout=30,
-
-
 
             )
 
-
-
         if res.status_code >= 400:
-
-
 
             send(f"ERROR sending document: HTTP {res.status_code}")
 
-
-
             return
-
-
 
         payload = res.json()
 
-
-
         if not payload.get("ok", False):
-
-
 
             send(f"ERROR sending document: {payload}")
 
-
-
     except Exception as exc:
 
-
-
         send(f"ERROR sending document: {exc}")
-
-
-
- 
 
 def fmt_public_number(value: Any, decimals: int = 2) -> str:
 
@@ -3954,17 +2024,11 @@ def fmt_public_number(value: Any, decimals: int = 2) -> str:
 
             return "n/a"
 
-
-
         return str(round(float(value), decimals))
-
-
 
     except Exception:
 
         return "n/a"
-
-
 
 def public_signal_footer() -> str:
 
@@ -3981,10 +2045,6 @@ def public_signal_footer() -> str:
         "Paid access, if any, is for automated alerts only — no profit guarantee or personalized advice."
 
     )
-
-
-
-
 
 def public_channel_terms_text() -> str:
 
@@ -4024,10 +2084,6 @@ def public_channel_terms_text() -> str:
 
     )
 
-
-
-
-
 def should_forward_public_position(pos: Dict[str, Any]) -> bool:
 
     """
@@ -4035,8 +2091,6 @@ def should_forward_public_position(pos: Dict[str, Any]) -> bool:
     Only forward exits/partials to the public channel if the original entry
 
     was also sent to the public channel.
-
-
 
     This prevents old paper positions or manual/private positions from creating
 
@@ -4048,15 +2102,11 @@ def should_forward_public_position(pos: Dict[str, Any]) -> bool:
 
     return bool(entry_data.get("public_signal_sent"))
 
-
-
 def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
     """
 
     Send clean public trade signals to Telegram channel.
-
-
 
     This is intentionally separate from private admin Telegram messages.
 
@@ -4066,23 +2116,15 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
         return False, "PUBLIC_SIGNAL_ENABLED is off"
 
-
-
     if SIGNAL_CHANNEL_ID == 0:
 
         return False, "SIGNAL_CHANNEL_ID is missing or invalid"
 
-
-
     text = str(msg)
-
-
 
     if not text:
 
         text = " "
-
-
 
     chunks = [
 
@@ -4091,8 +2133,6 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
         for i in range(0, len(text), MAX_TELEGRAM_MESSAGE)
 
     ]
-
-
 
     for chunk in chunks:
 
@@ -4116,8 +2156,6 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
             )
 
-
-
             if res.status_code >= 400:
 
                 err = f"HTTP {res.status_code}: {res.text[:500]}"
@@ -4126,11 +2164,7 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
                 return False, err
 
-
-
             payload = res.json()
-
-
 
             if not payload.get("ok", False):
 
@@ -4140,8 +2174,6 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
                 return False, err
 
-
-
         except Exception as exc:
 
             err = str(exc)
@@ -4150,13 +2182,7 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
             return False, err
 
-
-
     return True, "sent"
-
-
-
-
 
 def format_public_entry_signal(
 
@@ -4170,8 +2196,6 @@ def format_public_entry_signal(
 
     market = entry_data.get("market", "UNKNOWN")
 
-
-
     position_size = format_plain_pct(
 
         entry_data.get("position_size_pct"),
@@ -4180,8 +2204,6 @@ def format_public_entry_signal(
 
     )
 
-
-
     trade_risk = format_plain_pct(
 
         entry_data.get("single_trade_risk_pct"),
@@ -4189,8 +2211,6 @@ def format_public_entry_signal(
         decimals=2
 
     )
-
-
 
     return (
 
@@ -4204,8 +2224,6 @@ def format_public_entry_signal(
 
         f"⚙️ Setup: {setup_label(setup)}\n\n"
 
-
-
         f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\n"
 
         f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
@@ -4216,23 +2234,15 @@ def format_public_entry_signal(
 
         f"⚠️ Trade risk guide: about {trade_risk} of account value\n\n"
 
-
-
         f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
 
         f"⭐ Score: {entry_data.get('score')}\n"
 
         f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
 
-
-
         f"{public_signal_footer()}"
 
     )
-
-
-
-
 
 def format_public_partial_signal(
 
@@ -4251,8 +2261,6 @@ def format_public_partial_signal(
         price
 
     )
-
-
 
     entry_data = trade.get("entry_data", {}) or {}
 
@@ -4277,21 +2285,13 @@ def format_public_partial_signal(
 
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
-
-
         "Bot status: partial-profit condition triggered.\n"
 
         "Review your own plan before taking any action.\n\n"
 
-
-
         f"{public_signal_footer()}"
 
     )
-
-
-
-
 
 def format_public_exit_signal(
 
@@ -4319,8 +2319,6 @@ def format_public_exit_signal(
 
     }.get(str(reason).lower(), str(reason))
 
-
-
     exit_pct = pct_from_entry(
 
         trade.get("entry_price"),
@@ -4328,8 +2326,6 @@ def format_public_exit_signal(
         price
 
     )
-
-
 
     return (
 
@@ -4347,197 +2343,89 @@ def format_public_exit_signal(
 
         f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
 
-
-
         "Bot status: exit condition triggered.\n"
 
         "Review your own plan before taking any action.\n\n"
-
-
 
         f"{public_signal_footer()}"
 
     )
 
- 
-
-
-
 def get_updates() -> None:
-
-
 
     last_update_id = load_update_id()
 
-
-
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-
-
 
     if last_update_id is not None:
 
-
-
         url += f"?offset={last_update_id + 1}"
-
-
-
- 
-
-
 
     try:
 
-
-
         res = SESSION.get(url, timeout=5)
-
-
 
         res.raise_for_status()
 
-
-
         payload = res.json()
-
-
 
         if not payload.get("ok", False):
 
-
-
             print(f"[TELEGRAM GETUPDATES API ERROR] {payload}")
-
-
 
             return
 
-
-
     except Exception as exc:
-
-
 
         print(f"[TELEGRAM GETUPDATES ERROR] {exc}")
 
-
-
         return
-
-
-
- 
-
-
 
     for update in payload.get("result", []):
 
-
-
         update_id = update.get("update_id")
-
-
 
         if update_id is None:
 
-
-
             continue
-
-
-
- 
-
-
 
         if is_update_processed(int(update_id)):
 
-
-
             save_update_id(int(update_id))
 
-
-
             continue
-
-
-
- 
-
-
 
         message = update.get("message") or update.get("edited_message")
 
-
-
         if not message:
-
-
 
             mark_update_processed(int(update_id), "ignored_no_message")
 
-
-
             continue
-
-
-
- 
-
-
 
         chat_id = message.get("chat", {}).get("id")
 
-
-
         if chat_id != CHAT_ID:
-
-
 
             print(f"[UNAUTHORIZED TELEGRAM COMMAND] chat_id={chat_id} update_id={update_id}")
 
-
-
             mark_update_processed(int(update_id), "unauthorized")
-
-
 
             continue
 
-
-
- 
-
-
-
         text = message.get("text") or ""
-
-
 
         try:
 
-
-
             handle_command(text, update_id=int(update_id))
-
-
 
             # handle_command marks trade-mutating updates inside the same transaction.
 
-
-
             if not is_update_processed(int(update_id)):
-
-
 
                 mark_update_processed(int(update_id), "processed")
 
-
-
         except Exception as exc:
-
-
 
             logger.exception(
 
@@ -4545,51 +2433,23 @@ def get_updates() -> None:
 
             )
 
-
-
             traceback.print_exc()
-
-
 
             send(f"ERROR processing command: {exc}")
 
-
-
             # Mark failed to avoid infinite crash loops; transactional trade commands roll back on error.
-
-
 
             if not is_update_processed(int(update_id)):
 
-
-
                 mark_update_processed(int(update_id), "failed")
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # DATA PROVIDER
 
-
-
 # -----------------------------------------------------------------------------
 
-
-
- 
-
-
-
 from typing import Union
-
-
 
 def request_json(
 
@@ -4603,151 +2463,67 @@ def request_json(
 
 ) -> Any:
 
-
-
     last_exc: Optional[Exception] = None
-
-
 
     for attempt in range(retries + 1):
 
-
-
         try:
-
-
 
             res = SESSION.get(url, timeout=timeout)
 
-
-
             res.raise_for_status()
-
-
 
             return res.json()
 
-
-
         except Exception as exc:
-
-
 
             last_exc = exc
 
-
-
             if attempt < retries:
-
-
 
                 time.sleep(0.5 * (attempt + 1))
 
-
-
     if context:
-
-
 
         raise RuntimeError(f"{context}: {last_exc}") from last_exc
 
-
-
     raise RuntimeError(str(last_exc)) from last_exc
-
-
-
- 
-
-
-
- 
-
-
 
 def get_prices_batch(tickers: List[str]) -> Dict[str, float]:
 
-
-
     prices: Dict[str, float] = {}
-
-
 
     clean_tickers = []
 
-
-
     seen = set()
-
-
 
     for ticker in tickers:
 
-
-
         nticker = normalize_ticker(str(ticker))
-
-
 
         if nticker and nticker not in seen:
 
-
-
             clean_tickers.append(nticker)
-
-
 
             seen.add(nticker)
 
-
-
- 
-
-
-
     if not clean_tickers:
-
-
 
         return prices
 
-
-
- 
-
-
-
     try:
-
-
 
         symbols = ",".join(clean_tickers)
 
-
-
         url = f"{FMP_BASE}/batch-quote?symbols={symbols}&apikey={FMP_API_KEY}"
-
-
 
         data = request_json(url, timeout=5, context="batch quote", retries=1)
 
-
-
- 
-
-
-
         if not isinstance(data, list):
-
-
 
             print(f"[BATCH PRICE BAD SCHEMA] {data}")
 
-
-
             return prices
-
-
 
         if len(data) == 0:
 
@@ -4755,223 +2531,91 @@ def get_prices_batch(tickers: List[str]) -> Dict[str, float]:
 
             return prices
 
-
-
         for item in data:
-
-
 
             ticker = normalize_ticker(str(item.get("symbol", "")))
 
-
-
             raw_price = item.get("price")
-
-
 
             try:
 
-
-
                 price = float(raw_price)
-
-
 
             except (TypeError, ValueError):
 
-
-
                 continue
-
-
 
             if ticker and is_finite_positive(price):
 
-
-
                 prices[ticker] = price
-
-
 
                 print(f"💲 PRICE | {ticker} = {price}")
 
-
-
- 
-
-
-
     except Exception as exc:
-
-
 
         logger.warning(f"[BATCH PRICE ERROR] {exc}")
 
-
-
- 
-
-
-
     return prices
-
-
-
- 
-
-
-
- 
-
-
 
 def get_historical(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
-
-
     nticker = normalize_ticker(ticker)
-
-
 
     if nticker is None:
 
-
-
         return None
-
-
-
- 
-
-
 
     try:
 
-
-
         url = f"{FMP_BASE}/historical-price-eod/full?symbol={nticker}&apikey={FMP_API_KEY}"
-
-
 
         data = request_json(url, timeout=(3, 10), context=f"historical {nticker}", retries=1)
 
-
-
- 
-
-
-
         if not isinstance(data, list) or len(data) == 0:
-
-
 
             print(f"[HIST EMPTY] {nticker}")
 
-
-
             return None
-
-
-
- 
-
-
 
         df = pd.DataFrame(data)
 
-
-
         df = df.rename(
-
-
 
             columns={
 
-
-
                 "open": "Open",
-
-
 
                 "high": "High",
 
-
-
                 "low": "Low",
-
-
 
                 "close": "Close",
 
-
-
                 "volume": "Volume",
-
-
 
             }
 
-
-
         )
-
-
-
- 
-
-
 
         required = ["date", "Open", "High", "Low", "Close", "Volume"]
 
-
-
         missing = [c for c in required if c not in df.columns]
-
-
 
         if missing:
 
-
-
             print(f"[HIST BAD SCHEMA] {nticker} missing={missing}")
-
-
 
             return None
 
-
-
- 
-
-
-
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-
 
         for col in ["Open", "High", "Low", "Close", "Volume"]:
 
-
-
             df[col] = pd.to_numeric(df[col], errors="coerce")
-
-
-
- 
-
-
 
         df = df.dropna(subset=required)
 
-
-
         df = df.sort_values("date").tail(limit).reset_index(drop=True)
-
-
-
- 
-
-
 
         if df.empty:
 
@@ -4979,77 +2623,41 @@ def get_historical(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
             return None
 
-
-
         if len(df) < 30:
 
             print(f"[HIST TOO SHORT] {nticker}")
 
             return None
 
-
-
- 
-
-
-
         print(
-
-
 
             f"[📚 DATA OK] {nticker} | "
 
-
-
             f"date={df.iloc[-1]['date'].date().isoformat()} | "
-
-
 
             f"rows={len(df)} | last={df['Close'].iloc[-1]:.2f}"
 
-
-
         )
-
-
 
         return df
 
-
-
- 
-
-
-
     except Exception as exc:
-
-
 
         logger.warning(f"[HIST ERROR] {nticker}: {exc}")
 
-
-
         return None
-
-
 
 def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
     nticker = normalize_ticker(ticker)
 
-
-
     if nticker is None:
 
         return None
 
-
-
     try:
 
         url = f"{FMP_BASE}/historical-chart/5min?symbol={nticker}&apikey={FMP_API_KEY}"
-
-
 
         data = request_json(
 
@@ -5063,19 +2671,13 @@ def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
         )
 
-
-
         if not isinstance(data, list) or len(data) == 0:
 
             print(f"[INTRADAY EMPTY] {nticker}")
 
             return None
 
-
-
         df = pd.DataFrame(data)
-
-
 
         df = df.rename(
 
@@ -5095,15 +2697,9 @@ def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
         )
 
-
-
         required = ["date", "Open", "High", "Low", "Close", "Volume"]
 
-
-
         missing = [c for c in required if c not in df.columns]
-
-
 
         if missing:
 
@@ -5111,23 +2707,15 @@ def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
             return None
 
-
-
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-
 
         for col in ["Open", "High", "Low", "Close", "Volume"]:
 
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-
-
         df = df.dropna(subset=required)
 
         df = df.sort_values("date").reset_index(drop=True)
-
-
 
         if df.empty:
 
@@ -5135,11 +2723,7 @@ def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
             return None
 
-
-
         return df
-
-
 
     except Exception as exc:
 
@@ -5147,17 +2731,11 @@ def get_intraday_5min(ticker: str) -> Optional[pd.DataFrame]:
 
         return None
 
-
-
-
-
 def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
     """
 
     Build a daily dataframe where today's candle is synthesized from 5-minute intraday bars.
-
-
 
     Used for near-close scans so the bot does not rely on yesterday's EOD candle.
 
@@ -5165,27 +2743,17 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
     nticker = normalize_ticker(ticker)
 
-
-
     if nticker is None:
 
         return None
 
-
-
     hist = get_historical(nticker, limit=limit + 5)
-
-
 
     if hist is None or hist.empty:
 
         return None
 
-
-
     intraday = get_intraday_5min(nticker)
-
-
 
     if intraday is None or intraday.empty:
 
@@ -5193,15 +2761,9 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
         return None
 
-
-
     today = ny_now().date()
 
-
-
     today_rows = intraday[intraday["date"].dt.date == today].copy()
-
-
 
     if today_rows.empty:
 
@@ -5209,13 +2771,9 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
         return None
 
-
-
     # Keep only regular-session bars: 09:30–16:00 New York time.
 
     bar_minutes = today_rows["date"].dt.hour * 60 + today_rows["date"].dt.minute
-
-
 
     today_rows = today_rows[
 
@@ -5225,15 +2783,11 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
     ].copy()
 
-
-
     if today_rows.empty:
 
         print(f"[LIVE DAILY SKIP] {nticker} no regular-session intraday rows for {today}")
 
         return None
-
-
 
     live_bar = {
 
@@ -5251,15 +2805,11 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
     }
 
-
-
     # Remove any existing row for today from EOD data, then append synthetic current-day row.
 
     hist = hist[pd.to_datetime(hist["date"]).dt.date < today].copy()
 
     hist = hist.tail(limit - 1)
-
-
 
     live_df = pd.concat(
 
@@ -5269,11 +2819,7 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
     )
 
-
-
     live_df = live_df.sort_values("date").tail(limit).reset_index(drop=True)
-
-
 
     print(
 
@@ -5291,21 +2837,13 @@ def build_live_daily_df(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]
 
     )
 
-
-
     return live_df
-
-
-
-
 
 def get_signal_dataframe(ticker: str, limit: int = 120) -> Optional[pd.DataFrame]:
 
     current_ny = ny_now()
 
     minutes = current_ny.hour * 60 + current_ny.minute
-
-
 
     # From 15:45 onward on market days, use intraday data to synthesize today's daily candle.
 
@@ -5315,37 +2853,21 @@ def get_signal_dataframe(ticker: str, limit: int = 120) -> Optional[pd.DataFrame
 
         return build_live_daily_df(ticker, limit=limit)
 
-
-
     return get_historical(ticker, limit=limit)
 
- 
-
-
-
 def is_daily_data_current(df: pd.DataFrame) -> bool:
-
-
 
     if df is None or df.empty or "date" not in df.columns:
 
         return False
 
-
-
     try:
 
-
-
         last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
-
-
 
         current_ny = ny_now()
 
         today = current_ny.date()
-
-
 
         schedule = NYSE.schedule(
 
@@ -5355,21 +2877,13 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         )
 
-
-
         if schedule.empty:
 
             return False
 
-
-
         sessions = [d.date() for d in schedule.index]
 
-
-
         expected_session = sessions[-1]
-
-
 
         # Before the near-close scan window, expect previous completed session.
 
@@ -5379,15 +2893,11 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
             minutes = current_ny.hour * 60 + current_ny.minute
 
-
-
             if minutes < (15 * 60 + 45):
 
                 if len(sessions) >= 2:
 
                     expected_session = sessions[-2]
-
-
 
         print(
 
@@ -5401,11 +2911,7 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         )
 
-
-
         return last_date >= expected_session
-
-
 
     except Exception as exc:
 
@@ -5413,327 +2919,137 @@ def is_daily_data_current(df: pd.DataFrame) -> bool:
 
         return False
 
-
-
 def earnings_status(ticker: str, days: int = 7) -> str:
-
-
 
     """Return SOON, CLEAR, or UNKNOWN. UNKNOWN should generally fail closed."""
 
-
-
     nticker = normalize_ticker(ticker)
-
-
 
     if nticker is None:
 
-
-
         return "UNKNOWN"
-
-
-
- 
-
-
 
     today = ny_now().date()
 
-
-
     end_date = today + timedelta(days=days)
-
-
-
- 
-
-
 
     endpoints = [
 
-
-
         # Documented broad-calendar style endpoint.
-
-
 
         f"{FMP_BASE}/earnings-calendar?from={today.isoformat()}&to={end_date.isoformat()}&apikey={FMP_API_KEY}",
 
-
-
         # Compatibility with prior script endpoint, if available on the user's plan.
-
-
 
         f"{FMP_BASE}/earning-calendar-confirmed?symbol={nticker}&apikey={FMP_API_KEY}",
 
-
-
     ]
-
-
-
- 
-
-
 
     any_valid_response = False
 
-
-
- 
-
-
-
     for url in endpoints:
-
-
 
         try:
 
-
-
             data = request_json(url, timeout=5, context=f"earnings {nticker}", retries=1)
-
-
 
             if not isinstance(data, list):
 
-
-
                 continue
-
-
 
             any_valid_response = True
 
-
-
- 
-
-
-
             for item in data:
-
-
 
                 if not isinstance(item, dict):
 
-
-
                     continue
-
-
 
                 symbol = normalize_ticker(str(item.get("symbol", nticker)))
 
-
-
                 if symbol != nticker:
 
-
-
                     continue
-
-
 
                 date_str = item.get("date") or item.get("fiscalDateEnding")
 
-
-
                 if not date_str:
 
-
-
                     continue
-
-
 
                 try:
 
-
-
                     earnings_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
-
-
 
                 except ValueError:
 
-
-
                     continue
-
-
 
                 diff = (earnings_date - today).days
 
-
-
                 if 0 <= diff <= days:
-
-
 
                     print(f"[EARNINGS SOON] {nticker} -> {earnings_date.isoformat()}")
 
-
-
                     return "SOON"
-
-
-
- 
-
-
 
             # If broad calendar endpoint returned valid data and ticker wasn't found, this is clear.
 
-
-
             if "earnings-calendar?" in url:
-
-
 
                 return "CLEAR"
 
-
-
- 
-
-
-
         except Exception as exc:
-
-
 
             print(f"[EARNINGS ERROR] {nticker}: {exc}")
 
-
-
- 
-
-
-
     return "CLEAR" if any_valid_response else "UNKNOWN"
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # INDICATORS
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def rsi(series: pd.Series, period: int = 14) -> pd.Series:
 
-
-
     delta = series.diff()
-
-
 
     gain = delta.clip(lower=0).rolling(period).mean()
 
-
-
     loss = -delta.clip(upper=0).rolling(period).mean()
-
-
 
     loss = loss.replace(0, 1e-9)
 
-
-
     rs = gain / loss
-
-
 
     return 100 - (100 / (1 + rs))
 
-
-
- 
-
-
-
- 
-
-
-
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-
-
 
     tr = pd.concat(
 
-
-
         [
-
-
 
             df["High"] - df["Low"],
 
-
-
             (df["High"] - df["Close"].shift()).abs(),
-
-
 
             (df["Low"] - df["Close"].shift()).abs(),
 
-
-
         ],
-
-
 
         axis=1,
 
-
-
     ).max(axis=1)
-
-
 
     return tr.rolling(period).mean()
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # MARKET / RISK HELPERS
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def pct_change_over(series: pd.Series, bars: int) -> Optional[float]:
     try:
@@ -5753,7 +3069,6 @@ def pct_change_over(series: pd.Series, bars: int) -> Optional[float]:
     except Exception:
         return None
 
-
 def rolling_slope_positive(series: pd.Series, lookback: int = 10) -> bool:
     try:
         clean = series.dropna()
@@ -5765,7 +3080,6 @@ def rolling_slope_positive(series: pd.Series, lookback: int = 10) -> bool:
 
     except Exception:
         return False
-
 
 def close_location(df: pd.DataFrame) -> float:
     try:
@@ -5780,7 +3094,6 @@ def close_location(df: pd.DataFrame) -> float:
 
     except Exception:
         return 0.5
-
 
 def market_regime_details() -> Dict[str, Any]:
     """
@@ -5848,7 +3161,6 @@ def market_regime_details() -> Dict[str, Any]:
         "frames": frames,
     }
 
-
 def market_condition() -> str:
     try:
         return str(market_regime_details().get("condition", "UNCERTAIN"))
@@ -5856,8 +3168,6 @@ def market_condition() -> str:
     except Exception as exc:
         print(f"[MARKET ERROR] {exc}")
         return "UNCERTAIN"
-
-
 
 def frame_last_close_ma(df: Optional[pd.DataFrame], ma_period: int) -> Tuple[Optional[float], Optional[float]]:
     try:
@@ -5875,81 +3185,8 @@ def frame_last_close_ma(df: Optional[pd.DataFrame], ma_period: int) -> Tuple[Opt
     except Exception:
         return None, None
 
-
 def bear_regime_details(market_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """
-    Bear sleeve regime score, max 60.
-
-    This is separate from the long VCP market score. It looks for broad-market
-    risk-off conditions before allowing inverse ETF signals.
-    """
-    frames: Dict[str, Optional[pd.DataFrame]] = {}
-
-    if market_details and isinstance(market_details.get("frames"), dict):
-        frames.update(market_details.get("frames", {}))
-
-    for symbol in ["SPY", "QQQ", "IWM", "SMH"]:
-        if frames.get(symbol) is None:
-            frames[symbol] = get_signal_dataframe(symbol, limit=260)
-
-    score = 0
-    notes: List[str] = []
-
-    for symbol in ["SPY", "QQQ"]:
-        df = frames.get(symbol)
-
-        if df is None or df.empty or len(df) < 220:
-            notes.append(f"{symbol}:no_data")
-            continue
-
-        close = df["Close"].dropna()
-        ma20 = close.rolling(20).mean().iloc[-1]
-        ma50 = close.rolling(50).mean().iloc[-1]
-        ma100 = close.rolling(100).mean().iloc[-1]
-        ma200 = close.rolling(200).mean().iloc[-1]
-        last = float(close.iloc[-1])
-
-        if not pd.isna(ma50) and last < float(ma50):
-            score += 6
-        if not pd.isna(ma20) and not pd.isna(ma50) and float(ma20) < float(ma50):
-            score += 5
-        if not pd.isna(ma100) and last < float(ma100):
-            score += 4
-        if not pd.isna(ma200) and last < float(ma200):
-            score += 8
-
-        ret20 = pct_change_over(close, 20)
-        if ret20 is not None and ret20 < 0:
-            score += 3
-
-    for symbol in ["IWM", "SMH"]:
-        df = frames.get(symbol)
-
-        if df is None or df.empty or len(df) < 60:
-            continue
-
-        close = df["Close"].dropna()
-        ma50 = close.rolling(50).mean().iloc[-1]
-
-        if not pd.isna(ma50) and float(close.iloc[-1]) < float(ma50):
-            score += 4
-
-    active = score >= BEAR_ENTRY_SCORE
-    exit_pressure_low = score <= BEAR_EXIT_SCORE
-
-    return {
-        "active": active,
-        "score": score,
-        "max_score": 60,
-        "exit_pressure_low": exit_pressure_low,
-        "entry_score_required": BEAR_ENTRY_SCORE,
-        "exit_score": BEAR_EXIT_SCORE,
-        "notes": notes,
-        "frames": frames,
-    }
-
-
-
+    return {"active": False, "score": 0, "max_score": 60, "exit_pressure_low": True, "entry_score_required": 999, "exit_score": 0, "notes": ["removed_in_v4_8"], "frames": {}}
 
 def compute_equity_snapshot_data() -> Dict[str, float]:
     refresh_portfolio()
@@ -5985,68 +3222,31 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
 
 def save_equity_snapshot() -> None:
 
-
-
     snapshot = compute_equity_snapshot_data()
-
-
 
     snapshot_date = ny_date_str()
 
-
-
     with db_tx() as conn:
 
-
-
         conn.execute(
-
-
 
             "INSERT OR REPLACE INTO equity_snapshots(snapshot_date, time, equity, cash, positions_value) "
 
-
-
             "VALUES (?, ?, ?, ?, ?)",
-
-
 
             (snapshot_date, now_ts(), snapshot["equity"], snapshot["cash"], snapshot["positions_value"]),
 
-
-
         )
-
-
 
         conn.execute(
 
-
-
             "INSERT INTO meta(key, value) VALUES ('last_equity_snapshot_date', ?) "
-
-
 
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
 
-
-
             (snapshot_date,),
 
-
-
         )
-
-
-
- 
-
-
-
- 
-
-
-
 
 def open_risk_details() -> Dict[str, float]:
     refresh_portfolio()
@@ -6091,13 +3291,9 @@ def get_withdrawal_hwm() -> Optional[float]:
 
     value = get_meta("withdrawal_high_water_mark")
 
-
-
     if value is None:
 
         return None
-
-
 
     try:
 
@@ -6109,21 +3305,13 @@ def get_withdrawal_hwm() -> Optional[float]:
 
         return None
 
-
-
-
-
 def get_withdrawal_hwm_initialized_at() -> Optional[float]:
 
     value = get_meta("withdrawal_hwm_initialized_at")
 
-
-
     if value is None:
 
         return None
-
-
 
     try:
 
@@ -6135,33 +3323,21 @@ def get_withdrawal_hwm_initialized_at() -> Optional[float]:
 
         return None
 
-
-
-
-
 def set_withdrawal_hwm(value: float) -> None:
 
     if not math.isfinite(value) or value <= 0:
 
         raise ValueError("Withdrawal high-water mark must be positive")
 
-
-
     set_meta("withdrawal_high_water_mark", str(round(value, 2)))
 
     set_meta("withdrawal_hwm_initialized_at", str(now_ts()))
-
-
-
-
 
 def auto_initialize_withdrawal_hwm_if_needed() -> None:
 
     """
 
     One-time automatic baseline.
-
-
 
     This prevents the bot from immediately suggesting withdrawals from old/legacy profits.
 
@@ -6171,29 +3347,19 @@ def auto_initialize_withdrawal_hwm_if_needed() -> None:
 
     existing = get_withdrawal_hwm()
 
-
-
     if existing is not None:
 
         return
-
-
 
     snapshot = compute_equity_snapshot_data()
 
     equity = float(snapshot["equity"])
 
-
-
     if equity <= 0:
 
         return
 
-
-
     set_withdrawal_hwm(equity)
-
-
 
     audit(
 
@@ -6203,19 +3369,11 @@ def auto_initialize_withdrawal_hwm_if_needed() -> None:
 
     )
 
-
-
     print(f"[WITHDRAWAL HWM INIT] equity={round(equity, 2)}")
-
-
-
-
 
 def get_last_withdrawal_time() -> Optional[float]:
 
     conn = db_connect()
-
-
 
     try:
 
@@ -6225,31 +3383,19 @@ def get_last_withdrawal_time() -> Optional[float]:
 
         ).fetchone()
 
-
-
         if row is None or row["t"] is None:
 
             return None
 
-
-
         return float(row["t"])
-
-
 
     finally:
 
         conn.close()
 
-
-
-
-
 def load_withdrawals() -> List[Dict[str, Any]]:
 
     conn = db_connect()
-
-
 
     try:
 
@@ -6258,8 +3404,6 @@ def load_withdrawals() -> List[Dict[str, Any]]:
             "SELECT * FROM withdrawals ORDER BY time ASC"
 
         ).fetchall()
-
-
 
         return [
 
@@ -6289,15 +3433,9 @@ def load_withdrawals() -> List[Dict[str, Any]]:
 
         ]
 
-
-
     finally:
 
         conn.close()
-
-
-
-
 
 def withdrawal_funny_note() -> str:
 
@@ -6315,31 +3453,19 @@ def withdrawal_funny_note() -> str:
 
     ]
 
-
-
     idx = int(now_ts()) % len(jokes)
 
     return jokes[idx]
-
-
-
-
 
 def compute_withdrawal_plan() -> Dict[str, Any]:
 
     snapshot = compute_equity_snapshot_data()
 
-
-
     equity = float(snapshot["equity"])
 
     cash = float(snapshot["cash"])
 
-
-
     hwm = get_withdrawal_hwm()
-
-
 
     if hwm is None:
 
@@ -6371,11 +3497,7 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
 
         }
 
-
-
     profit_above_hwm = equity - hwm
-
-
 
     if equity < WITHDRAWAL_BUILD_PHASE_EQUITY:
 
@@ -6389,45 +3511,31 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
 
         phase = "NORMAL"
 
-
-
     gross_suggested = max(0.0, profit_above_hwm * rate)
 
     cash_cap = max(0.0, cash - WITHDRAWAL_MIN_CASH_AFTER)
 
     suggested = min(gross_suggested, cash_cap)
 
-
-
     last_withdrawal_time = get_last_withdrawal_time()
 
     clock_start = last_withdrawal_time or get_withdrawal_hwm_initialized_at()
 
-
-
     days_since_clock = None
-
-
 
     if clock_start is not None:
 
         days_since_clock = (now_ts() - clock_start) / 86400
 
-
-
     eligible = True
 
     reason = "Eligible"
-
-
 
     if profit_above_hwm <= 0:
 
         eligible = False
 
         reason = "No profit above high-water mark."
-
-
 
     elif profit_above_hwm < WITHDRAWAL_MIN_PROFIT:
 
@@ -6441,8 +3549,6 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
 
         )
 
-
-
     elif suggested < WITHDRAWAL_MIN_AMOUNT:
 
         eligible = False
@@ -6454,8 +3560,6 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
             f"{format_money(WITHDRAWAL_MIN_AMOUNT)} or cash cap is too low."
 
         )
-
-
 
     elif days_since_clock is not None and days_since_clock < WITHDRAWAL_REVIEW_DAYS:
 
@@ -6470,8 +3574,6 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
             f"target is {WITHDRAWAL_REVIEW_DAYS} days."
 
         )
-
-
 
     return {
 
@@ -6503,10 +3605,6 @@ def compute_withdrawal_plan() -> Dict[str, Any]:
 
     }
 
-
-
-
-
 def record_withdrawal(
 
     amount: float,
@@ -6517,33 +3615,21 @@ def record_withdrawal(
 
 ) -> Tuple[bool, str]:
 
-
-
     if not math.isfinite(amount) or amount <= 0:
 
         return False, "Withdrawal amount must be positive and finite."
 
-
-
     refresh_portfolio()
 
-
-
     snapshot = compute_equity_snapshot_data()
-
-
 
     equity_before = float(snapshot["equity"])
 
     cash_before = float(snapshot["cash"])
 
-
-
     if amount > cash_before:
 
         return False, "Withdrawal amount is larger than available cash."
-
-
 
     if cash_before - amount < WITHDRAWAL_MIN_CASH_AFTER:
 
@@ -6557,33 +3643,21 @@ def record_withdrawal(
 
         )
 
-
-
     hwm_before = get_withdrawal_hwm()
-
-
 
     if hwm_before is None:
 
         return False, "Withdrawal high-water mark is not initialized."
 
-
-
     # After withdrawal, keep HWM at the pre-withdrawal equity peak.
 
     hwm_after = max(hwm_before, equity_before)
 
-
-
     cash_after = cash_before - amount
-
-
 
     with db_tx() as conn:
 
         set_cash_tx(conn, cash_after)
-
-
 
         conn.execute(
 
@@ -6623,8 +3697,6 @@ def record_withdrawal(
 
         )
 
-
-
         conn.execute(
 
             "INSERT INTO meta(key, value) VALUES ('withdrawal_high_water_mark', ?) "
@@ -6635,15 +3707,9 @@ def record_withdrawal(
 
         )
 
-
-
         mark_update_processed_tx(conn, update_id, "processed_withdrawal")
 
-
-
     refresh_portfolio()
-
-
 
     audit(
 
@@ -6656,8 +3722,6 @@ def record_withdrawal(
         f"hwm_before={hwm_before} hwm_after={hwm_after}"
 
     )
-
-
 
     return True, (
 
@@ -6675,17 +3739,11 @@ def record_withdrawal(
 
     )
 
-
-
-
-
 def maybe_send_withdrawal_signal() -> None:
 
     """
 
     Automatic withdrawal alert.
-
-
 
     Checks once per market day after 16:05 NY time.
 
@@ -6697,17 +3755,11 @@ def maybe_send_withdrawal_signal() -> None:
 
     current_ny = ny_now()
 
-
-
     if not is_market_weekday(current_ny):
 
         return
 
-
-
     minutes = current_ny.hour * 60 + current_ny.minute
-
-
 
     # Check after market close, so equity/quotes are more stable.
 
@@ -6715,27 +3767,17 @@ def maybe_send_withdrawal_signal() -> None:
 
         return
 
-
-
     today = current_ny.date().isoformat()
-
-
 
     if get_meta("last_withdrawal_check_date") == today:
 
         return
 
-
-
     set_meta("last_withdrawal_check_date", today)
-
-
 
     try:
 
         plan = compute_withdrawal_plan()
-
-
 
         if not plan.get("initialized"):
 
@@ -6743,21 +3785,15 @@ def maybe_send_withdrawal_signal() -> None:
 
             return
 
-
-
         if not plan.get("eligible"):
 
             print(f"[WITHDRAWAL CHECK] Not eligible: {plan.get('reason')}")
 
             return
 
-
-
         last_alert_raw = get_meta("last_withdrawal_alert_ts")
 
         last_alert_ts = None
-
-
 
         if last_alert_raw:
 
@@ -6769,13 +3805,9 @@ def maybe_send_withdrawal_signal() -> None:
 
                 last_alert_ts = None
 
-
-
         if last_alert_ts is not None:
 
             days_since_alert = (now_ts() - last_alert_ts) / 86400
-
-
 
             if days_since_alert < WITHDRAWAL_ALERT_REPEAT_DAYS:
 
@@ -6789,11 +3821,7 @@ def maybe_send_withdrawal_signal() -> None:
 
                 return
 
-
-
         set_meta("last_withdrawal_alert_ts", str(now_ts()))
-
-
 
         send(
 
@@ -6823,28 +3851,17 @@ def maybe_send_withdrawal_signal() -> None:
 
         )
 
-
-
     except Exception as exc:
 
         logger.exception(f"[WITHDRAWAL SIGNAL ERROR] {exc}")
 
         print(f"[WITHDRAWAL SIGNAL ERROR] {exc}")
 
- 
-
-
-
-
-
-
 def clamp_float(value: float, low: float, high: float) -> float:
     return max(low, min(high, float(value)))
 
-
 def wealth_asset_cluster(ticker: str) -> str:
     return WEALTH_ASSET_CLUSTERS.get(str(ticker).upper(), "other")
-
 
 def current_drawdown_details() -> Dict[str, Any]:
     """Current equity drawdown from highest known equity snapshot.
@@ -6894,7 +3911,6 @@ def current_drawdown_details() -> Dict[str, Any]:
         "hard_threshold_pct": round(-PORTFOLIO_HARD_DD_PAUSE_PCT * 100, 2),
     }
 
-
 def portfolio_risk_guard_details() -> Dict[str, Any]:
     dd = current_drawdown_details()
     dd_raw = float(dd.get("drawdown_pct", 0.0) or 0.0) / 100.0
@@ -6917,7 +3933,6 @@ def portfolio_risk_guard_details() -> Dict[str, Any]:
         ),
     }
 
-
 def maybe_send_portfolio_risk_guard_alert(details: Optional[Dict[str, Any]] = None) -> None:
     if not PORTFOLIO_RISK_GUARD_ENABLED:
         return
@@ -6934,7 +3949,6 @@ def maybe_send_portfolio_risk_guard_alert(details: Optional[Dict[str, Any]] = No
     set_meta(last_key, today)
     send(format_portfolio_risk_guard(details=info))
 
-
 def sleeve_from_trade(trade: Dict[str, Any]) -> str:
     entry_data = trade.get("entry_data", {}) or {}
     sleeve = str(entry_data.get("strategy_sleeve") or "").upper()
@@ -6948,8 +3962,6 @@ def sleeve_from_trade(trade: Dict[str, Any]) -> str:
     if entry_data:
         return "LONG_VCP"
     return "LEGACY_OR_MANUAL"
-
-
 
 def sleeve_performance_summary() -> Dict[str, Any]:
     trades = load_trades()
@@ -7068,7 +4080,6 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
         **{k: round(v * 100, 2) for k, v in values.items()},
     }
 
-
 def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
@@ -7093,7 +4104,6 @@ def format_portfolio_allocation_plan() -> str:
         "• In hard drawdown mode, new entries pause and exits/management continue."
     )
 
-
 def format_portfolio_risk_guard(details: Optional[Dict[str, Any]] = None) -> str:
     info = details or portfolio_risk_guard_details()
     return (
@@ -7110,7 +4120,6 @@ def format_portfolio_risk_guard(details: Optional[Dict[str, Any]] = None) -> str
         f"Hard pause active: {yes_no(bool(info.get('hard_active')))}\n\n"
         f"Action: {info.get('recommended_action')}"
     )
-
 
 def format_sleeve_performance_report() -> str:
     summary = sleeve_performance_summary()
@@ -7147,7 +4156,6 @@ def pct_change_last(df: pd.DataFrame, bars: int) -> Optional[float]:
     except Exception:
         return None
 
-
 def realized_vol_last(df: pd.DataFrame, bars: int = 63) -> Optional[float]:
     try:
         if df is None or len(df) <= bars:
@@ -7158,8 +4166,6 @@ def realized_vol_last(df: pd.DataFrame, bars: int = 63) -> Optional[float]:
         return float(returns.std() * math.sqrt(252))
     except Exception:
         return None
-
-
 
 def wealth_core_score_ticker(ticker: str, regime: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Score one asset for the private v3.5 core-rotation sleeve."""
@@ -7222,7 +4228,6 @@ def wealth_core_score_ticker(ticker: str, regime: Optional[str] = None) -> Optio
         print(f"[WEALTH SCORE ERROR] {ticker}: {exc}")
         return None
 
-
 def select_cluster_controlled_assets(scored: List[Dict[str, Any]], top_n: int) -> List[Dict[str, Any]]:
     if not WEALTH_CLUSTER_CONTROL_ENABLED:
         return scored[:max(1, top_n)]
@@ -7239,7 +4244,6 @@ def select_cluster_controlled_assets(scored: List[Dict[str, Any]], top_n: int) -
         if len(selected) >= max(1, top_n):
             break
     return selected
-
 
 def assign_core_weights(top: List[Dict[str, Any]], core_account_pct: float) -> List[Dict[str, Any]]:
     if not top:
@@ -7277,8 +4281,6 @@ def assign_core_weights(top: List[Dict[str, Any]], core_account_pct: float) -> L
         row["target_account_pct"] = round(sleeve_weight * core_account_pct * 100, 2)
         enriched.append(row)
     return enriched
-
-
 
 def compute_wealth_core_plan() -> Dict[str, Any]:
     """Build ranked, actionable private core wealth plan with ledger-aware actions."""
@@ -7408,7 +4410,6 @@ def compute_wealth_core_plan() -> Dict[str, Any]:
         "ledger_enabled": CORE_LEDGER_ENABLED,
     }
 
-
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:
     actions = plan.get("actions", []) or []
     allocation = plan.get("allocation", {}) or {}
@@ -7511,47 +4512,21 @@ def maybe_send_wealth_core_signal() -> None:
         logger.exception(f"[WEALTH CORE SIGNAL ERROR] {exc}")
         print(f"[WEALTH CORE SIGNAL ERROR] {exc}")
 
-
 def risk_pct_for_ticker(ticker: str) -> Optional[float]:
-
-
 
     if ticker in STRONG:
 
-
-
         return 0.03
-
-
 
     if ticker in MEDIUM:
 
-
-
         return 0.02
-
-
 
     if ticker in WEAK:
 
-
-
         return 0.01
 
-
-
     return None
-
-
-
- 
-
-
-
- 
-
-
-
 
 def approximate_equity_from_portfolio() -> float:
     snapshot = compute_equity_snapshot_data()
@@ -7559,11 +4534,7 @@ def approximate_equity_from_portfolio() -> float:
 
 def daily_drawdown_exceeded() -> bool:
 
-
-
     conn = db_connect()
-
-
 
     try:
 
@@ -7595,37 +4566,21 @@ def daily_drawdown_exceeded() -> bool:
 
         ).fetchall()
 
-
-
         total = sum(float(r["profit"]) for r in rows)
 
-
-
         equity = approximate_equity_from_portfolio()
-
-
 
         if equity <= 0:
 
             return False
 
-
-
         return (total / equity) <= -MAX_DAILY_LOSS_PCT
-
-
 
     finally:
 
         conn.close()
 
- 
-
-
-
 def is_market_weekday(dt: datetime) -> bool:
-
-
 
     schedule = NYSE.schedule(
 
@@ -7635,45 +4590,21 @@ def is_market_weekday(dt: datetime) -> bool:
 
     )
 
-
-
     return not schedule.empty
-
- 
-
-
-
- 
-
-
 
 def is_regular_market_hours(dt: datetime) -> bool:
 
-
-
     if not is_market_weekday(dt):
-
-
 
         return False
 
-
-
     minutes = dt.hour * 60 + dt.minute
 
-
-
     return (9 * 60 + 30) <= minutes <= (16 * 60)
-
-
-
-
 
 def is_morning_scan_window(dt: datetime) -> bool:
 
     minutes = dt.hour * 60 + dt.minute
-
-
 
     # Morning scan window: 06:45 to 09:25 New York time.
 
@@ -7681,13 +4612,9 @@ def is_morning_scan_window(dt: datetime) -> bool:
 
     return (6 * 60 + 45) <= minutes <= (9 * 60 + 25)
 
-
-
 def is_near_close_scan_window(dt: datetime) -> bool:
 
     minutes = dt.hour * 60 + dt.minute
-
-
 
     # Official weekday scan window: 15:50 to 15:58 New York time.
 
@@ -7695,15 +4622,11 @@ def is_near_close_scan_window(dt: datetime) -> bool:
 
     return (15 * 60 + 50) <= minutes <= (15 * 60 + 58)
 
-
-
 def expected_daily_bar_date() -> Optional[str]:
 
     current_ny = ny_now()
 
     today = current_ny.date()
-
-
 
     try:
 
@@ -7715,19 +4638,13 @@ def expected_daily_bar_date() -> Optional[str]:
 
         )
 
-
-
         if schedule.empty:
 
             return None
 
-
-
         sessions = [d.date() for d in schedule.index]
 
         expected_session = sessions[-1]
-
-
 
         # Before the near-close scan window, the latest completed candle is the previous session.
 
@@ -7737,27 +4654,19 @@ def expected_daily_bar_date() -> Optional[str]:
 
             minutes = current_ny.hour * 60 + current_ny.minute
 
-
-
             if minutes < (15 * 60 + 45):
 
                 if len(sessions) >= 2:
 
                     expected_session = sessions[-2]
 
-
-
         return expected_session.isoformat()
-
-
 
     except Exception as exc:
 
         print(f"[EXPECTED BAR DATE ERROR] {exc}")
 
         return None
-
-
 
 def outstanding_signal_reservations(
 
@@ -7769,8 +4678,6 @@ def outstanding_signal_reservations(
 
     Reserve risk/capital for already-sent signals from the same daily candle.
 
-
-
     This prevents repeated forcescan calls from producing more and more
 
     candidates from the same candle after earlier signals were already sent.
@@ -7779,21 +4686,15 @@ def outstanding_signal_reservations(
 
     refresh_portfolio()
 
-
-
     signals = load_signals()
 
     open_positions = set(portfolio["positions"].keys())
-
-
 
     reserved_risk = 0.0
 
     reserved_capital = 0.0
 
     reserved_tickers: List[str] = []
-
-
 
     for ticker, signal in signals.items():
 
@@ -7803,23 +4704,15 @@ def outstanding_signal_reservations(
 
             continue
 
-
-
         if not isinstance(signal, dict):
 
             continue
 
-
-
         entry_data = signal.get("entry_data", {}) or {}
-
-
 
         if expected_bar_date and entry_data.get("daily_bar_date") != expected_bar_date:
 
             continue
-
-
 
         try:
 
@@ -7829,8 +4722,6 @@ def outstanding_signal_reservations(
 
             risk_amount = 0.0
 
-
-
         try:
 
             capital = float(entry_data.get("capital", 0) or 0)
@@ -7839,1413 +4730,343 @@ def outstanding_signal_reservations(
 
             capital = 0.0
 
-
-
         if risk_amount > 0:
 
             reserved_risk += risk_amount
 
             reserved_tickers.append(ticker)
 
-
-
         if capital > 0:
 
             reserved_capital += capital
 
-
-
     return reserved_risk, reserved_capital, reserved_tickers
 
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # ANALYTICS
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def weekly_performance() -> float:
 
-
-
     trades = load_trades()
-
-
 
     week_ago = now_ts() - 7 * 86400
 
-
-
     return round(sum(float(t.get("profit", 0)) for t in trades if float(t.get("exit_time", 0)) >= week_ago), 2)
-
-
-
- 
-
-
-
- 
-
-
 
 def win_rate() -> float:
 
-
-
     trades = load_trades()
 
-
-
     if not trades:
-
-
 
         return 0.0
 
-
-
     wins = sum(1 for t in trades if float(t.get("profit", 0)) > 0)
-
-
 
     return round((wins / len(trades)) * 100, 2)
 
-
-
- 
-
-
-
- 
-
-
-
 def ticker_stats() -> Tuple[Tuple[str, float], Tuple[str, float]]:
 
-
-
     trades = load_trades()
-
-
 
     stats: Dict[str, float] = {}
 
-
-
     for t in trades:
-
-
 
         ticker = str(t.get("ticker", "UNKNOWN"))
 
-
-
         stats.setdefault(ticker, 0.0)
-
-
 
         stats[ticker] += float(t.get("profit", 0))
 
-
-
     best = max(stats.items(), key=lambda x: x[1], default=("None", 0.0))
-
-
 
     worst = min(stats.items(), key=lambda x: x[1], default=("None", 0.0))
 
-
-
     return best, worst
-
-
-
- 
-
-
-
- 
-
-
 
 def avg_trade_duration() -> str:
 
-
-
     trades = load_trades()
-
-
 
     if not trades:
 
-
-
         return "0 hrs"
-
-
 
     avg = sum(int(t.get("duration_sec", 0)) for t in trades) / len(trades)
 
-
-
     hours = avg / 3600
-
-
 
     if hours >= 72:
 
-
-
         days = hours / 24
-
-
 
         return f"{round(days, 2)} days ({round(hours, 2)} hrs)"
 
-
-
     return f"{round(hours, 2)} hrs"
-
-
-
- 
-
-
-
- 
-
-
 
 def expectancy_summary() -> Dict[str, Any]:
 
-
-
     trades = load_trades()
-
-
 
     r_values = [float(t["r_multiple"]) for t in trades if t.get("r_multiple") is not None]
 
-
-
     profits = [float(t.get("profit", 0)) for t in trades]
-
-
 
     gross_profit = sum(p for p in profits if p > 0)
 
-
-
     gross_loss = abs(sum(p for p in profits if p < 0))
-
-
 
     profit_factor = None if gross_loss == 0 else gross_profit / gross_loss
 
-
-
- 
-
-
-
     if not r_values:
-
-
 
         return {
 
-
-
             "trades": len(trades),
-
-
 
             "r_trades": 0,
 
-
-
             "avg_r": None,
-
-
 
             "median_r": None,
 
-
-
             "avg_win_r": None,
-
-
 
             "avg_loss_r": None,
 
-
-
             "profit_factor": profit_factor,
-
-
 
         }
 
-
-
- 
-
-
-
     wins_r = [x for x in r_values if x > 0]
-
-
 
     losses_r = [x for x in r_values if x < 0]
 
-
-
     return {
-
-
 
         "trades": len(trades),
 
-
-
         "r_trades": len(r_values),
-
-
 
         "avg_r": round(sum(r_values) / len(r_values), 3),
 
-
-
         "median_r": round(float(pd.Series(r_values).median()), 3),
-
-
 
         "avg_win_r": round(sum(wins_r) / len(wins_r), 3) if wins_r else None,
 
-
-
         "avg_loss_r": round(sum(losses_r) / len(losses_r), 3) if losses_r else None,
-
-
 
         "profit_factor": round(profit_factor, 3) if profit_factor is not None else None,
 
-
-
     }
-
-
-
- 
-
-
-
- 
-
-
 
 def position_level_summary() -> Dict[str, Any]:
 
-
-
     trades = load_trades()
-
-
 
     grouped: Dict[str, Dict[str, Any]] = {}
 
-
-
     for trade in trades:
-
-
 
         position_id = trade.get("position_id") or f"legacy_{trade.get('id')}"
 
-
-
         g = grouped.setdefault(
-
-
 
             position_id,
 
-
-
             {
-
-
 
                 "profit": 0.0,
 
-
-
                 "risk_dollars": 0.0,
-
-
 
                 "ticker": trade.get("ticker"),
 
-
-
                 "exit_count": 0,
-
-
 
             },
 
-
-
         )
-
-
 
         g["profit"] += float(trade.get("profit", 0))
 
-
-
         rps = trade.get("risk_per_share")
-
-
 
         if rps is not None and float(rps) > 0:
 
-
-
             g["risk_dollars"] += float(rps) * int(trade.get("shares", 0))
-
-
 
         g["exit_count"] += 1
 
-
-
- 
-
-
-
     values = []
-
-
 
     for g in grouped.values():
 
-
-
         if g["risk_dollars"] > 0:
-
-
 
             values.append(g["profit"] / g["risk_dollars"])
 
-
-
- 
-
-
-
     return {
-
-
 
         "positions_closed_or_partially_closed": len(grouped),
 
-
-
         "positions_with_r": len(values),
-
-
 
         "avg_position_r": round(sum(values) / len(values), 3) if values else None,
 
-
-
         "median_position_r": round(float(pd.Series(values).median()), 3) if values else None,
-
-
 
     }
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # TRADING ACCOUNTING OPERATIONS
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def make_trade_from_position(
 
-
-
     ticker: str,
-
-
 
     pos: Dict[str, Any],
 
-
-
     shares: int,
-
-
 
     exit_price: float,
 
-
-
     exit_reason: str,
-
-
 
 ) -> Dict[str, Any]:
 
-
-
     entry = float(pos["price"])
-
-
 
     profit = (exit_price - entry) * shares
 
-
-
     risk_per_share = pos.get("risk_per_share")
-
-
 
     r_multiple: Optional[float] = None
 
-
-
     if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-
-
 
         r_multiple = (exit_price - entry) / float(risk_per_share)
 
-
-
- 
-
-
-
     entry_time = float(pos.get("entry_time", now_ts()))
-
-
 
     exit_time = now_ts()
 
-
-
     return {
-
-
 
         "id": uuid.uuid4().hex,
 
-
-
         "position_id": pos.get("position_id"),
-
-
 
         "strategy_version": pos.get("strategy_version", STRATEGY_VERSION),
 
-
-
         "ticker": ticker,
-
-
 
         "entry_price": entry,
 
-
-
         "exit_price": exit_price,
 
-
-
         "shares": shares,
-
-
 
         "profit": round(profit, 2),
 
-
-
         "entry_time": entry_time,
-
-
 
         "exit_time": exit_time,
 
-
-
         "duration_sec": int(exit_time - entry_time),
-
-
 
         "exit_reason": exit_reason,
 
-
-
         "entry_data": pos.get("entry_data", {}),
-
-
 
         "risk_per_share": risk_per_share if isinstance(risk_per_share, (int, float)) and risk_per_share > 0 else None,
 
-
-
         "r_multiple": None if r_multiple is None else round(r_multiple, 4),
 
-
-
     }
 
-
-
- 
-
-
-
- 
-
-
-
-def record_buy(
-
-
-
-    ticker: str,
-
-
-
-    shares: int,
-
-
-
-    price: float,
-
-
-
-    update_id: Optional[int] = None,
-
-
-
-) -> Tuple[bool, str]:
-
-
-
-    ticker = normalize_ticker(ticker) or ""
-
-
-
-    if not ticker:
-
-
-
-        return False, "Invalid ticker"
-
-
-
-    if shares <= 0:
-
-
-
-        return False, "Shares must be positive"
-
-
-
-    if not is_finite_positive(price):
-
-
-
-        return False, "Price must be positive and finite"
-
-
-
-    signal = last_signals.get(ticker, {})
-
-
-
-    signal_data = signal.get("entry_data", {}) if isinstance(signal, dict) else {}
-
-
-
-    signal_price = signal_data.get("signal_price")
-
-
-
-    if REQUIRE_BUY_TICKER_IN_WATCHLIST and ticker not in ALLOWED_BUY_TICKERS:
-
-        return (
-
-            False,
-
-            f"Buy rejected: {ticker} is not in WATCHLIST or BEAR_WATCHLIST.\n"
-
-            "This may be a typo. Add it to the correct universe first if you really want to trade it."
-
-        )
-
-
-
-    if REQUIRE_ACTIVE_SIGNAL_FOR_BUY and not signal_data:
-
-        return (
-
-            False,
-
-            f"Buy rejected: no active signal found for {ticker}.\n"
-
-            "This protects you from typo buys like UBST instead of UPST.\n"
-
-            "Use forcescan/wait for a signal, or disable REQUIRE_ACTIVE_SIGNAL_FOR_BUY if you intentionally want manual buys."
-
-        )
-
-
-
-    if REQUIRE_LIVE_QUOTE_FOR_BUY:
-
-        quote = get_prices_batch([ticker]).get(ticker)
-
-
-
-        if quote is None:
-
-            return (
-
-                False,
-
-                f"Buy rejected: no live quote found for {ticker}.\n"
-
-                "Cash was not changed. Check ticker spelling."
-
-            )
-
-
-
-        quote_deviation = abs(price - quote) / quote
-
-
-
-        if quote_deviation > BUY_QUOTE_DEVIATION_LIMIT:
-
-            return (
-
-                False,
-
-                f"Buy rejected: entered price is too far from live quote.\n"
-
-                f"Ticker: {ticker}\n"
-
-                f"Your price: {round(price, 2)}\n"
-
-                f"Live quote: {round(quote, 2)}\n"
-
-                f"Difference: {round(quote_deviation * 100, 2)}%\n"
-
-                f"Max allowed: {round(BUY_QUOTE_DEVIATION_LIMIT * 100, 2)}%"
-
-            )
-
-
-
-    signal_max_valid_entry = signal_data.get("max_valid_entry")
-
-    if isinstance(signal_max_valid_entry, (int, float)) and signal_max_valid_entry > 0:
-        max_allowed_price = float(signal_max_valid_entry)
-        max_entry_label = "signal max entry limit"
-
-    elif isinstance(signal_price, (int, float)) and signal_price > 0:
-        max_allowed_price = float(signal_price) * (1 + MAX_ENTRY_EXTENSION_PCT)
-        max_entry_label = f"{round(MAX_ENTRY_EXTENSION_PCT * 100, 2)}% above signal"
-
-    else:
-        max_allowed_price = None
-        max_entry_label = "n/a"
-
-    if max_allowed_price is not None and price > max_allowed_price:
-        return (
-            False,
-            f"Entry rejected: price too extended above signal.\n"
-            f"Entry signal: {round(float(signal_price), 2) if isinstance(signal_price, (int, float)) else 'n/a'}\n"
-            f"Your price: {round(price, 2)}\n"
-            f"Max entry limit: {round(max_allowed_price, 2)} ({max_entry_label})"
-        )
-
-    atr_val: Optional[float] = None
-
-    stop: Optional[float] = None
-
-    signal_atr = signal_data.get("atr")
-    signal_stop = signal_data.get("stop")
-
-    # V2: prefer the exact signaled STOP/LOSS. The old code recalculated
-    # stop from ATR, which could make the recorded trade different from the alert.
-    if isinstance(signal_atr, (int, float)) and signal_atr > 0:
-        atr_val = float(signal_atr)
-
-    if isinstance(signal_stop, (int, float)) and 0 < float(signal_stop) < price:
-        stop = float(signal_stop)
-
-    if stop is None and isinstance(signal_atr, (int, float)) and signal_atr > 0:
-        atr_val = float(signal_atr)
-        stop = price - (1.5 * atr_val)
-
-    if stop is None:
-        try:
-            df = get_signal_dataframe(ticker, limit=120)
-
-            if df is not None and not df.empty:
-                val = atr(df).iloc[-1]
-
-                if not pd.isna(val) and is_finite_positive(float(val)):
-                    atr_val = float(val)
-                    stop = price - (1.5 * atr_val)
-
-        except Exception as exc:
-            print(f"[BUY ATR ERROR] {ticker}: {exc}")
-
-
-
-    if stop is None or stop <= 0 or stop >= price:
-
-
-
-        stop = price * 0.95
-
-
-
-        atr_val = None
-
-
-
- 
-
-
-
-    risk_per_share = price - stop
-
-
-
-    if risk_per_share <= 0:
-
-
-
-        return False, "Invalid stop/risk calculation"
-
-
-
- 
-
-
-
- 
-
-
-
-    position_id = f"{ticker}_{int(now_ts())}_{uuid.uuid4().hex[:8]}"
-
-
-
-    new_pos = {
-
-
-
-        "position_id": position_id,
-
-
-
-        "strategy_version": str(signal_data.get("strategy_version", STRATEGY_VERSION)),
-
-
-
-        "shares": shares,
-
-
-
-        "price": price,
-
-
-
-        "initial_stop": stop,
-
-
-
-        "stop": stop,
-
-
-
-        "highest": price,
-
-
-
-        "partial_taken": False,
-
-
-
-        "entry_time": now_ts(),
-
-
-
-        "atr": atr_val,
-
-
-
-        "risk_per_share": risk_per_share,
-
-
-
-        "entry_data": signal_data,
-
-
-
-    }
-
-
-
- 
-
-
-
-    with db_tx() as conn:
-
-
-
-        existing = conn.execute("SELECT 1 FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-        if existing is not None:
-            mark_update_processed_tx(conn, update_id, "rejected_existing_position")
-            return False, "Position already exists"
-
-        open_count = conn.execute("SELECT COUNT(*) AS n FROM positions").fetchone()["n"]
-
-        if int(open_count) >= MAX_OPEN_POSITIONS:
-            mark_update_processed_tx(conn, update_id, "rejected_max_open_positions")
-            return False, f"Buy rejected: max open positions reached ({MAX_OPEN_POSITIONS})."
-
-        cash = get_cash(conn)
-
-
-
-        cost = shares * price
-
-
-
-        if cost > cash:
-
-
-
-            mark_update_processed_tx(conn, update_id, "rejected_insufficient_cash")
-
-
-
-            return False, "Not enough cash"
-
-
-
- 
-
-
-
-        set_cash_tx(conn, cash - cost)
-
-
-
-        upsert_position_tx(conn, ticker, new_pos)
-
-
-
-        mark_update_processed_tx(conn, update_id, "processed_buy")
-
-
-
- 
-
-
-
-    refresh_portfolio()
-
-
-
-    audit(
-
-        "BUY",
-
-        f"{ticker} shares={shares} price={price} "
-
-        f"position_id={position_id}"
-
-    )
-
-
-
-    return True, (
-
-        f"✅ BOUGHT {ticker}\n\n"
-
-        f"📦 Shares: {shares}\n"
-
-        f"💵 Price: {price}\n"
-
-        f"💰 Cash left: {format_money(portfolio['cash'])}"
-
-    )
-
-
-
- 
-
-
-
- 
-
-
-
-def record_sell(
-
-
-
-    ticker: str,
-
-
-
-    shares: int,
-
-
-
-    price: float,
-
-
-
-    exit_reason: str = "manual",
-
-
-
-    update_id: Optional[int] = None,
-
-
-
-) -> Tuple[bool, str]:
-
-
-
-    ticker = normalize_ticker(ticker) or ""
-
-
-
-    if not ticker:
-
-
-
-        return False, "Invalid ticker"
-
-
-
-    if shares <= 0:
-
-
-
-        return False, "Shares must be positive"
-
-
-
-    if not is_finite_positive(price):
-
-
-
-        return False, "Price must be positive and finite"
-
-
-
- 
-
-
-
-    with db_tx() as conn:
-
-
-
-        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-
-
-        if row is None:
-
-
-
-            mark_update_processed_tx(conn, update_id, "rejected_no_position")
-
-
-
-            return False, "No position to sell"
-
-
-
- 
-
-
-
-        pos = row_to_position(row)
-
-
-
-        current_shares = int(pos["shares"])
-
-
-
-        if shares > current_shares:
-
-
-
-            mark_update_processed_tx(conn, update_id, "rejected_too_many_shares")
-
-
-
-            return False, f"You only have {current_shares} shares"
-
-
-
- 
-
-
-
-        trade = make_trade_from_position(ticker, pos, shares, price, exit_reason)
-
-
-
-        insert_trade_tx(conn, trade)
-
-
-
- 
-
-
-
-        cash = get_cash(conn)
-
-
-
-        set_cash_tx(conn, cash + shares * price)
-
-
-
- 
-
-
-
-        remaining = current_shares - shares
-
-
-
-        if remaining <= 0:
-
-
-
-            delete_position_tx(conn, ticker)
-
-
-
-        else:
-
-
-
-            pos["shares"] = remaining
-
-
-
-            # Manual partial means the planned partial should not also auto-fire later.
-
-
-
-            if exit_reason == "manual":
-
-
-
-                pos["partial_taken"] = True
-
-
-
-            upsert_position_tx(conn, ticker, pos)
-
-
-
- 
-
-
-
-        mark_update_processed_tx(conn, update_id, f"processed_{exit_reason}_sell")
-
-
-
- 
-
-
-
-    refresh_portfolio()
-
-
-
-    audit(
-
-        "SELL",
-
-        f"{ticker} shares={shares} price={price} "
-
-        f"reason={exit_reason}"
-
-    )
-
-
-
-    if exit_reason == "manual" and should_forward_public_position(pos):
-
-        if remaining <= 0:
-
-            send_public_signal(
-
-                format_public_exit_signal(
-
-                    ticker=ticker,
-
-                    price=price,
-
-                    trade=trade,
-
-                    reason="manual"
-
-                )
-
-            )
-
-        else:
-
-            send_public_signal(
-
-                format_public_partial_signal(
-
-                    ticker=ticker,
-
-                    price=price,
-
-                    trade=trade
-
-                )
-
-            )
-
-
-
-    return True, (
-
-        f"💰 SOLD {ticker}\n\n"
-
-        f"📦 Shares: {shares}\n"
-
-        f"💵 Exit Price: {price}\n"
-
-        f"📊 P/L: {format_money(trade['profit'])}\n"
-
-        f"💼 Cash: {format_money(portfolio['cash'])}"
-
-    )
-
-
-
- 
-
-
-
- 
-
-
+def record_buy(ticker: str, shares: int, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+    return False, "Legacy bought/sold tactical ledger was removed in v4.8. Use swingbuy/swingsell for Swing Alpha or the correct monthly/crypto ledger command."
+
+def record_sell(ticker: str, shares: int, price: float, exit_reason: str = "manual", update_id: Optional[int] = None) -> Tuple[bool, str]:
+    return False, "Legacy bought/sold tactical ledger was removed in v4.8. Use swingbuy/swingsell for Swing Alpha or the correct monthly/crypto ledger command."
 
 def record_auto_exit_or_partial(
 
-
-
     ticker: str,
-
-
 
     shares: int,
 
-
-
     price: float,
-
-
 
     exit_reason: str,
 
-
-
     updated_fields: Optional[Dict[str, Any]] = None,
-
-
 
 ) -> Optional[Dict[str, Any]]:
 
-
-
     """Transactional auto exit. Returns trade dict if executed, else None."""
-
-
 
     ticker = normalize_ticker(ticker) or ""
 
-
-
     if not ticker or shares <= 0 or not is_finite_positive(price):
-
-
 
         return None
 
-
-
-
-
     with db_tx() as conn:
-
-
 
         row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
 
-
-
         if row is None:
-
-
 
             return None
 
-
-
         pos = row_to_position(row)
-
-
 
         current_shares = int(pos["shares"])
 
-
-
         if shares > current_shares:
-
-
 
             shares = current_shares
 
-
-
         if updated_fields:
-
-
 
             pos.update(updated_fields)
 
-
-
- 
-
-
-
         trade = make_trade_from_position(ticker, pos, shares, price, exit_reason)
-
-
 
         insert_trade_tx(conn, trade)
 
-
-
- 
-
-
-
         cash = get_cash(conn)
-
-
 
         set_cash_tx(conn, cash + shares * price)
 
-
-
- 
-
-
-
         remaining = current_shares - shares
-
-
 
         if remaining <= 0:
 
-
-
             delete_position_tx(conn, ticker)
-
-
 
             set_cooldown_tx(conn, ticker, now_ts())
 
-
-
         else:
-
-
 
             pos["shares"] = remaining
 
-
-
             if exit_reason == "partial":
-
-
 
                 pos["partial_taken"] = True
 
-
-
             upsert_position_tx(conn, ticker, pos)
 
-
-
- 
-
-
-
     refresh_portfolio()
-
-
 
     if trade:
 
@@ -9261,95 +5082,43 @@ def record_auto_exit_or_partial(
 
         )
 
-
-
     return trade
-
-
-
- 
-
-
 
 def set_cooldown_tx(conn: sqlite3.Connection, ticker: str, timestamp: float) -> None:
 
-
-
     conn.execute(
-
-
 
         "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
 
-
-
         "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
-
-
 
         (ticker, timestamp),
 
-
-
     )
-
-
-
- 
-
-
-
- 
-
-
 
 def update_position_fields(ticker: str, fields: Dict[str, Any]) -> None:
 
-
-
     ticker = normalize_ticker(ticker) or ""
-
-
 
     if not ticker:
 
-
-
         return
-
-
 
     with db_tx() as conn:
 
-
-
         row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-
 
         if row is None:
 
-
-
             return
-
-
 
         pos = row_to_position(row)
 
-
-
         pos.update(fields)
-
-
 
         upsert_position_tx(conn, ticker, pos)
 
-
-
     refresh_portfolio()
-
-
 
 def void_buy(
 
@@ -9363,13 +5132,9 @@ def void_buy(
 
     Undo a mistaken buy without creating a fake sell trade.
 
-
-
     Use only for admin/paper correction when the buy itself was a mistake,
 
     for example: bought UBST instead of UPST.
-
-
 
     It refunds original entry cost and deletes the open position.
 
@@ -9379,13 +5144,9 @@ def void_buy(
 
     ticker = normalize_ticker(ticker) or ""
 
-
-
     if not ticker:
 
         return False, "Invalid ticker"
-
-
 
     with db_tx() as conn:
 
@@ -9397,21 +5158,15 @@ def void_buy(
 
         ).fetchone()
 
-
-
         if row is None:
 
             mark_update_processed_tx(conn, update_id, "rejected_voidbuy_no_position")
 
             return False, f"No open position found for {ticker}"
 
-
-
         pos = row_to_position(row)
 
         position_id = pos.get("position_id")
-
-
 
         existing_trade = conn.execute(
 
@@ -9420,8 +5175,6 @@ def void_buy(
             (position_id,),
 
         ).fetchone()
-
-
 
         if existing_trade is not None:
 
@@ -9437,25 +5190,17 @@ def void_buy(
 
             )
 
-
-
         shares = int(pos["shares"])
 
         entry_price = float(pos["price"])
 
         refund = shares * entry_price
 
-
-
         cash = get_cash(conn)
 
         set_cash_tx(conn, cash + refund)
 
-
-
         delete_position_tx(conn, ticker)
-
-
 
         conn.execute(
 
@@ -9465,17 +5210,11 @@ def void_buy(
 
         )
 
-
-
         mark_update_processed_tx(conn, update_id, "processed_voidbuy")
-
-
 
     refresh_portfolio()
 
     missing_price_counts.pop(ticker, None)
-
-
 
     audit(
 
@@ -9484,8 +5223,6 @@ def void_buy(
         f"{ticker} shares={shares} entry_price={entry_price} refund={refund}"
 
     )
-
-
 
     return True, (
 
@@ -9503,14 +5240,9 @@ def void_buy(
 
     )
 
-
-
-
-
 # -----------------------------------------------------------------------------
 # CORE WEALTH LEDGER v3.6
 # -----------------------------------------------------------------------------
-
 
 def row_to_core_position(row: sqlite3.Row) -> Dict[str, Any]:
     return {
@@ -9529,7 +5261,6 @@ def row_to_core_position(row: sqlite3.Row) -> Dict[str, Any]:
         "notes": row["notes"],
     }
 
-
 def load_core_positions() -> Dict[str, Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -9538,7 +5269,6 @@ def load_core_positions() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def load_core_trades() -> List[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -9546,7 +5276,6 @@ def load_core_trades() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
-
 
 def load_latest_core_signal() -> Optional[Dict[str, Any]]:
     conn = db_connect()
@@ -9561,7 +5290,6 @@ def load_latest_core_signal() -> Optional[Dict[str, Any]]:
         return data
     finally:
         conn.close()
-
 
 def save_core_plan_signal(plan: Dict[str, Any]) -> str:
     plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
@@ -9588,7 +5316,6 @@ def save_core_plan_signal(plan: Dict[str, Any]) -> str:
         )
     return plan_id
 
-
 def current_core_plan_for_validation() -> Dict[str, Any]:
     # Recompute so buys/sells use the latest market/equity state. Also persists
     # it as the active plan so each confirmed core trade can reference a plan_id.
@@ -9596,11 +5323,9 @@ def current_core_plan_for_validation() -> Dict[str, Any]:
     save_core_plan_signal(plan)
     return plan
 
-
 def latest_core_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     actions = plan.get("actions", []) or []
     return {str(item.get("ticker", "")).upper(): item for item in actions if item.get("ticker")}
-
 
 def core_position_market_value_details(
     prices: Optional[Dict[str, float]] = None,
@@ -9641,7 +5366,6 @@ def core_position_market_value_details(
         "total_profit": round(realized + total_unrealized, 2),
     }
 
-
 def format_core_shares(value: Any) -> str:
     try:
         x = float(value)
@@ -9650,7 +5374,6 @@ def format_core_shares(value: Any) -> str:
         return (f"{x:.6f}").rstrip("0").rstrip(".")
     except Exception:
         return str(value)
-
 
 def validate_core_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not CORE_REQUIRE_LIVE_QUOTE:
@@ -9671,14 +5394,12 @@ def validate_core_price_against_quote(ticker: str, price: float) -> Tuple[bool, 
         )
     return True, "OK", quote
 
-
 def core_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker = ticker.upper()
     for item in plan.get("top", []) or []:
         if str(item.get("ticker", "")).upper() == ticker:
             return item
     return None
-
 
 def record_core_buy(
     ticker: str,
@@ -9828,7 +5549,6 @@ def record_core_buy(
         f"💵 Cash left: {format_money(portfolio['cash'])}"
     )
 
-
 def record_core_sell(
     ticker: str,
     shares: float,
@@ -9927,7 +5647,6 @@ def record_core_sell(
         f"💵 Cash now: {format_money(portfolio['cash'])}"
     )
 
-
 def format_core_portfolio_report() -> str:
     details = core_position_market_value_details()
     rows = details.get("rows", []) or []
@@ -9955,7 +5674,6 @@ def format_core_portfolio_report() -> str:
         )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_core_pnl_report() -> str:
     details = core_position_market_value_details()
     trades = load_core_trades()
@@ -9971,7 +5689,6 @@ def format_core_pnl_report() -> str:
         f"Buy records: {len(buys)}\n"
         f"Sell records: {len(sells)}"
     )
-
 
 def format_core_exposure_report() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -9990,13 +5707,9 @@ def format_core_exposure_report() -> str:
         "Use wealthplan for ranked BUY/ADD/HOLD/TRIM/SELL actions."
     )
 
-
 def write_json_file(path: str, data: Any) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(safe_convert(data), f, indent=2)
-
-
-
 
 def format_combined_portfolio_report() -> str:
     refresh_portfolio()
@@ -10059,7 +5772,6 @@ def format_combined_portfolio_report() -> str:
 
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def table_rows(table: str) -> List[Dict[str, Any]]:
 
     allowed = {
@@ -10086,17 +5798,11 @@ def table_rows(table: str) -> List[Dict[str, Any]]:
 
     }
 
-
-
     if table not in allowed:
 
         raise ValueError("Table export not allowed")
 
-
-
     conn = db_connect()
-
-
 
     try:
 
@@ -10104,15 +5810,9 @@ def table_rows(table: str) -> List[Dict[str, Any]]:
 
         return [dict(row) for row in rows]
 
-
-
     finally:
 
         conn.close()
-
-
-
-
 
 def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
@@ -10122,8 +5822,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     and key database tables into a zip file.
 
-
-
     This is safe to forward for analysis because it does not include API keys,
 
     Telegram token, or environment variables.
@@ -10132,25 +5830,17 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     refresh_portfolio()
 
-
-
     ts = ny_now().strftime("%Y%m%d_%H%M%S")
 
     export_root = os.path.join(DATA_DIR, "exports")
 
     export_dir = os.path.join(export_root, f"{prefix}_{ts}")
 
-
-
     os.makedirs(export_dir, exist_ok=True)
-
-
 
     risk = open_risk_details()
 
     withdrawal_plan = compute_withdrawal_plan()
-
-
 
     write_json_file(
 
@@ -10160,8 +5850,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     )
 
-
-
     write_json_file(
 
         os.path.join(export_dir, "trades.json"),
@@ -10169,8 +5857,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         load_trades()
 
     )
-
-
 
     write_json_file(
 
@@ -10180,8 +5866,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     )
 
-
-
     write_json_file(
 
         os.path.join(export_dir, "withdrawals.json"),
@@ -10189,8 +5873,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         load_withdrawals()
 
     )
-
-
 
     write_json_file(
 
@@ -10200,8 +5882,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     )
 
-
-
     write_json_file(
 
         os.path.join(export_dir, "withdrawal_plan.json"),
@@ -10209,8 +5889,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         withdrawal_plan
 
     )
-
-
 
     write_json_file(
 
@@ -10246,8 +5924,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     )
 
-
-
     for table in [
 
         "positions",
@@ -10280,8 +5956,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
         )
 
-
-
     # CSV versions are useful for analysis.
 
     try:
@@ -10298,8 +5972,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
             )
 
-
-
         positions_rows = []
 
         for ticker, pos in portfolio["positions"].items():
@@ -10309,8 +5981,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
             row.update(safe_convert(pos))
 
             positions_rows.append(row)
-
-
 
         if positions_rows:
 
@@ -10322,17 +5992,11 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
             )
 
-
-
     except Exception as exc:
 
         print(f"[CSV EXPORT WARNING] {exc}")
 
-
-
     zip_path = f"{export_dir}.zip"
-
-
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
 
@@ -10346,27 +6010,15 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
                 z.write(full_path, arcname)
 
-
-
     return zip_path
-
-
-
-
 
 def send_json_export(data: Any, filename: str, caption: str = "") -> None:
 
     path = os.path.join(DATA_DIR, filename)
 
-
-
     write_json_file(path, data)
 
-
-
     send_document(path, caption=caption or filename)
-
-
 
 def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
 
@@ -10375,8 +6027,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
     """
 
     Dangerous command used only when moving from paper testing to live.
-
-
 
     It exports a backup first, then clears trading state.
 
@@ -10387,8 +6037,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
     """
 
     backup_path = export_state_bundle(prefix="pre_reset_backup")
-
-
 
     with db_tx() as conn:
 
@@ -10409,15 +6057,11 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM core_trades")
         conn.execute("DELETE FROM core_signals")
 
-
-
         # Set cash to zero as a fail-safe.
 
         # You will explicitly set real live cash afterward.
 
         set_cash_tx(conn, 0.0)
-
-
 
         conn.execute(
 
@@ -10451,25 +6095,15 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
         )
 
-
-
         mark_update_processed_tx(conn, update_id, "processed_resetall")
 
-
-
     refresh_portfolio()
-
-
 
     last_signals = {}
 
     missing_price_counts = {}
 
-
-
     audit("RESET_ALL", "Paper/live state reset; backup exported first")
-
-
 
     return True, (
 
@@ -10498,65 +6132,33 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
     ), backup_path
 
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # COMMANDS
 
-
-
 # -----------------------------------------------------------------------------
 
-
-
- 
-
-
-
 def handle_command(text: str, update_id: Optional[int] = None) -> None:
-
-
 
     global portfolio, last_signals
 
     global PANIC_MODE
 
-
-
     text = (text or "").strip()
-
-
 
     if not text:
 
         return
 
-
-
     text_lower = text.lower()
-
-
 
     audit("COMMAND", text)
 
-
-
     if text_lower == "panic":
-
-
 
         PANIC_MODE = True
 
-
-
         audit("PANIC_ON")
-
-
 
         send(
 
@@ -10568,39 +6170,21 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "resume":
 
-
-
         PANIC_MODE = False
-
-
 
         audit("PANIC_OFF")
 
-
-
         send("✅ Bot resumed.\n\n🔎 Scanning enabled again.")
-
-
 
         return
 
-
-
     if text_lower in {"help", "/help"}:
 
-
-
         send(
-
-
 
             "Commands:\n"
 
@@ -10635,11 +6219,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             "sold TICKER SHARES at PRICE"
         )
 
-
-
         return
-
-
 
     if text_lower == "testchannel":
 
@@ -10651,8 +6231,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         if ok:
 
             send("✅ Public signal channel test sent.")
@@ -10661,17 +6239,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             send(f"❌ Public signal channel test failed:\n\n{info}")
 
-
-
         return
-
-
 
     if text_lower == "postchannelterms":
 
         ok, info = send_public_signal(public_channel_terms_text())
-
-
 
         if ok:
 
@@ -10687,19 +6259,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             send(f"❌ Channel disclaimer failed:\n\n{info}")
 
-
-
         return
-
-
 
     if text_lower == "pnl":
 
-
-
         perf = realized_performance_all_time()
-
-
 
         send(
 
@@ -10717,15 +6281,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "equity":
 
@@ -10742,14 +6298,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         return
 
-
     if text_lower == "openrisk":
 
-
-
         details = open_risk_details()
-
-
 
         send(
 
@@ -10769,43 +6320,19 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "winrate":
 
-
-
         send(f"🏆 Win Rate: {win_rate()}%")
-
-
 
         return
 
-
-
- 
-
-
-
     if text_lower == "expectancy":
-
-
 
         e = expectancy_summary()
 
-
-
         p = position_level_summary()
-
-
 
         send(
 
@@ -10833,23 +6360,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "stats":
 
-
-
         best, worst = ticker_stats()
-
-
 
         send(
 
@@ -10861,55 +6376,25 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "duration":
 
-
-
         send(f"⏱️ Avg Trade Duration: {avg_trade_duration()}")
-
-
 
         return
 
-
-
- 
-
-
-
     if text_lower == "summary":
-
-
 
         perf = realized_performance_all_time()
 
-
-
         wr = win_rate()
-
-
 
         best, worst = ticker_stats()
 
-
-
         duration = avg_trade_duration()
 
-
-
         e = expectancy_summary()
-
-
 
         send(
 
@@ -10931,11 +6416,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "scanstatus":
 
@@ -10944,8 +6425,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         last_scan_day = get_meta("last_scan_day")
 
         details = open_risk_details()
-
-
 
         send(
 
@@ -10971,11 +6450,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "bearstatus":
         details = bear_regime_details(market_details=market_regime_details())
@@ -11006,23 +6481,15 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             )
 
-
-
         send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
 
         return
-
-
 
     if text_lower == "forcescan":
 
         send("🔎 Manual scan started.\n\nCheck Telegram/logs for signals and scan summary.")
 
-
-
         current_ny = ny_now()
-
-
 
         official_scan_window = (
 
@@ -11048,11 +6515,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         scanned_ok = scan_market()
-
-
 
         if scanned_ok and official_scan_window:
 
@@ -11060,17 +6523,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             expected_bar = expected_daily_bar_date()
 
-
-
             set_meta("last_scan_day", today)
-
-
 
             if expected_bar:
 
                 set_meta("last_scan_bar_date", expected_bar)
-
-
 
             send("✅ Manual scan completed.\n\n📅 Marked done for today.")
 
@@ -11088,11 +6545,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             send("⚠️ Manual scan completed, but historical data was not usable.")
 
-
-
         return
-
-
 
     if text_lower == "wealthplan":
         plan = compute_wealth_core_plan()
@@ -11124,7 +6577,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             "allocationplan | riskstatus | sleevestatus"
         )
         return
-
 
     if text_lower in {"corestatus", "coreledger"}:
         latest = load_latest_core_signal()
@@ -11202,11 +6654,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         equity = float(snapshot["equity"])
 
-
-
         set_withdrawal_hwm(equity)
-
-
 
         send(
 
@@ -11218,17 +6666,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "withdrawplan":
 
         plan = compute_withdrawal_plan()
-
-
 
         if not plan["initialized"]:
 
@@ -11244,11 +6686,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             )
 
-
-
             return
-
-
 
         send(
 
@@ -11280,25 +6718,17 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower.startswith("withdrawdone"):
 
         parts = text.split(maxsplit=2)
-
-
 
         if len(parts) < 2:
 
             send("Usage: withdrawdone 250")
 
             return
-
-
 
         try:
 
@@ -11310,11 +6740,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             return
 
-
-
         note = parts[2] if len(parts) >= 3 else ""
-
-
 
         ok, msg = record_withdrawal(
 
@@ -11326,21 +6752,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         send(msg if ok else "❌ ERROR: " + msg)
 
-
-
         return
-
-
 
     if text_lower == "showwithdrawals":
 
         withdrawals = load_withdrawals()
-
-
 
         if not withdrawals:
 
@@ -11348,11 +6766,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             return
 
-
-
         total = sum(float(w["amount"]) for w in withdrawals)
-
-
 
         msg = (
 
@@ -11364,8 +6778,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         for item in withdrawals[-10:]:
 
             dt = datetime.fromtimestamp(
@@ -11375,8 +6787,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
                 NY_TZ
 
             ).strftime("%Y-%m-%d")
-
-
 
             msg += (
 
@@ -11390,15 +6800,9 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             )
 
-
-
         send(msg[:MAX_TELEGRAM_MESSAGE])
 
-
-
         return
-
-
 
     if text_lower == "portfolio":
         send(format_combined_portfolio_report())
@@ -11407,8 +6811,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
     if text_lower == "showportfolio_raw":
 
         refresh_portfolio()
-
-
 
         send_json_export(
 
@@ -11420,15 +6822,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "showtrades":
 
@@ -11442,21 +6836,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "showsignals":
 
         last_signals = load_signals()
-
-
 
         send_json_export(
 
@@ -11468,103 +6852,45 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "resetsignals":
 
-
-
         clear_signals()
-
-
 
         if update_id is not None:
 
-
-
             mark_update_processed(update_id, "processed_resetsignals")
-
-
 
         send("🔄 Signals reset.\n\nTrade history and portfolio are unchanged.")
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "setupstats":
 
-
-
         trades = load_trades()
-
-
 
         breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
 
-
-
         pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
-
-
-
- 
-
-
 
         def stats(trades_list: List[Dict[str, Any]]) -> str:
 
-
-
             if not trades_list:
-
-
 
                 return "0 trades"
 
-
-
             total = sum(float(t.get("profit", 0)) for t in trades_list)
-
-
 
             win = sum(1 for t in trades_list if float(t.get("profit", 0)) > 0)
 
-
-
             wr = (win / len(trades_list)) * 100
-
-
 
             r_vals = [float(t["r_multiple"]) for t in trades_list if t.get("r_multiple") is not None]
 
-
-
             avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
 
-
-
             return f"{len(trades_list)} trades | P/L: {format_money(total)} | WR: {round(wr, 2)}% | Avg R: {avg_r}"
-
-
-
- 
-
-
 
         send(
 
@@ -11576,45 +6902,23 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower == "download_trades":
 
-
-
         path = os.path.join(DATA_DIR, "trades_export.json")
-
-
 
         with open(path, "w", encoding="utf-8") as f:
 
-
-
             json.dump(safe_convert(load_trades()), f, indent=2)
-
-
 
         send_document(path, caption="trades_export.json")
 
-
-
         return
-
-
 
     if text_lower == "download_state":
 
         path = export_state_bundle(prefix="bot_state_export")
-
-
 
         send_document(
 
@@ -11624,17 +6928,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "download_portfolio":
 
         refresh_portfolio()
-
-
 
         send_json_export(
 
@@ -11646,11 +6944,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "download_signals":
 
@@ -11664,11 +6958,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "download_withdrawals":
 
@@ -11682,11 +6972,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "resetall":
 
@@ -11706,17 +6992,11 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         return
-
-
 
     if text_lower == "resetall confirm-live":
 
         ok, msg, backup_path = reset_all_paper_state(update_id=update_id)
-
-
 
         if backup_path:
 
@@ -11728,21 +7008,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             )
 
-
-
         send(msg if ok else "❌ ERROR: " + msg)
 
-
-
         return
-
-
 
     if text_lower.startswith("voidbuy"):
 
         parts = text.split()
-
-
 
         if len(parts) != 2:
 
@@ -11750,19 +7022,13 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
             return
 
-
-
         ticker = normalize_ticker(parts[1])
-
-
 
         if not ticker:
 
             send("Invalid ticker")
 
             return
-
-
 
         ok, msg = void_buy(
 
@@ -11772,1366 +7038,404 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
         )
 
-
-
         send(msg if ok else "❌ ERROR: " + msg)
 
-
-
         return
-
- 
-
-
 
     if text_lower.startswith("setcash"):
 
-
-
         parts = text.split()
-
-
 
         if len(parts) != 2:
 
-
-
             send("Usage: setcash 1670.15")
-
-
 
             return
 
-
-
         try:
-
-
 
             amount = float(parts[1])
 
-
-
         except ValueError:
-
-
 
             send("Invalid number")
 
-
-
             return
-
-
 
         if not math.isfinite(amount) or amount < 0:
 
-
-
             send("Cash must be finite and non-negative")
-
-
 
             return
 
-
-
         with db_tx() as conn:
-
-
 
             set_cash_tx(conn, amount)
 
-
-
             maybe_set_performance_base_from_cash_tx(conn, amount)
-
-
 
             mark_update_processed_tx(conn, update_id, "processed_setcash")
 
-
-
         refresh_portfolio()
-
-
 
         send(f"💵 Cash updated to {format_money(amount)}")
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower.startswith("editbuy"):
 
-
-
         parts = text.split()
 
-
-
         if len(parts) != 3:
-
-
 
             send("Usage: editbuy TICKER PRICE")
 
-
-
             return
-
-
 
         ticker = normalize_ticker(parts[1])
 
-
-
         if not ticker:
-
-
 
             send("Invalid ticker")
 
-
-
             return
-
-
 
         try:
 
-
-
             new_price = float(parts[2])
-
-
 
         except ValueError:
 
-
-
             send("Invalid price")
 
-
-
             return
-
-
 
         if not is_finite_positive(new_price):
 
-
-
             send("Price must be positive and finite")
-
-
 
             return
 
-
-
- 
-
-
-
         with db_tx() as conn:
-
-
 
             row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
 
-
-
             if row is None:
-
-
 
                 mark_update_processed_tx(conn, update_id, "rejected_editbuy_no_position")
 
-
-
                 send("Position not found")
 
-
-
                 return
-
-
 
             pos = row_to_position(row)
 
-
-
             old_price = pos["price"]
-
-
 
             shares = int(pos["shares"])
 
-
-
             cash = get_cash(conn)
-
-
 
             cash_adjustment = (old_price - new_price) * shares
 
-
-
             new_cash = cash + cash_adjustment
 
-
-
             if new_cash < 0:
-
-
 
                 mark_update_processed_tx(conn, update_id, "rejected_editbuy_negative_cash")
 
-
-
                 send("Edit would make cash negative")
 
-
-
                 return
-
-
 
             risk_per_share = new_price - pos["initial_stop"]
 
-
-
             if risk_per_share <= 0:
-
-
 
                 mark_update_processed_tx(conn, update_id, "rejected_editbuy_invalid_risk")
 
-
-
                 send("Edit rejected: new entry price must be above initial_stop. Use a manual correction instead.")
 
-
-
                 return
-
-
 
             pos["price"] = new_price
 
-
-
             pos["risk_per_share"] = risk_per_share
-
-
 
             pos["highest"] = max(pos.get("highest", new_price), new_price)
 
-
-
             set_cash_tx(conn, new_cash)
-
-
 
             upsert_position_tx(conn, ticker, pos)
 
-
-
             mark_update_processed_tx(conn, update_id, "processed_editbuy")
-
-
 
         refresh_portfolio()
 
-
-
         send(
-
-
 
             f"BUY UPDATED {ticker}\n"
 
-
-
             f"Old: {round(old_price, 2)}\n"
-
-
 
             f"New: {round(new_price, 2)}\n"
 
-
-
             f"Cash adjusted by: {format_money(cash_adjustment)}"
-
-
 
         )
 
-
-
         return
-
-
-
- 
-
-
 
     if text_lower.startswith("editsell"):
 
-
-
         parts = text.split()
-
-
 
         if len(parts) != 3:
 
-
-
             send("Usage: editsell TICKER PRICE")
 
-
-
             return
-
-
 
         ticker = normalize_ticker(parts[1])
 
-
-
         if not ticker:
-
-
 
             send("Invalid ticker")
 
-
-
             return
 
-
-
         try:
-
-
 
             new_price = float(parts[2])
 
-
-
         except ValueError:
-
-
 
             send("Invalid price")
 
-
-
             return
-
-
 
         if not is_finite_positive(new_price):
 
-
-
             send("Price must be positive and finite")
-
-
 
             return
 
-
-
- 
-
-
-
         with db_tx() as conn:
-
-
 
             row = conn.execute(
 
-
-
                 "SELECT * FROM trades WHERE ticker = ? ORDER BY exit_time DESC, created_at DESC LIMIT 1",
-
-
 
                 (ticker,),
 
-
-
             ).fetchone()
-
-
 
             if row is None:
 
-
-
                 mark_update_processed_tx(conn, update_id, "rejected_editsell_no_trade")
-
-
 
                 send("Trade not found")
 
-
-
                 return
-
-
 
             trade = row_to_trade(row)
 
-
-
             old_price = trade["exit_price"]
-
-
 
             shares = int(trade["shares"])
 
-
-
             cash_adjustment = (new_price - old_price) * shares
-
-
 
             cash = get_cash(conn)
 
-
-
             new_cash = cash + cash_adjustment
-
-
 
             if new_cash < 0:
 
-
-
                 mark_update_processed_tx(conn, update_id, "rejected_editsell_negative_cash")
-
-
 
                 send("Edit would make cash negative")
 
-
-
                 return
-
-
 
             entry_price = float(trade["entry_price"])
 
-
-
             profit = (new_price - entry_price) * shares
-
-
 
             risk_per_share = trade.get("risk_per_share")
 
-
-
             r_multiple = None
-
-
 
             if risk_per_share is not None and float(risk_per_share) > 0:
 
-
-
                 r_multiple = (new_price - entry_price) / float(risk_per_share)
-
-
 
             conn.execute(
 
-
-
                 "UPDATE trades SET exit_price = ?, profit = ?, r_multiple = ? WHERE id = ?",
-
-
 
                 (new_price, round(profit, 2), None if r_multiple is None else round(r_multiple, 4), trade["id"]),
 
-
-
             )
-
-
 
             set_cash_tx(conn, new_cash)
 
-
-
             mark_update_processed_tx(conn, update_id, "processed_editsell")
-
-
 
         refresh_portfolio()
 
-
-
         send(
-
-
 
             f"SELL UPDATED {ticker}\n"
 
-
-
             f"Trade ID: {trade['id']}\n"
-
-
 
             f"Old: {round(old_price, 2)}\n"
 
-
-
             f"New: {round(new_price, 2)}\n"
-
-
 
             f"Cash adjusted by: {format_money(cash_adjustment)}"
 
-
-
         )
 
-
-
         return
-
-
-
- 
-
-
 
     trade_cmd = re.fullmatch(
 
-
-
         r"(?i)\s*(bought|sold)\s+([A-Z0-9.\-]{1,15})\s+(\d+)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-
-
 
         text,
 
-
-
     )
-
-
 
     if not trade_cmd:
 
-
-
         # Preserve original behavior: unknown short/invalid commands are ignored, but alert on likely trade commands.
-
-
 
         if text_lower.startswith(("bought", "sold")):
 
-
-
             send("Invalid command format. Use: bought TICKER SHARES at PRICE or sold TICKER SHARES at PRICE")
 
-
-
         return
-
-
-
- 
-
-
 
     action = trade_cmd.group(1).lower()
 
-
-
     ticker = normalize_ticker(trade_cmd.group(2))
-
-
 
     shares = int(trade_cmd.group(3))
 
-
-
     price = float(trade_cmd.group(4))
-
-
-
- 
-
-
 
     if not ticker:
 
-
-
         send("Invalid ticker")
 
-
-
         return
-
-
 
     if shares <= 0 or not is_finite_positive(price):
 
-
-
         send("Shares and price must be positive")
 
-
-
         return
-
-
-
- 
-
-
 
     if action == "bought":
 
-
-
         ok, msg = record_buy(ticker, shares, price, update_id=update_id)
-
-
 
         send(msg if ok else "❌ ERROR: " + msg)
 
-
-
         return
-
-
-
- 
-
-
 
     if action == "sold":
 
-
-
         ok, msg = record_sell(ticker, shares, price, exit_reason="manual", update_id=update_id)
-
-
 
         send(msg if ok else "❌ ERROR: " + msg)
 
-
-
         return
 
-
-
- 
-
-
-
 # -----------------------------------------------------------------------------
-
-
 
 # STRATEGY / SIGNAL ANALYSIS
 
-
-
 # -----------------------------------------------------------------------------
 
-
-
- 
-
-
-
-def analyze(
-    ticker: str,
-    market: str,
-    df: pd.DataFrame,
-    market_details: Optional[Dict[str, Any]] = None,
-) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
-    """
-    V2.8 VCP-only leader engine with winner-capture upgrade.
-
-    Primary and only live setup: VCP / volatility-contraction breakout. Entry logic is kept from v2.7 research; exit logic is upgraded to let winners breathe.
-
-    Kept intentionally disabled by default:
-    - ordinary RS breakout sleeve,
-    - weak bucket,
-    - medium bucket,
-    - broad pullbacks,
-    - random reclaim trades.
-
-    This is balanced rather than dead-conservative: the universe remains broad,
-    but the setup family is restricted to the most robust VCP/contraction pattern.
-    """
-    try:
-        if df is None or df.empty:
-            print(f"[ANALYZE SKIP] {ticker} - no data")
-            return None
-    except Exception as exc:
-        print(f"[ANALYZE ERROR] {ticker}: {exc}")
-        return None
-
-    if ticker not in STRONG:
-        return None
-
-    if ticker in MEDIUM and not V2_ALLOW_MEDIUM:
-        return None
-
-    if ticker in WEAK and not V2_ALLOW_WEAK:
-        return None
-
-    if len(df) < 220:
-        return None
-
-    close = df["Close"]
-    high = df["High"]
-    low = df["Low"]
-    volume = df["Volume"]
-
-    price = float(close.iloc[-1])
-    prev_close = float(close.iloc[-2])
-
-    if price <= 0 or prev_close <= 0:
-        return None
-
-    rsi_val = rsi(close).iloc[-1]
-    atr_val = atr(df).iloc[-1]
-    atr50_val = atr(df, period=50).iloc[-1]
-    ma10 = close.rolling(10).mean().iloc[-1]
-    ma20 = close.rolling(20).mean().iloc[-1]
-    ma50 = close.rolling(50).mean().iloc[-1]
-    ma100 = close.rolling(100).mean().iloc[-1]
-    ma200 = close.rolling(200).mean().iloc[-1]
-    avg_vol = volume.rolling(20).mean().iloc[-1]
-
-    ema12 = close.ewm(span=12, adjust=False).mean()
-    ema26 = close.ewm(span=26, adjust=False).mean()
-    macd = ema12 - ema26
-    macd_signal = macd.ewm(span=9, adjust=False).mean()
-    macd_hist = macd.iloc[-1] - macd_signal.iloc[-1]
-
-    bb_mid = close.rolling(20).mean()
-    bb_std = close.rolling(20).std()
-    bb_width = ((bb_mid + 2 * bb_std) - (bb_mid - 2 * bb_std)) / bb_mid
-    bb_current = bb_width.iloc[-1]
-    bb_lookback = bb_width.dropna().iloc[-100:]
-
-    bb_width_rank = None
-    if not pd.isna(bb_current) and len(bb_lookback) >= 50:
-        bb_width_rank = float((bb_lookback <= bb_current).mean())
-
-    required_vals = [
-        rsi_val, atr_val, atr50_val, ma10, ma20, ma50, ma100, ma200,
-        avg_vol, macd_hist
-    ]
-
-    if any(pd.isna(x) for x in required_vals):
-        return None
-
-    if ma20 <= 0 or ma50 <= 0 or ma100 <= 0 or ma200 <= 0 or avg_vol <= 0 or atr_val <= 0 or atr50_val <= 0:
-        return None
-
-    atr_val = float(atr_val)
-    atr50_val = float(atr50_val)
-    atr_pct = atr_val / price
-    atr_ratio = atr_val / atr50_val if atr50_val > 0 else None
-    avg_dollar_volume = float(avg_vol) * price
-    daily_move_pct = ((price - prev_close) / prev_close) * 100
-    volume_ratio = float(volume.iloc[-1]) / float(avg_vol)
-    close_loc = close_location(df)
-
-    if price < V2_MIN_PRICE:
-        return None
-
-    if avg_dollar_volume < V2_MIN_AVG_DOLLAR_VOLUME:
-        return None
-
-    if atr_pct < V2_MIN_ATR_PCT or atr_pct > V2_MAX_ATR_PCT:
-        return None
-
-    market_score = 0
-    spy_df = None
-    qqq_df = None
-    smh_df = None
-
-    if market_details:
-        market_score = int(market_details.get("score", 0) or 0)
-        frames = market_details.get("frames", {}) or {}
-        spy_df = frames.get("SPY")
-        qqq_df = frames.get("QQQ")
-        smh_df = frames.get("SMH")
-
-    if market == "BEAR" or market_score < V2_MIN_MARKET_SCORE:
-        return None
-
-    def frame_above_ma(frame: Optional[pd.DataFrame], period: int) -> bool:
-        try:
-            if frame is None or frame.empty or len(frame) < period:
-                return False
-            ma_val = frame["Close"].rolling(period).mean().iloc[-1]
-            if pd.isna(ma_val):
-                return False
-            return float(frame["Close"].iloc[-1]) > float(ma_val)
-        except Exception:
-            return False
-
-    if V2_REQUIRE_SPY_ABOVE_MA100 and not frame_above_ma(spy_df, 100):
-        return None
-
-    if V2_REQUIRE_SPY_ABOVE_MA200 and not frame_above_ma(spy_df, 200):
-        return None
-
-    if V2_REQUIRE_QQQ_ABOVE_MA100 and not frame_above_ma(qqq_df, 100):
-        return None
-
-    if V2_REQUIRE_QQQ_ABOVE_MA200 and not frame_above_ma(qqq_df, 200):
-        return None
-
-    # Relative strength vs SPY/QQQ/SMH.
-    stock_ret_10 = pct_change_over(close, 10)
-    stock_ret_20 = pct_change_over(close, 20)
-    stock_ret_63 = pct_change_over(close, 63)
-    spy_ret_20 = pct_change_over(spy_df["Close"], 20) if spy_df is not None and not spy_df.empty else None
-    spy_ret_63 = pct_change_over(spy_df["Close"], 63) if spy_df is not None and not spy_df.empty else None
-    qqq_ret_20 = pct_change_over(qqq_df["Close"], 20) if qqq_df is not None and not qqq_df.empty else None
-    smh_ret_20 = pct_change_over(smh_df["Close"], 20) if smh_df is not None and not smh_df.empty else None
-
-    rel_20 = None if stock_ret_20 is None or spy_ret_20 is None else stock_ret_20 - spy_ret_20
-    rel_63 = None if stock_ret_63 is None or spy_ret_63 is None else stock_ret_63 - spy_ret_63
-    rel_qqq_20 = None if stock_ret_20 is None or qqq_ret_20 is None else stock_ret_20 - qqq_ret_20
-    rel_smh_20 = None if stock_ret_20 is None or smh_ret_20 is None else stock_ret_20 - smh_ret_20
-
-    trend_score = 0
-
-    if price > float(ma50):
-        trend_score += 12
-
-    if float(ma20) > float(ma50):
-        trend_score += 10
-
-    if price > float(ma20):
-        trend_score += 6
-
-    if price > float(ma10):
-        trend_score += 4
-
-    if price > float(ma100):
-        trend_score += 6
-
-    if price > float(ma200):
-        trend_score += 8
-
-    if float(ma50) > float(ma200):
-        trend_score += 4
-
-    if rolling_slope_positive(close.rolling(50).mean(), lookback=10):
-        trend_score += 10
-
-    if rolling_slope_positive(close.rolling(20).mean(), lookback=5):
-        trend_score += 4
-
-    if float(macd_hist) > 0:
-        trend_score += 4
-
-    if close_loc >= 0.55:
-        trend_score += 5
-
-    if avg_dollar_volume >= 100_000_000:
-        trend_score += 5
-
-    rs_score = 0
-
-    if stock_ret_10 is not None and stock_ret_10 > 0:
-        rs_score += 3
-
-    if stock_ret_20 is not None and stock_ret_20 > 0:
-        rs_score += 5
-
-    if stock_ret_63 is not None and stock_ret_63 > 0:
-        rs_score += 5
-
-    if rel_20 is not None:
-        if rel_20 > 0:
-            rs_score += 8
-        if rel_20 > 0.03:
-            rs_score += 5
-        if rel_20 > 0.08:
-            rs_score += 4
-
-    if rel_63 is not None:
-        if rel_63 > 0:
-            rs_score += 8
-        if rel_63 > 0.06:
-            rs_score += 5
-
-    if rel_qqq_20 is not None and rel_qqq_20 > 0:
-        rs_score += 4
-
-    semi_leaders = {"NVDA", "AMD", "MU", "LRCX", "ASML", "QCOM", "AVGO", "SMH", "SOXX", "KLAC", "AMAT", "TSM", "TXN", "ADI", "MRVL", "MPWR", "ON", "NXPI", "ARM"}
-    if rel_smh_20 is not None and rel_smh_20 > 0 and ticker in semi_leaders:
-        rs_score += 3
-
-    recent_high_20 = float(close.iloc[-21:-1].max())
-    recent_high_55 = float(close.iloc[-56:-1].max())
-    breakout_20 = price > recent_high_20
-    breakout_55 = price > recent_high_55
-
-    if not (breakout_20 or breakout_55):
-        return None
-
-    recent_high_20_window = float(high.iloc[-21:].max())
-    recent_low_20_window = float(low.iloc[-21:].min())
-    recent_range_20_pct = (recent_high_20_window - recent_low_20_window) / price
-
-    breakout_level = recent_high_55 if breakout_55 else recent_high_20
-    breakout_extension_atr = max(0.0, (price - breakout_level) / atr_val) if atr_val > 0 else 999.0
-    extension_ma20 = (price - float(ma20)) / float(ma20)
-
-    breakout_score = -999
-
-    if V2_ALLOW_BREAKOUTS:
-        breakout_score = trend_score + rs_score
-
-        if breakout_20:
-            breakout_score += 8
-
-        if breakout_55:
-            breakout_score += 12
-
-        if volume_ratio >= V2_MIN_BREAKOUT_VOLUME_RATIO:
-            breakout_score += 8
-
-        if volume_ratio >= 1.5:
-            breakout_score += 5
-
-        if close_loc >= V2_BREAKOUT_MIN_CLOSE_LOCATION:
-            breakout_score += 8
-
-        if 50 <= float(rsi_val) <= V2_MAX_BREAKOUT_RSI:
-            breakout_score += 6
-
-        if 0 < daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-            breakout_score += 5
-
-        if float(ma20) > float(ma50):
-            breakout_score += 5
-
-        if bb_width_rank is not None and bb_width_rank <= 0.50:
-            breakout_score += 3
-
-        # Hard filters for the RS-breakout sleeve.
-        if float(rsi_val) > V2_MAX_BREAKOUT_RSI:
-            breakout_score = -999
-
-        if daily_move_pct <= 0 or daily_move_pct > V2_MAX_BREAKOUT_DAY_MOVE_PCT:
-            breakout_score = -999
-
-        if volume_ratio < V2_MIN_BREAKOUT_VOLUME_RATIO:
-            breakout_score = -999
-
-        if close_loc < V2_BREAKOUT_MIN_CLOSE_LOCATION:
-            breakout_score = -999
-
-        if not (price > float(ma20) > float(ma50)):
-            breakout_score = -999
-
-        if V2_BREAKOUT_REQUIRE_MA20_SLOPE and not rolling_slope_positive(close.rolling(20).mean(), lookback=5):
-            breakout_score = -999
-
-        if stock_ret_20 is None or stock_ret_20 < V2_BREAKOUT_MIN_STOCK_RET_20:
-            breakout_score = -999
-
-        if stock_ret_63 is None or stock_ret_63 < V2_BREAKOUT_MIN_STOCK_RET_63:
-            breakout_score = -999
-
-        if rel_20 is None or rel_20 < V2_BREAKOUT_MIN_REL_20_SPY:
-            breakout_score = -999
-
-        if rel_63 is None or rel_63 < V2_BREAKOUT_MIN_REL_63_SPY:
-            breakout_score = -999
-
-        if rel_qqq_20 is None or rel_qqq_20 < V2_BREAKOUT_MIN_REL_20_QQQ:
-            breakout_score = -999
-
-        if V2_BREAKOUT_REQUIRE_55DAY_OR_STRONG_RS:
-            strong_rs = rel_20 is not None and rel_20 >= V2_BREAKOUT_STRONG_RS_20_SPY
-            if not (breakout_55 or strong_rs):
-                breakout_score = -999
-
-        if recent_range_20_pct > V2_BREAKOUT_MAX_BASE_RANGE_PCT:
-            breakout_score = -999
-
-        if extension_ma20 > V2_BREAKOUT_MAX_EXTENSION_MA20:
-            breakout_score = -999
-
-        if breakout_extension_atr > V2_BREAKOUT_MAX_EXTENSION_ATR:
-            breakout_score = -999
-
-        if rs_score < V2_BREAKOUT_MIN_RS_SCORE:
-            breakout_score = -999
-
-    vcp_score = -999
-
-    if V2_ALLOW_VCP:
-        vcp_candidate = (
-            recent_range_20_pct <= V2_VCP_MAX_BASE_RANGE_PCT
-            and atr_ratio is not None and atr_ratio <= V2_VCP_MAX_ATR_RATIO
-            and bb_width_rank is not None and bb_width_rank <= V2_VCP_MAX_BB_WIDTH_RANK
-            and volume_ratio >= V2_VCP_MIN_VOLUME_RATIO
-            and close_loc >= V2_VCP_MIN_CLOSE_LOCATION
-            and price > float(ma20) > float(ma50)
-            and daily_move_pct > 0
-            and daily_move_pct <= V2_MAX_BREAKOUT_DAY_MOVE_PCT
-            and float(rsi_val) <= V2_MAX_BREAKOUT_RSI
-        )
-
-        if V2_VCP_REQUIRE_MA200 and price <= float(ma200):
-            vcp_candidate = False
-
-        if V2_BREAKOUT_REQUIRE_POSITIVE_RS and not (
-            (rel_20 is not None and rel_20 >= V2_BREAKOUT_MIN_REL_20_SPY)
-            or (rel_63 is not None and rel_63 >= V2_BREAKOUT_MIN_REL_63_SPY)
-        ):
-            vcp_candidate = False
-
-        if vcp_candidate:
-            vcp_score = trend_score + rs_score + 18
-
-            if breakout_55:
-                vcp_score += 10
-
-            if recent_range_20_pct <= V2_VCP_MAX_BASE_RANGE_PCT * 0.75:
-                vcp_score += 6
-
-            if atr_ratio is not None and atr_ratio <= V2_VCP_MAX_ATR_RATIO * 0.85:
-                vcp_score += 5
-
-            if bb_width_rank is not None and bb_width_rank <= 0.30:
-                vcp_score += 5
-
-            if volume_ratio >= 1.5:
-                vcp_score += 5
-
-            if rel_20 is not None and rel_20 > 0:
-                vcp_score += 5
-
-    candidates = [
-        ("vcp_breakout", int(round(vcp_score)), max(V2_MIN_SCORE, V2_VCP_MIN_SCORE), True, breakout_level),
-        ("breakout", int(round(breakout_score)), max(V2_MIN_SCORE, V2_BREAKOUT_MIN_SCORE), True, breakout_level),
-    ]
-
-    setup_type, score, min_score, is_breakout, selected_breakout_level = max(candidates, key=lambda x: x[1])
-
-    if market == "UNCERTAIN":
-        min_score += 5
-
-    if setup_type in {"breakout", "vcp_breakout"} and V2_BREAKOUT_REQUIRE_POSITIVE_RS:
-        if not (
-            (rel_20 is not None and rel_20 >= V2_BREAKOUT_MIN_REL_20_SPY)
-            or (rel_63 is not None and rel_63 >= V2_BREAKOUT_MIN_REL_63_SPY)
-        ):
-            return None
-
-    if score < min_score:
-        return None
-
-    atr_stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-    structure_stop = float(selected_breakout_level) - (0.35 * atr_val)
-    stop = min(atr_stop, structure_stop) if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else max(atr_stop, structure_stop)
-    stop_model = "v2_8_vcp_exit_upgrade_structure_atr" if V2_STOP_WIDER_OF_ATR_AND_STRUCTURE else "v2_8_vcp_exit_upgrade_tighter_atr"
-
-    if stop <= 0 or stop >= price:
-        stop = price - (V2_BREAKOUT_ATR_STOP_MULT * atr_val)
-        stop_model = "fallback_v28_atr"
-
-    risk = price - stop
-
-    if risk <= 0:
-        return None
-
-    if (risk / price) > V2_MAX_RISK_PER_SHARE_PCT:
-        return None
-
-    risk_pct = risk_pct_for_ticker(ticker)
-
-    if risk_pct is None:
-        return None
-
-    if V2_RISK_BOOST_ENABLED:
-        if score >= 180:
-            risk_pct *= V2_A_PLUS_RISK_BOOST
-        elif score >= 172:
-            risk_pct *= V2_A_RISK_BOOST
-
-    refresh_portfolio()
-    account_equity = approximate_equity_from_portfolio()
-    available_cash = float(portfolio["cash"])
-
-    shares_by_risk = int((account_equity * risk_pct) / risk)
-    shares_by_position_cap = int((account_equity * MAX_POSITION_EQUITY_PCT) / price)
-    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
-    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
-
-    if shares <= 0:
-        return None
-
-    rank_score = float(score)
-
-    if setup_type == "vcp_breakout":
-        rank_score += 6.0
-
-    if breakout_55:
-        rank_score += 8.0
-
-    if rel_20 is not None:
-        rank_score += max(0.0, min(10.0, rel_20 * 100.0))
-
-    if rel_63 is not None:
-        rank_score += max(0.0, min(8.0, rel_63 * 50.0))
-
-    rank_score += max(0.0, min(8.0, (volume_ratio - 1.0) * 6.0))
-    rank_score += max(0.0, min(10.0, (close_loc - 0.50) * 40.0))
-
-    if bb_width_rank is not None and bb_width_rank <= 0.35:
-        rank_score += 4.0
-
-    if atr_ratio is not None and atr_ratio <= 0.85:
-        rank_score += 3.0
-
-    metrics = {
-        "setup_type": setup_type,
-        "strategy_family": "v2_8_vcp_exit_upgrade",
-        "breakout": True,
-        "breakout_20": breakout_20,
-        "breakout_55": breakout_55,
-        "breakout_level": selected_breakout_level,
-        "breakout_extension_atr": breakout_extension_atr,
-        "extension_ma20": extension_ma20,
-        "recent_range_20_pct": recent_range_20_pct,
-        "atr": atr_val,
-        "atr_pct": atr_pct,
-        "atr_ratio_14_50": atr_ratio,
-        "bb_width_rank_100": bb_width_rank,
-        "volume_ratio": volume_ratio,
-        "daily_move_pct": daily_move_pct,
-        "market_score": market_score,
-        "trend_score": trend_score,
-        "rs_score": rs_score,
-        "rank_score": rank_score,
-        "breakout_score": breakout_score if breakout_score != -999 else None,
-        "vcp_score": vcp_score if vcp_score != -999 else None,
-        "pullback_score": None,
-        "min_score_required": min_score,
-        "stock_ret_10": stock_ret_10,
-        "stock_ret_20": stock_ret_20,
-        "stock_ret_63": stock_ret_63,
-        "rel_20_spy": rel_20,
-        "rel_63_spy": rel_63,
-        "rel_20_qqq": rel_qqq_20,
-        "rel_20_smh": rel_smh_20,
-        "ma20": float(ma20),
-        "ma50": float(ma50),
-        "ma100": float(ma100),
-        "ma200": float(ma200),
-        "close_location": close_loc,
-        "avg_dollar_volume": avg_dollar_volume,
-        "stop_model": stop_model,
-        "risk_pct_used": risk_pct,
-    }
-
-    return ticker, price, shares, stop, score, metrics
-
+def analyze(*args: Any, **kwargs: Any) -> None:
+    # Legacy VCP/Bear analyzer removed in v4.8. Swing Alpha is the active tactical stock engine.
+    return None
 
 # -----------------------------------------------------------------------------
 # POSITION MANAGEMENT
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def repair_position_if_needed(ticker: str, pos: Dict[str, Any]) -> Dict[str, Any]:
 
-
-
     changed = False
-
-
 
     entry = float(pos.get("price", 0) or 0)
 
-
-
     if entry <= 0:
-
-
 
         raise ValueError(f"Invalid entry price for {ticker}")
 
-
-
- 
-
-
-
     if not is_finite_positive(float(pos.get("stop", 0) or 0)):
-
-
 
         pos["stop"] = entry * 0.95
 
-
-
         changed = True
-
-
 
     if not is_finite_positive(float(pos.get("highest", 0) or 0)):
 
-
-
         pos["highest"] = entry
 
-
-
         changed = True
-
-
 
     if not is_finite_positive(float(pos.get("initial_stop", 0) or 0)):
 
-
-
         pos["initial_stop"] = pos["stop"]
 
-
-
         changed = True
-
-
 
     if "partial_taken" not in pos:
 
-
-
         pos["partial_taken"] = False
 
-
-
         changed = True
-
-
 
     risk_per_share = pos.get("risk_per_share")
 
-
-
     if not isinstance(risk_per_share, (int, float)) or risk_per_share <= 0:
-
-
 
         fallback_risk = entry - float(pos["initial_stop"])
 
-
-
         if fallback_risk <= 0:
-
-
 
             fallback_risk = entry * 0.05
 
-
-
             pos["initial_stop"] = entry - fallback_risk
-
-
 
             if pos["stop"] >= entry:
 
-
-
                 pos["stop"] = pos["initial_stop"]
-
-
 
         pos["risk_per_share"] = fallback_risk
 
-
-
         changed = True
-
-
 
         print(f"[POSITION REPAIRED RISK] {ticker} risk_per_share={fallback_risk}")
 
-
-
- 
-
-
-
     if float(pos["highest"]) < entry:
-
-
 
         pos["highest"] = entry
 
-
-
         changed = True
-
-
-
- 
-
-
 
     if changed:
 
-
-
         update_position_fields(ticker, pos)
 
-
-
     return pos
-
-
-
- 
-
-
-
- 
-
-
 
 def position_exit_params(pos: Dict[str, Any]) -> Dict[str, Any]:
     """Per-position exit settings.
@@ -13154,1585 +7458,101 @@ def position_exit_params(pos: Dict[str, Any]) -> Dict[str, Any]:
         "max_holding_days": int(entry_data.get("max_holding_days", 0) or 0),
     }
 
-
 def manage_positions() -> None:
-
-
-
-    refresh_portfolio()
-
-
-
-    tickers = list(portfolio["positions"].keys())
-
-
-
-    if not tickers:
-
-
-
-        return
-
-
-
- 
-
-
-
-    prices = get_prices_batch(tickers)
-
-
-
- 
-
-
-
-    for ticker in tickers:
-
-
-
-        refresh_portfolio()
-
-
-
-        pos = portfolio["positions"].get(ticker)
-
-
-
-        if pos is None:
-
-
-
-            continue
-
-
-
- 
-
-
-
-        price = prices.get(ticker)
-
-
-
-        if price is None:
-
-
-
-            missing_price_counts[ticker] = missing_price_counts.get(ticker, 0) + 1
-
-
-
-            if missing_price_counts[ticker] == PRICE_MISSING_ALERT_THRESHOLD:
-
-
-
-                send(f"WARNING: Missing price for {ticker} {missing_price_counts[ticker]} times. Position not managed.")
-
-
-
-            continue
-
-
-
-        missing_price_counts[ticker] = 0
-
-
-
- 
-
-
-
-        try:
-
-
-
-            pos = repair_position_if_needed(ticker, pos)
-
-
-
-        except Exception as exc:
-
-
-
-            print(f"[POSITION REPAIR ERROR] {ticker}: {exc}")
-
-
-
-            send(f"CRITICAL: Position repair failed for {ticker}: {exc}")
-
-
-
-            continue
-
-
-
- 
-
-
-
-        entry = float(pos["price"])
-
-
-
-        old_highest = float(pos["highest"])
-
-
-
-        new_highest = max(old_highest, price)
-
-
-
-        if new_highest > old_highest:
-
-
-
-            print(f"[📈 NEW HIGH] {ticker} -> {new_highest}")
-
-
-
-            pos["highest"] = new_highest
-
-
-
- 
-
-
-
-        risk_per_share = pos.get("risk_per_share")
-
-
-
-        trade_r: Optional[float] = None
-
-
-
-        if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-
-
-
-            trade_r = (price - entry) / float(risk_per_share)
-
-
-
- 
-
-
-
-        print(
-
-
-
-            f"[MANAGE] {ticker} | "
-
-
-
-            f"price={price} | stop={round(float(pos['stop']), 2)} | "
-
-
-
-            f"high={round(float(pos['highest']), 2)} | R={None if trade_r is None else round(trade_r, 2)}"
-
-
-
-        )
-
-
-
- 
-
-
-
-        exit_params = position_exit_params(pos)
-
-        # Compute effective stop first. This fixes the gap-through-trailing-stop bug.
-
-
-
-        effective_stop = float(pos["stop"])
-
-
-
-        atr_val = pos.get("atr")
-
-
-
-        if isinstance(atr_val, (int, float)) and atr_val > 0:
-
-
-
-            # Preserve original intent: tighter trail once price is up 5%.
-
-
-
-            multiplier = exit_params["trail_mult_late"] if (price >= entry * (1 + exit_params["trail_tighten_pct"]) or (trade_r is not None and trade_r >= 1.5) or pos.get("partial_taken", False)) else exit_params["trail_mult_early"]
-
-
-
-            theoretical_trail = float(pos["highest"]) - (multiplier * float(atr_val))
-
-
-
-            if theoretical_trail > effective_stop:
-
-
-
-                effective_stop = theoretical_trail
-
-
-
- 
-
-
-
-        # Breakeven rule, upgraded to R-based trigger from the prior version.
-
-
-
-        if trade_r is not None and trade_r >= exit_params["breakeven_r_trigger"] and effective_stop < entry:
-
-
-
-            effective_stop = entry
-
-
-
- 
-
-
-
-        # STOP / TRAILING STOP CHECK FIRST.
-
-
-
-        if price <= effective_stop:
-
-
-
-            fill_price = min(price, effective_stop)
-
-
-
-            trade = record_auto_exit_or_partial(
-
-                ticker=ticker,
-
-                shares=int(pos["shares"]),
-
-                price=fill_price,
-
-                exit_reason="stop",
-
-                updated_fields={
-
-                    "highest": pos["highest"],
-
-                    "stop": effective_stop
-
-                },
-
-            )
-
-
-
-            if trade:
-
-                exit_gain_pct = pct_from_entry(entry, fill_price)
-
-
-
-                send(
-
-                    f"📉 EXIT {ticker}\n"
-
-                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
-
-                    "📤 Action: exit your remaining position according to your own sizing\n"
-
-                    f"💵 Exit price: {round(fill_price, 2)} ({format_pct(exit_gain_pct)})\n"
-
-                    f"P/L: {format_money(trade['profit'])}\n"
-
-                    f"R: {trade.get('r_multiple')}"
-
-                )
-
-
-
-                if should_forward_public_position(pos):
-
-                    send_public_signal(
-
-                        format_public_exit_signal(
-
-                            ticker=ticker,
-
-                            price=fill_price,
-
-                            trade=trade,
-
-                            reason="stop"
-
-                        )
-
-                    )
-
-
-
-            continue
-
-
-
- 
-
-
-
-        # Save stop/high updates before checking partials.
-
-
-
-        updates: Dict[str, Any] = {}
-
-
-
-        if effective_stop > float(pos["stop"]):
-
-
-
-            updates["stop"] = effective_stop
-
-
-
-        if float(pos["highest"]) != old_highest:
-
-
-
-            updates["highest"] = pos["highest"]
-
-
-
-        if updates:
-
-
-
-            update_position_fields(ticker, updates)
-
-
-
-            pos.update(updates)
-
-
-
- 
-
-
-
-        # Time / regime exits. Used mainly by the bear inverse sleeve.
-        holding_days = (now_ts() - float(pos.get("entry_time", now_ts()))) / 86400
-
-        time_exit_reason: Optional[str] = None
-
-        entry_data_for_exit = pos.get("entry_data", {}) or {}
-
-        if entry_data_for_exit.get("strategy_sleeve") in {"BEAR_INVERSE", "BEAR_STOCK"}:
-            try:
-                bear_now = bear_regime_details(market_details=market_regime_details())
-                if int(bear_now.get("score", 0) or 0) <= BEAR_EXIT_SCORE:
-                    time_exit_reason = "bear_regime_exit"
-            except Exception as exc:
-                print(f"[BEAR REGIME EXIT CHECK ERROR] {ticker}: {exc}")
-
-        if time_exit_reason is None and exit_params["max_holding_days"] > 0 and holding_days >= exit_params["max_holding_days"]:
-            time_exit_reason = "max_hold"
-
-        elif (
-            time_exit_reason is None
-            and exit_params["time_stop_days"] > 0
-            and holding_days >= exit_params["time_stop_days"]
-            and trade_r is not None
-            and trade_r < exit_params["time_stop_min_r"]
-        ):
-            time_exit_reason = "time_stop"
-
-        if time_exit_reason is not None:
-            trade = record_auto_exit_or_partial(
-                ticker=ticker,
-                shares=int(pos["shares"]),
-                price=price,
-                exit_reason=time_exit_reason,
-                updated_fields={"highest": pos["highest"], "stop": float(pos["stop"])}
-            )
-
-            if trade:
-                exit_gain_pct = pct_from_entry(entry, price)
-                send(
-                    f"⏱️ EXIT {ticker}\n"
-                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
-                    f"Reason: {time_exit_reason}\n"
-                    "📤 Action: exit your remaining position according to your own sizing\n"
-                    f"💵 Exit price: {round(price, 2)} ({format_pct(exit_gain_pct)})\n"
-                    f"P/L: {format_money(trade['profit'])}\n"
-                    f"R: {trade.get('r_multiple')}"
-                )
-
-                if should_forward_public_position(pos):
-                    send_public_signal(
-                        format_public_exit_signal(
-                            ticker=ticker,
-                            price=price,
-                            trade=trade,
-                            reason=time_exit_reason
-                        )
-                    )
-
-            continue
-
-        # Partial take-profit logic: V2.8 defaults are +10% OR +1.25R, with 40% partial.
-
-
-
-        partial_trigger = (price >= entry * (1 + exit_params["partial_pct"])) or (trade_r is not None and trade_r >= exit_params["partial_r"])
-
-
-
-        if partial_trigger and not pos.get("partial_taken", False) and int(pos["shares"]) > 1:
-
-
-
-            sell_shares = max(1, int(math.floor(int(pos["shares"]) * exit_params["partial_fraction"])))
-
-            sell_shares = min(sell_shares, int(pos["shares"]) - 1)
-
-
-
-            trade = record_auto_exit_or_partial(
-
-
-
-                ticker=ticker,
-
-
-
-                shares=sell_shares,
-
-
-
-                price=price,
-
-
-
-                exit_reason="partial",
-
-
-
-                updated_fields={"highest": pos["highest"], "stop": pos["stop"]},
-
-
-
-            )
-
-
-
-            if trade:
-
-                partial_gain_pct = pct_from_entry(entry, price)
-
-
-
-                partial_reasons = []
-
-
-
-                if price >= entry * (1 + exit_params["partial_pct"]):
-
-                    partial_reasons.append(f"+{round(exit_params['partial_pct'] * 100, 2)}% target")
-
-
-
-                if trade_r is not None and trade_r >= exit_params["partial_r"]:
-
-                    partial_reasons.append(f"+{round(exit_params['partial_r'], 2)}R target")
-
-
-
-                partial_reason_text = " + ".join(partial_reasons) if partial_reasons else "partial condition"
-
-
-
-                remaining_shares = int(pos["shares"]) - sell_shares
-
-                partial_fraction_label = int(round(float(exit_params.get("partial_fraction", PARTIAL_TAKE_PROFIT_FRACTION)) * 100))
-
-                send(
-
-                    f"💰 PARTIAL {ticker}\n"
-
-                    f"🧬 Sleeve: {sleeve_short_label(pos.get('entry_data', {}) or {})}\n"
-
-                    f"📤 SELL NOW: {sell_shares} shares (~{partial_fraction_label}% of position)\n"
-
-                    f"📦 Remaining after partial: {remaining_shares} shares\n"
-
-                    f"💵 Partial exit price: {round(price, 2)} ({format_pct(partial_gain_pct)})\n"
-
-                    f"📌 Trigger: {partial_reason_text}\n"
-
-                    f"P/L: {format_money(trade['profit'])}\n"
-
-                    f"R: {trade.get('r_multiple')}"
-
-                )
-
-
-
-                if should_forward_public_position(pos):
-
-                    send_public_signal(
-
-                        format_public_partial_signal(
-
-                            ticker=ticker,
-
-                            price=price,
-
-                            trade=trade
-
-                        )
-
-                    )
-
-
+    # Legacy VCP/Bear position manager removed in v4.8. Active Swing Alpha exits are handled by the v4.6+ wrapper.
+    return None
 
 # -----------------------------------------------------------------------------
-
-
 
 # SCANNING
 
-
-
 # -----------------------------------------------------------------------------
 
-
-
- 
-
-
-
-def should_skip_for_existing_signal(
-
-    ticker: str,
-
-    expected_bar_date: Optional[str] = None
-
-) -> bool:
-
-
-
-    signal = last_signals.get(ticker)
-
-
-
-    if not signal:
-
-        return False
-
-
-
-    try:
-
-        if isinstance(signal, dict):
-
-            signal_time = float(signal.get("time", 0))
-
-            entry_data = signal.get("entry_data", {}) or {}
-
-        else:
-
-            signal_time = float(signal)
-
-            entry_data = {}
-
-
-
-        # Important for weekend/Monday behavior:
-
-        # if the signal was already produced for the same daily candle, do not resend it.
-
-        if expected_bar_date and entry_data.get("daily_bar_date") == expected_bar_date:
-
-            return True
-
-
-
-        return now_ts() - signal_time < SIGNAL_COOLDOWN_SEC
-
-
-
-    except Exception:
-
-        return False
-
- 
-
-
-
-def count_open_bear_positions() -> int:
-    refresh_portfolio()
-    count = 0
-    for pos in portfolio["positions"].values():
-        entry_data = pos.get("entry_data", {}) or {}
-        if entry_data.get("strategy_sleeve") == "BEAR_INVERSE":
-            count += 1
-    return count
-
-
-def analyze_bear_signal(
-    ticker: str,
-    df: pd.DataFrame,
-    bear_details: Dict[str, Any],
-) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
-    """Robust 3x inverse ETF VCP bear sleeve.
-
-    This is separate from the long v2.8 VCP strategy. It only runs when
-    bear_regime_details() says the broad market is risk-off.
-    """
-    if not BEAR_SLEEVE_ENABLED:
-        return None
-
-    if ticker not in BEAR_WATCHLIST:
-        return None
-
-    if not bear_details.get("active"):
-        return None
-
-    if df is None or df.empty or len(df) < 220:
-        return None
-
-    close = df["Close"].dropna()
-    high = df["High"]
-    low = df["Low"]
-    volume = df["Volume"]
-
-    price = float(close.iloc[-1])
-    prev_close = float(close.iloc[-2])
-
-    if price <= 0 or prev_close <= 0:
-        return None
-
-    rsi_val = rsi(close).iloc[-1]
-    atr_val = atr(df).iloc[-1]
-    atr50_val = atr(df, period=50).iloc[-1]
-    ma10 = close.rolling(10).mean().iloc[-1]
-    ma20 = close.rolling(20).mean().iloc[-1]
-    ma50 = close.rolling(50).mean().iloc[-1]
-    avg_vol = volume.rolling(20).mean().iloc[-1]
-
-    bb_mid = close.rolling(20).mean()
-    bb_std = close.rolling(20).std()
-    bb_width = ((bb_mid + (2 * bb_std)) - (bb_mid - (2 * bb_std))) / bb_mid
-    bb_width_rank = bb_width.rolling(100).rank(pct=True).iloc[-1]
-
-    required = [rsi_val, atr_val, atr50_val, ma10, ma20, ma50, avg_vol, bb_width_rank]
-    if any(pd.isna(x) for x in required):
-        return None
-
-    atr_pct = float(atr_val) / price
-    atr_ratio = float(atr_val) / float(atr50_val) if float(atr50_val) > 0 else None
-    avg_dollar_volume = float(avg_vol) * price
-    volume_ratio = float(volume.iloc[-1]) / float(avg_vol) if float(avg_vol) > 0 else 0.0
-    close_loc = close_location(df)
-    daily_move_pct = ((price - prev_close) / prev_close) * 100
-
-    if price < BEAR_MIN_PRICE:
-        return None
-    if avg_dollar_volume < BEAR_MIN_AVG_DOLLAR_VOLUME:
-        return None
-    if atr_pct < BEAR_MIN_ATR_PCT or atr_pct > BEAR_MAX_ATR_PCT:
-        return None
-
-    recent_high_20 = float(close.iloc[-21:-1].max())
-    recent_high_55 = float(close.iloc[-56:-1].max())
-    breakout_20 = price > recent_high_20
-    breakout_55 = price > recent_high_55
-
-    if not (breakout_20 or breakout_55):
-        return None
-
-    recent_high_20_window = float(high.iloc[-21:].max())
-    recent_low_20_window = float(low.iloc[-21:].min())
-    recent_range_20_pct = (recent_high_20_window - recent_low_20_window) / price
-    breakout_level = recent_high_55 if breakout_55 else recent_high_20
-    breakout_extension_atr = max(0.0, (price - breakout_level) / float(atr_val)) if float(atr_val) > 0 else 999.0
-
-    vcp_candidate = (
-        recent_range_20_pct <= BEAR_VCP_MAX_BASE_RANGE_PCT
-        and atr_ratio is not None and atr_ratio <= BEAR_VCP_MAX_ATR_RATIO
-        and float(bb_width_rank) <= BEAR_VCP_MAX_BB_WIDTH_RANK
-        and volume_ratio >= BEAR_VCP_MIN_VOLUME_RATIO
-        and close_loc >= BEAR_VCP_MIN_CLOSE_LOCATION
-        and price > float(ma20) > float(ma50)
-        and daily_move_pct > 0
-        and daily_move_pct <= BEAR_MAX_DAY_MOVE_PCT
-        and float(rsi_val) <= BEAR_MAX_RSI
-    )
-
-    if not vcp_candidate:
-        return None
-
-    score = 0
-
-    if price > float(ma50):
-        score += 12
-    if float(ma20) > float(ma50):
-        score += 10
-    if price > float(ma20):
-        score += 6
-    if price > float(ma10):
-        score += 4
-    if rolling_slope_positive(close.rolling(20).mean(), lookback=5):
-        score += 6
-    if breakout_20:
-        score += 8
-    if breakout_55:
-        score += 12
-    if volume_ratio >= BEAR_VCP_MIN_VOLUME_RATIO:
-        score += 8
-    if volume_ratio >= 1.5:
-        score += 5
-    if close_loc >= BEAR_VCP_MIN_CLOSE_LOCATION:
-        score += 8
-    if recent_range_20_pct <= BEAR_VCP_MAX_BASE_RANGE_PCT * 0.75:
-        score += 6
-    if atr_ratio is not None and atr_ratio <= BEAR_VCP_MAX_ATR_RATIO * 0.90:
-        score += 5
-    if float(bb_width_rank) <= 0.45:
-        score += 5
-    score += int(bear_details.get("score", 0) or 0) // 4
-
-    if score < BEAR_VCP_MIN_SCORE:
-        return None
-
-    atr_stop = price - (BEAR_ATR_STOP_MULT * float(atr_val))
-    structure_stop = float(breakout_level) - (0.35 * float(atr_val))
-    stop = min(atr_stop, structure_stop)
-
-    if stop <= 0 or stop >= price:
-        stop = price - (BEAR_ATR_STOP_MULT * float(atr_val))
-
-    risk = price - stop
-
-    if risk <= 0:
-        return None
-
-    if (risk / price) > BEAR_MAX_RISK_PER_SHARE_PCT:
-        return None
-
-    refresh_portfolio()
-    account_equity = approximate_equity_from_portfolio()
-    available_cash = float(portfolio["cash"])
-
-    shares_by_risk = int((account_equity * BEAR_RISK_PCT) / risk)
-    shares_by_position_cap = int((account_equity * MAX_POSITION_EQUITY_PCT) / price)
-    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
-    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
-
-    if shares <= 0:
-        return None
-
-    rank_score = float(score)
-    if breakout_55:
-        rank_score += 8
-    rank_score += max(0.0, min(8.0, (volume_ratio - 1.0) * 6.0))
-    rank_score += max(0.0, min(10.0, (close_loc - 0.50) * 40.0))
-
-    metrics = {
-        "setup_type": "bear_vcp_inverse",
-        "strategy_sleeve": "BEAR_INVERSE",
-        "strategy_family": "bear_v1_robust_3x_vcp",
-        "breakout": True,
-        "breakout_20": breakout_20,
-        "breakout_55": breakout_55,
-        "breakout_level": breakout_level,
-        "breakout_extension_atr": breakout_extension_atr,
-        "recent_range_20_pct": recent_range_20_pct,
-        "atr": float(atr_val),
-        "atr_pct": atr_pct,
-        "atr_ratio_14_50": atr_ratio,
-        "bb_width_rank_100": float(bb_width_rank),
-        "volume_ratio": volume_ratio,
-        "daily_move_pct": daily_move_pct,
-        "bear_score": int(bear_details.get("score", 0) or 0),
-        "rank_score": rank_score,
-        "min_score_required": BEAR_VCP_MIN_SCORE,
-        "close_location": close_loc,
-        "avg_dollar_volume": avg_dollar_volume,
-        "risk_pct_used": BEAR_RISK_PCT,
-        "stop_model": "bear_v1_robust_3x_vcp_structure_atr",
-        "exit_params": {
-            "breakeven_r_trigger": BEAR_BREAKEVEN_R_TRIGGER,
-            "partial_take_profit_r": BEAR_PARTIAL_TAKE_PROFIT_R,
-            "partial_take_profit_pct": BEAR_PARTIAL_TAKE_PROFIT_PCT,
-            "partial_take_profit_fraction": BEAR_PARTIAL_TAKE_PROFIT_FRACTION,
-            "trail_mult_early": BEAR_TRAIL_MULT_EARLY,
-            "trail_mult_late": BEAR_TRAIL_MULT_LATE,
-            "trail_tighten_pct": TRAIL_TIGHTEN_PCT,
-            "time_stop_days": BEAR_TIME_STOP_DAYS,
-            "time_stop_min_r": BEAR_TIME_STOP_MIN_R,
-            "max_holding_days": BEAR_MAX_HOLDING_DAYS,
-        },
-    }
-
-    return ticker, price, shares, stop, score, metrics
-
-
-def scan_market() -> bool:
-    global last_signals
-
-    refresh_portfolio()
-    last_signals = load_signals()
-
-    usable_data_found = False
-    attempted_historical = 0
-
-    skip_counts = {
-        "cooldown": 0,
-        "existing_position": 0,
-        "max_positions": 0,
-        "low_cash": 0,
-        "existing_signal": 0,
-        "earnings_soon": 0,
-        "earnings_unknown": 0,
-        "no_historical": 0,
-        "stale_data": 0,
-        "strategy_filter": 0,
-        "risk_cap": 0,
-        "cash_reserve": 0,
-        "candidates": 0,
-        "signals_sent": 0,
-        "bear_regime_block_long": 0,
-        "bear_candidates": 0,
-        "bear_signals_sent": 0,
-    }
-
-    today = ny_date_str()
-    expected_bar = expected_daily_bar_date()
-
-    stale = []
-
-    for ticker, signal in last_signals.items():
-        if isinstance(signal, dict):
-            entry_data = signal.get("entry_data", {}) or {}
-        else:
-            entry_data = {}
-
-        signal_day = entry_data.get("signal_date_ny")
-        signal_bar_day = entry_data.get("daily_bar_date")
-
-        if expected_bar:
-            if signal_bar_day != expected_bar:
-                stale.append(ticker)
-        else:
-            if signal_day != today:
-                stale.append(ticker)
-
-    if stale:
-        with db_tx() as conn:
-            for ticker in stale:
-                conn.execute(
-                    "DELETE FROM signals WHERE ticker = ?",
-                    (ticker,)
-                )
-
-        last_signals = load_signals()
-
-    heartbeat()
-
-    market_details = market_regime_details()
-    market = str(market_details.get("condition", "UNCERTAIN"))
-    market_score = int(market_details.get("score", 0) or 0)
-
-    market_emoji = "🟡"
-
-    if market == "BULL":
-        market_emoji = "🐂"
-    elif market == "BEAR":
-        market_emoji = "🐻"
-
-    print(f"{market_emoji} MARKET | {market} | score={market_score}/8")
-
-    bear_details = bear_regime_details(market_details=market_details)
-    bear_active = bool(BEAR_SLEEVE_ENABLED and bear_details.get("active"))
-    print(
-        f"🐻 BEAR SLEEVE | active={yes_no(bear_active)} | "
-        f"score={bear_details.get('score')}/{bear_details.get('max_score')} | "
-        f"entry={BEAR_ENTRY_SCORE}"
-    )
-
-    cooldowns = get_cooldowns()
-    base_risk_details = open_risk_details()
-
-    reserved_signal_risk, reserved_signal_capital, reserved_signal_tickers = (
-        outstanding_signal_reservations(expected_bar)
-    )
-
-    if reserved_signal_tickers:
-        print(
-            "[SIGNAL RESERVATION] "
-            f"tickers={reserved_signal_tickers} | "
-            f"risk={round(reserved_signal_risk, 2)} | "
-            f"capital={round(reserved_signal_capital, 2)}"
-        )
-
-    if PANIC_MODE:
-       print("[SCAN BLOCKED] PANIC_MODE")
-       return True
-
-    if daily_drawdown_exceeded():
-       print("[🚨 SCAN BLOCKED] DAILY LOSS LIMIT")
-       return True
-
-    guard = portfolio_risk_guard_details()
-    if guard.get("block_new_entries"):
-       print("[🚨 SCAN BLOCKED] PORTFOLIO HARD DRAWDOWN GUARD")
-       maybe_send_portfolio_risk_guard_alert(guard)
-       return True
-
-    if guard.get("soft_active"):
-       maybe_send_portfolio_risk_guard_alert(guard)
-
-    available_signal_slots = max(
-        0,
-        MAX_OPEN_POSITIONS - len(portfolio["positions"]) - len(reserved_signal_tickers)
-    )
-
-    if available_signal_slots <= 0:
-        print("[SCAN COMPLETE] No open position slots available after signal reservations.")
-        return True
-
-    candidates: List[Dict[str, Any]] = []
-
-    long_scan_universe = [] if (bear_active and BEAR_BLOCK_LONG_SIGNALS_IN_BEAR) else WATCHLIST
-
-    if bear_active and BEAR_BLOCK_LONG_SIGNALS_IN_BEAR:
-        skip_counts["bear_regime_block_long"] = len(WATCHLIST)
-        print("[LONG SCAN BLOCKED] Bear sleeve is active; no new long VCP signals will be sent.")
-
-    for ticker in long_scan_universe:
-        try:
-            refresh_portfolio()
-
-            if ticker in cooldowns and now_ts() - cooldowns[ticker] < STOP_COOLDOWN_SEC:
-                skip_counts["cooldown"] += 1
-                continue
-
-            if ticker in portfolio["positions"]:
-                skip_counts["existing_position"] += 1
-                continue
-
-            if len(portfolio["positions"]) >= MAX_OPEN_POSITIONS:
-                skip_counts["max_positions"] += 1
-                continue
-
-            if portfolio["cash"] < MIN_CASH_REQUIRED:
-                skip_counts["low_cash"] += 1
-                continue
-
-            if should_skip_for_existing_signal(ticker, expected_bar):
-                skip_counts["existing_signal"] += 1
-                continue
-
-            earnings = earnings_status(ticker, days=EARNINGS_LOOKAHEAD_DAYS)
-
-            if earnings == "SOON":
-                skip_counts["earnings_soon"] += 1
-                print(f"[SKIP EARNINGS] {ticker}")
-                continue
-
-            if earnings == "UNKNOWN" and FAIL_CLOSED_ON_EARNINGS_UNKNOWN:
-                skip_counts["earnings_unknown"] += 1
-                print(f"[SKIP EARNINGS UNKNOWN] {ticker}")
-                continue
-
-            attempted_historical += 1
-
-            df = get_signal_dataframe(ticker, limit=260)
-
-            if df is None or df.empty or len(df) < 220:
-                skip_counts["no_historical"] += 1
-                continue
-
-            if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
-                skip_counts["stale_data"] += 1
-
-                last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
-                current_ny = ny_now()
-
-                print(
-                    f"[🧊 STALE DATA SKIP] "
-                    f"{ticker} | "
-                    f"last={last_date} | "
-                    f"today={current_ny.date()} | "
-                    f"ny={current_ny.strftime('%H:%M')}"
-                )
-
-                continue
-
-            usable_data_found = True
-
-            close = df["Close"].dropna()
-
-            if len(close) < 2:
-                continue
-
-            price = float(close.iloc[-1])
-            prev_close = float(close.iloc[-2])
-
-            if prev_close <= 0:
-                continue
-
-            move = ((price - prev_close) / prev_close) * 100
-            levels = [10, 15, 20]
-            existing_levels = get_breakout_levels(ticker)
-            triggered_levels = [lvl for lvl in levels if move >= lvl]
-
-            if triggered_levels:
-                highest_level = max(triggered_levels)
-
-                if highest_level not in existing_levels:
-                    send(
-                        f"🚀 BREAKOUT ALERT\n\n"
-                        f"🏷️ Ticker: {ticker}\n"
-                        f"📊 Move: +{round(move, 2)}%\n"
-                        f"🎚️ Level: {highest_level}%+"
-                    )
-
-                    existing_levels.update(triggered_levels)
-                    set_breakout_levels(ticker, existing_levels)
-
-            elif move < 8:
-                clear_breakout_levels(ticker)
-
-            risk_details = base_risk_details
-
-            if risk_details["equity"] <= 0:
-                continue
-
-            if (risk_details["initial_risk_dollars"] + reserved_signal_risk) / risk_details["equity"] >= MAX_TOTAL_RISK:
-                skip_counts["risk_cap"] += 1
-                continue
-
-            result = analyze(ticker, market, df, market_details=market_details)
-
-            if not result:
-                skip_counts["strategy_filter"] += 1
-                continue
-
-            ticker, price, shares, stop, score, metrics = result
-
-            risk_amount = (price - stop) * shares
-            capital = shares * price
-            equity_at_signal = float(risk_details["equity"])
-
-            position_size_pct = (
-                (capital / equity_at_signal) * 100
-                if equity_at_signal > 0
-                else 0.0
-            )
-
-            single_trade_risk_pct = (
-                (risk_amount / equity_at_signal) * 100
-                if equity_at_signal > 0
-                else 0.0
-            )
-
-            max_valid_entry = min(
-                price * (1 + MAX_ENTRY_EXTENSION_PCT),
-                price + (0.35 * float(metrics.get("atr", 0) or 0))
-            )
-
-            entry_data = {
-                "rsi": round(float(rsi(df["Close"]).iloc[-1]), 2),
-                "score": int(score),
-                "market": market,
-                "market_score": metrics.get("market_score"),
-                "atr": round(float(metrics.get("atr", 0)), 4),
-                "atr_pct": round(float(metrics.get("atr_pct", 0)) * 100, 2),
-                "stop": round(stop, 2),
-                "breakout": bool(metrics.get("breakout")),
-                "setup_type": metrics.get("setup_type"),
-                "strategy_sleeve": "LONG_VCP",
-                "strategy_family": "v2_8_vcp_long",
-                "volume_ratio": None if metrics.get("volume_ratio") is None else round(float(metrics.get("volume_ratio")), 2),
-                "daily_move_pct": round(float(metrics.get("daily_move_pct", 0)), 2),
-                "trend_score": int(metrics.get("trend_score", 0) or 0),
-                "rs_score": int(metrics.get("rs_score", 0) or 0),
-                "min_score_required": int(metrics.get("min_score_required", 0) or 0),
-                "rel_20_spy": None if metrics.get("rel_20_spy") is None else round(float(metrics.get("rel_20_spy")) * 100, 2),
-                "rel_63_spy": None if metrics.get("rel_63_spy") is None else round(float(metrics.get("rel_63_spy")) * 100, 2),
-                "close_location": round(float(metrics.get("close_location", 0)), 2),
-                "rank_score": round(float(metrics.get("rank_score", score) or score), 2),
-                "recent_range_20_pct": round(float(metrics.get("recent_range_20_pct", 0)) * 100, 2),
-                "breakout_extension_atr": round(float(metrics.get("breakout_extension_atr", 0)), 2),
-                "extension_ma20_pct": round(float(metrics.get("extension_ma20", 0)) * 100, 2),
-                "avg_dollar_volume": round(float(metrics.get("avg_dollar_volume", 0)), 2),
-                "stop_model": metrics.get("stop_model"),
-                "strategy_version": STRATEGY_VERSION,
-                "signal_time": now_ts(),
-                "signal_date_ny": ny_date_str(),
-                "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
-                "signal_price": round(price, 2),
-                "max_valid_entry": round(max_valid_entry, 2),
-                "shares": int(shares),
-                "capital": round(capital, 2),
-                "equity_at_signal": round(equity_at_signal, 2),
-                "position_size_pct": round(position_size_pct, 2),
-                "single_trade_risk_pct": round(single_trade_risk_pct, 2),
-                "risk_amount": round(risk_amount, 2),
-            }
-
-            candidates.append({
-                "ticker": ticker,
-                "price": price,
-                "shares": shares,
-                "stop": stop,
-                "score": score,
-                "rank_score": float(metrics.get("rank_score", score) or score),
-                "risk_amount": risk_amount,
-                "capital": capital,
-                "entry_data": entry_data,
-            })
-
-            skip_counts["candidates"] += 1
-
-        except Exception as exc:
-            logger.exception(f"[❌ SCAN ERROR] {ticker}: {exc}")
-            traceback.print_exc()
-            send(f"WARNING: scan error for {ticker}: {exc}")
-
-    # Bear inverse sleeve candidates. This runs only in confirmed risk-off regimes.
-    if bear_active:
-        open_bear_positions = count_open_bear_positions()
-        bear_slots = max(0, BEAR_MAX_OPEN_POSITIONS - open_bear_positions)
-
-        if bear_slots <= 0:
-            print(f"[BEAR SCAN COMPLETE] No bear sleeve slots available: {open_bear_positions}/{BEAR_MAX_OPEN_POSITIONS}")
-
-        else:
-            for ticker in BEAR_WATCHLIST:
-                try:
-                    refresh_portfolio()
-
-                    if ticker in cooldowns and now_ts() - cooldowns[ticker] < STOP_COOLDOWN_SEC:
-                        skip_counts["cooldown"] += 1
-                        continue
-
-                    if ticker in portfolio["positions"]:
-                        skip_counts["existing_position"] += 1
-                        continue
-
-                    if should_skip_for_existing_signal(ticker, expected_bar):
-                        skip_counts["existing_signal"] += 1
-                        continue
-
-                    attempted_historical += 1
-                    df = get_signal_dataframe(ticker, limit=260)
-
-                    if df is None or df.empty or len(df) < 220:
-                        skip_counts["no_historical"] += 1
-                        continue
-
-                    if REQUIRE_FRESH_DAILY_CANDLE and not is_daily_data_current(df):
-                        skip_counts["stale_data"] += 1
-                        continue
-
-                    usable_data_found = True
-                    result = analyze_bear_signal(ticker, df, bear_details=bear_details)
-
-                    if not result:
-                        skip_counts["strategy_filter"] += 1
-                        continue
-
-                    ticker, price, shares, stop, score, metrics = result
-                    risk_amount = (price - stop) * shares
-                    capital = shares * price
-                    risk_details = base_risk_details
-                    equity_at_signal = float(risk_details["equity"])
-
-                    if equity_at_signal <= 0:
-                        continue
-
-                    position_size_pct = (capital / equity_at_signal) * 100
-                    single_trade_risk_pct = (risk_amount / equity_at_signal) * 100
-                    max_valid_entry = min(
-                        price * (1 + MAX_ENTRY_EXTENSION_PCT),
-                        price + (0.35 * float(metrics.get("atr", 0) or 0))
-                    )
-
-                    exit_params = metrics.get("exit_params", {}) or {}
-                    entry_data = {
-                        "rsi": round(float(rsi(df["Close"]).iloc[-1]), 2),
-                        "score": int(score),
-                        "market": "BEAR",
-                        "market_score": market_score,
-                        "bear_score": metrics.get("bear_score"),
-                        "atr": round(float(metrics.get("atr", 0)), 4),
-                        "atr_pct": round(float(metrics.get("atr_pct", 0)) * 100, 2),
-                        "stop": round(stop, 2),
-                        "breakout": bool(metrics.get("breakout", False)),
-                        "setup_type": metrics.get("setup_type", "bear_stock_rs"),
-                        "strategy_sleeve": metrics.get("strategy_sleeve", "BEAR_STOCK"),
-                        "bear_stock_bucket": metrics.get("bear_stock_bucket") or metrics.get("bucket"),
-                        "rel_21_spy": None if metrics.get("rel21_spy") is None else round(float(metrics.get("rel21_spy")) * 100, 2),
-                        "rel_63_spy": None if metrics.get("rel63_spy") is None else round(float(metrics.get("rel63_spy")) * 100, 2),
-                        "rel_21_qqq": None if metrics.get("rel21_qqq") is None else round(float(metrics.get("rel21_qqq")) * 100, 2),
-                        "volume_ratio": None if metrics.get("volume_ratio") is None else round(float(metrics.get("volume_ratio")), 2),
-                        "daily_move_pct": round(float(metrics.get("daily_move_pct", 0)), 2),
-                        "min_score_required": int(metrics.get("min_score_required", 0) or 0),
-                        "close_location": round(float(metrics.get("close_location", 0)), 2),
-                        "rank_score": round(float(metrics.get("rank_score", score) or score), 2),
-                        "recent_range_20_pct": round(float(metrics.get("recent_range_20_pct", 0)) * 100, 2),
-                        "breakout_extension_atr": round(float(metrics.get("breakout_extension_atr", 0)), 2),
-                        "avg_dollar_volume": round(float(metrics.get("avg_dollar_volume", 0)), 2),
-                        "stop_model": metrics.get("stop_model"),
-                        "strategy_version": BEAR_STRATEGY_VERSION,
-                        "signal_time": now_ts(),
-                        "signal_date_ny": ny_date_str(),
-                        "daily_bar_date": pd.to_datetime(df.iloc[-1]["date"]).date().isoformat(),
-                        "signal_price": round(price, 2),
-                        "max_valid_entry": round(max_valid_entry, 2),
-                        "shares": int(shares),
-                        "capital": round(capital, 2),
-                        "equity_at_signal": round(equity_at_signal, 2),
-                        "position_size_pct": round(position_size_pct, 2),
-                        "single_trade_risk_pct": round(single_trade_risk_pct, 2),
-                        "risk_amount": round(risk_amount, 2),
-                        "breakeven_r_trigger": exit_params.get("breakeven_r_trigger"),
-                        "partial_take_profit_r": exit_params.get("partial_take_profit_r"),
-                        "partial_take_profit_pct": exit_params.get("partial_take_profit_pct"),
-                        "partial_take_profit_fraction": exit_params.get("partial_take_profit_fraction"),
-                        "trail_mult_early": exit_params.get("trail_mult_early"),
-                        "trail_mult_late": exit_params.get("trail_mult_late"),
-                        "trail_tighten_pct": exit_params.get("trail_tighten_pct"),
-                        "time_stop_days": exit_params.get("time_stop_days"),
-                        "time_stop_min_r": exit_params.get("time_stop_min_r"),
-                        "max_holding_days": exit_params.get("max_holding_days"),
-                    }
-
-                    candidates.append({
-                        "ticker": ticker,
-                        "price": price,
-                        "shares": shares,
-                        "stop": stop,
-                        "score": score,
-                        "rank_score": float(metrics.get("rank_score", score) or score),
-                        "risk_amount": risk_amount,
-                        "capital": capital,
-                        "entry_data": entry_data,
-                        "is_bear": True,
-                    })
-
-                    skip_counts["candidates"] += 1
-                    skip_counts["bear_candidates"] += 1
-
-                except Exception as exc:
-                    logger.exception(f"[❌ BEAR SCAN ERROR] {ticker}: {exc}")
-                    traceback.print_exc()
-                    send(f"WARNING: bear scan error for {ticker}: {exc}")
-
-    candidates = sorted(candidates, key=lambda x: float(x.get("rank_score", x.get("score", 0)) or 0), reverse=True)
-
-    sent_count = 0
-    bear_sent_count = 0
-
-    for candidate in candidates:
-        is_bear_candidate = bool(candidate.get("is_bear"))
-
-        if is_bear_candidate:
-            if bear_sent_count >= BEAR_MAX_SIGNALS_PER_SCAN:
-                continue
-            if bear_sent_count >= max(0, BEAR_MAX_OPEN_POSITIONS - count_open_bear_positions()):
-                skip_counts["max_positions"] += 1
-                continue
-        else:
-            if sent_count >= V2_MAX_SIGNALS_PER_SCAN:
-                break
-
-        total_signals_this_scan = sent_count + bear_sent_count
-
-        if total_signals_this_scan >= available_signal_slots:
-            skip_counts["max_positions"] += 1
-            print(
-                f"[SIGNAL SLOT LIMIT] sent={total_signals_this_scan} "
-                f"available_slots={available_signal_slots}"
-            )
-            break
-
-        ticker = candidate["ticker"]
-        price = float(candidate["price"])
-        shares = int(candidate["shares"])
-        stop = float(candidate["stop"])
-        score = int(candidate["score"])
-        rank_score = float(candidate.get("rank_score", score) or score)
-        risk_amount = float(candidate["risk_amount"])
-        capital = float(candidate["capital"])
-        entry_data = candidate["entry_data"]
-
-        risk_details = base_risk_details
-        equity_at_signal = float(risk_details["equity"])
-
-        projected_risk_pct = (
-            risk_details["initial_risk_dollars"] + reserved_signal_risk + risk_amount
-        ) / equity_at_signal
-
-        projected_capital = reserved_signal_capital + capital
-
-        if projected_risk_pct > MAX_TOTAL_RISK:
-            skip_counts["risk_cap"] += 1
-            print(
-                f"[SKIP MAX RISK] {ticker} projected={round(projected_risk_pct * 100, 2)}% "
-                f"max={round(MAX_TOTAL_RISK * 100, 2)}%"
-            )
-            continue
-
-        if projected_capital > portfolio["cash"] * CASH_USAGE_BUFFER:
-            skip_counts["cash_reserve"] += 1
-            print(
-                f"[SKIP SIGNAL CASH RESERVE] {ticker} projected_capital={round(projected_capital, 2)} "
-                f"cash={round(portfolio['cash'], 2)}"
-            )
-            continue
-
-        entry_data["projected_total_risk_pct"] = round(projected_risk_pct * 100, 2)
-
-        score_label = "🐻 Bear RS score" if is_bear_candidate else "⭐ V2.8 VCP score"
-        extra_context = ""
-
-        if is_bear_candidate:
-            extra_context = (
-                f"🐻 Bear regime score: {entry_data.get('bear_score')}/60\n"
-                f"🧺 Bear stock bucket: {entry_data.get('bear_stock_bucket') or 'n/a'}\n"
-                f"💪 RS vs SPY: 21d {entry_data.get('rel_21_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
-                f"💪 RS vs QQQ: 21d {entry_data.get('rel_21_qqq')}%\n"
-                f"🚪 Primary exit: bear pressure <= {BEAR_EXIT_SCORE}\n"
-            )
-        else:
-            extra_context = (
-                f"💪 RS vs SPY: 20d {entry_data.get('rel_20_spy')}% | 63d {entry_data.get('rel_63_spy')}%\n"
-                f"🧱 Trend score: {entry_data.get('trend_score')} | RS score: {entry_data.get('rs_score')}\n"
-            )
-
-        send(
-            "📈 ENTRY SIGNAL\n\n"
-            f"🏷️ Ticker: {ticker}\n"
-            f"🌎 Market: {market_label(entry_data['market'])} ({entry_data.get('market_score')}/8)\n"
-            f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
-            f"⚙️ Setup: {setup_label(entry_data['setup_type'])}\n\n"
-            f"🟢 ENTRY: {round(price, 2)}\n"
-            f"🟡 MAX ENTRY LIMIT: {entry_data['max_valid_entry']}\n"
-            f"🔴 STOP/LOSS: {round(stop, 2)}\n"
-            f"📐 Position size: {round(entry_data['position_size_pct'], 2)}% of equity\n\n"
-            f"{score_label}: {score} / required {entry_data.get('min_score_required')}\n"
-            f"📊 RSI: {round(float(entry_data['rsi']), 1)}\n"
-            f"📊 Volume ratio: {entry_data.get('volume_ratio')}\n"
-            f"🏅 Rank score: {round(rank_score, 2)}\n"
-            f"{extra_context}\n"
-            f"🛒 Bot buy size: {shares} shares\n"
-            f"💰 Capital: {format_money(capital)}\n"
-            f"⚠️ Trade risk: {format_money(risk_amount)} "
-            f"({round(entry_data['single_trade_risk_pct'], 2)}% of equity)\n"
-            f"📉 Projected total risk: {round(projected_risk_pct * 100, 2)}%"
-            f"\n\n⚠️ Educational signal only. Use your own risk and account size."
-        )
-
-        public_ok, public_info = send_public_signal(
-            format_public_entry_signal(ticker, entry_data)
-        )
-
-        entry_data["public_signal_sent"] = bool(public_ok)
-        entry_data["public_signal_time"] = now_ts() if public_ok else None
-        entry_data["public_signal_error"] = None if public_ok else str(public_info)
-
-        save_signal(ticker, now_ts(), entry_data)
-
-        skip_counts["signals_sent"] += 1
-        if is_bear_candidate:
-            skip_counts["bear_signals_sent"] += 1
-            bear_sent_count += 1
-        else:
-            sent_count += 1
-        reserved_signal_risk += risk_amount
-        reserved_signal_capital += capital
-
-    refresh_portfolio()
-
-    print(
-        "[SCAN SUMMARY] "
-        f"usable_data_found={usable_data_found} | "
-        f"attempted_historical={attempted_historical} | "
-        f"positions={len(portfolio['positions'])}/{MAX_OPEN_POSITIONS} | "
-        f"cash={round(portfolio['cash'], 2)} | "
-        f"skips={skip_counts}"
-    )
-
-    if usable_data_found:
-        return True
-
-    if attempted_historical == 0:
-        print("[SCAN COMPLETE] No eligible tickers reached historical-data check.")
-        return True
-
+def should_skip_for_existing_signal(ticker: str, signal_now: float) -> bool:
+    # Legacy signal cooldown helper removed from active VCP path. Active sleeves manage their own plans/signals.
     return False
 
+def count_open_bear_positions() -> int:
+    return 0
 
+def analyze_bear_signal(*args: Any, **kwargs: Any) -> None:
+    # Bear/inverse strategy removed in v4.8.
+    return None
+
+def scan_market() -> bool:
+    # Legacy VCP/Bear scanner removed in v4.8. Final scan_market override routes to Swing Alpha.
+    try:
+        set_meta("last_scan_day", ny_date_str())
+        bar = expected_daily_bar_date()
+        if bar:
+            set_meta("last_scan_bar_date", bar)
+    except Exception:
+        pass
+    return True
 
 # -----------------------------------------------------------------------------
-
-
 
 # STARTUP / MAIN LOOP
 
-
-
 # -----------------------------------------------------------------------------
-
-
-
- 
-
-
 
 def startup_checks() -> None:
 
-
-
     init_db()
-
-
 
     migrate_legacy_json_once()
 
-
-
     refresh_portfolio()
-
-
 
     global last_signals
 
-
-
     last_signals = load_signals()
-
-
-
- 
-
-
 
     # Hard sanity checks. Do not silently continue with impossible state.
 
-
-
     if portfolio["cash"] < 0:
-
-
 
         raise RuntimeError("Invalid account state: negative cash")
 
-
-
     for ticker, pos in portfolio["positions"].items():
-
-
 
         if int(pos.get("shares", 0)) <= 0:
 
-
-
             raise RuntimeError(f"Invalid position state for {ticker}: non-positive shares")
-
-
 
         if not is_finite_positive(float(pos.get("price", 0))):
 
-
-
             raise RuntimeError(f"Invalid position state for {ticker}: invalid entry price")
-
-
 
     auto_initialize_withdrawal_hwm_if_needed()
 
-
-
- 
-
-
-
 def maybe_save_daily_equity_snapshot() -> None:
-
-
 
     today = ny_date_str()
 
-
-
     last = get_meta("last_equity_snapshot_date")
-
-
 
     if last == today:
 
-
-
         return
-
-
 
     try:
 
-
-
         save_equity_snapshot()
-
-
 
         print("[EQUITY SNAPSHOT SAVED]")
 
-
-
     except Exception as exc:
-
-
 
         print(f"[EQUITY SNAPSHOT ERROR] {exc}")
 
-
-
         send(f"WARNING: equity snapshot failed: {exc}")
-
-
-
- 
-
-
-
- 
-
-
 
 def main() -> None:
 
-
-
     global LAST_HEARTBEAT, LAST_SCAN_ATTEMPT
 
-
-
     startup_checks()
-
-
 
     send(
 
@@ -14750,75 +7570,39 @@ def main() -> None:
 
     audit("MAIN_LOOP_STARTED")
 
-
-
     send(f"SERVER TIME: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
-
-
 
     send(f"NY TIME: {ny_now().strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
-
-
- 
-
-
-
     while True:
 
-
-
         try:
-
-
 
             LAST_HEARTBEAT = now_ts()
 
             heartbeat()
 
-
-
             current_ny = ny_now()
 
-
-
             maybe_save_daily_equity_snapshot()
-
-
 
             maybe_send_withdrawal_signal()
 
             maybe_send_wealth_core_signal()
 
-
-
             get_updates()
-
- 
-
-
 
             if (not MANAGE_ONLY_REGULAR_HOURS) or is_regular_market_hours(current_ny):
 
-
-
                 manage_positions()
-
-
-
- 
 
             # Weekend handling
 
             if not is_market_weekday(current_ny):
 
-
-
                 # Saturday-only scan
 
                 if current_ny.weekday() == 5:
-
-
 
                     last_scan_day = get_meta("last_scan_day")
 
@@ -14827,8 +7611,6 @@ def main() -> None:
                     today = current_ny.date().isoformat()
 
                     expected_bar = expected_daily_bar_date()
-
-
 
                     if (
 
@@ -14842,41 +7624,23 @@ def main() -> None:
 
                     ):
 
-
-
                         LAST_SCAN_ATTEMPT = now_ts()
 
-
-
                         scanned_ok = scan_market()
-
-
 
                         if scanned_ok:
 
                             set_meta("last_scan_day", today)
 
-
-
                             if expected_bar:
 
                                 set_meta("last_scan_bar_date", expected_bar)
-
-
 
                 time.sleep(60)
 
                 continue
 
- 
-
-
-
-
-
             # Run once during the New York near-close scan window.
-
-
 
             last_scan_day = get_meta("last_scan_day")
 
@@ -14885,8 +7649,6 @@ def main() -> None:
             today = current_ny.date().isoformat()
 
             expected_bar = expected_daily_bar_date()
-
-
 
             if (
 
@@ -14900,21 +7662,13 @@ def main() -> None:
 
             ):
 
-
-
                 LAST_SCAN_ATTEMPT = now_ts()
 
-
-
                 scanned_ok = scan_market()
-
-
 
                 if scanned_ok:
 
                     set_meta("last_scan_day", today)
-
-
 
                     if expected_bar:
 
@@ -14924,57 +7678,23 @@ def main() -> None:
 
                     print("[SCAN NOT MARKED DONE] Historical data was not usable; will retry.")
 
-
-
             time.sleep(25)
-
-
-
- 
-
-
 
         except KeyboardInterrupt:
 
-
-
             send("BOT STOPPED BY KEYBOARD INTERRUPT")
-
-
 
             raise
 
-
-
         except Exception as exc:
-
-
 
             logger.exception(f"[MAIN LOOP ERROR] {exc}")
 
-
-
             traceback.print_exc()
-
-
 
             send(f"ERROR: {exc}")
 
-
-
             time.sleep(25)
-
-
-
- 
-
-
-
- 
-
-
-
-
 
 # =============================================================================
 # V3.7 EXTENSION: SPEC_ALPHA LIVE LEDGER + PUBLIC CORE/SPEC PLANS
@@ -17418,7 +10138,6 @@ _old_realized_performance_all_time = realized_performance_all_time
 _old_maybe_send_wealth_core_signal = maybe_send_wealth_core_signal
 _old_handle_command = handle_command
 
-
 def init_db() -> None:
     _old_init_db()
     conn = db_connect()
@@ -17478,7 +10197,6 @@ def init_db() -> None:
     finally:
         conn.close()
 
-
 def row_to_spec_position(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "ticker": row["ticker"],
@@ -17496,7 +10214,6 @@ def row_to_spec_position(row: sqlite3.Row) -> Dict[str, Any]:
         "notes": row["notes"],
     }
 
-
 def load_spec_positions() -> Dict[str, Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -17505,7 +10222,6 @@ def load_spec_positions() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def load_spec_trades() -> List[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -17513,7 +10229,6 @@ def load_spec_trades() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
-
 
 def load_latest_spec_plan() -> Optional[Dict[str, Any]]:
     conn = db_connect()
@@ -17528,7 +10243,6 @@ def load_latest_spec_plan() -> Optional[Dict[str, Any]]:
         return data
     finally:
         conn.close()
-
 
 def save_spec_plan_signal(plan: Dict[str, Any]) -> str:
     plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
@@ -17555,7 +10269,6 @@ def save_spec_plan_signal(plan: Dict[str, Any]) -> str:
         )
     return plan_id
 
-
 def spec_alpha_market_filter_ok() -> bool:
     if not SPEC_ALPHA_REQUIRE_SPY_ABOVE_MA200:
         return True
@@ -17569,7 +10282,6 @@ def spec_alpha_market_filter_ok() -> bool:
     except Exception as exc:
         print(f"[SPEC MARKET FILTER ERROR] {exc}")
         return False
-
 
 def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
     try:
@@ -17620,7 +10332,6 @@ def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
         print(f"[SPEC SCORE ERROR] {ticker}: {exc}")
         return None
 
-
 def select_spec_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     selected: List[Dict[str, Any]] = []
     sector_counts: Dict[str, int] = {}
@@ -17639,7 +10350,6 @@ def select_spec_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, Any
         if len(selected) >= SPEC_ALPHA_TOP_N:
             break
     return selected
-
 
 def assign_spec_alpha_weights(top: List[Dict[str, Any]], spec_account_pct: float) -> List[Dict[str, Any]]:
     if not top:
@@ -17665,7 +10375,6 @@ def assign_spec_alpha_weights(top: List[Dict[str, Any]], spec_account_pct: float
         row["target_account_pct"] = round(sleeve_weight * spec_account_pct * 100, 2)
         enriched.append(row)
     return enriched
-
 
 def spec_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     positions = load_spec_positions()
@@ -17693,7 +10402,6 @@ def spec_position_market_value_details(prices: Optional[Dict[str, float]] = None
         })
     realized = sum(float(t.get("realized_profit") or 0.0) for t in load_spec_trades() if str(t.get("side")).upper() == "SELL")
     return {"positions": positions, "rows": rows, "value": round(total_value, 2), "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2), "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
-
 
 def compute_spec_alpha_plan() -> Dict[str, Any]:
     refresh_portfolio()
@@ -17755,7 +10463,6 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:
     actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
     return {"plan_id": uuid.uuid4().hex, "strategy_version": "spec_alpha_v3_7_monthly_momentum", "private_only": False, "public_allowed": True, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "market": current_regime, "market_ok": market_ok, "score_mode": SPEC_ALPHA_SCORE_MODE, "top_n": SPEC_ALPHA_TOP_N, "universe_size": len(SPEC_ALPHA_UNIVERSE), "scored_count": len(scored), "target_spec_account_pct": round(spec_account_pct * 100, 2), "target_spec_value": round(sleeve_value, 2), "current_spec_value": round(float(spec_details.get("value", 0.0) or 0.0), 2), "current_spec_cost_basis": round(float(spec_details.get("cost_basis", 0.0) or 0.0), 2), "current_spec_unrealized_profit": round(float(spec_details.get("unrealized_profit", 0.0) or 0.0), 2), "account_equity": round(account_equity, 2), "allocation": allocation, "risk_guard": risk, "top": top, "actions": actions, "actionable": actionable, "all_scored": scored[:100]}
 
-
 def current_spec_plan_for_validation() -> Dict[str, Any]:
     latest = load_latest_spec_plan()
     if latest is not None:
@@ -17770,10 +10477,8 @@ def current_spec_plan_for_validation() -> Dict[str, Any]:
     save_spec_plan_signal(plan)
     return plan
 
-
 def latest_spec_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return {str(item.get("ticker", "")).upper(): item for item in plan.get("actions", []) if item.get("ticker")}
-
 
 def spec_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker = ticker.upper()
@@ -17781,7 +10486,6 @@ def spec_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[s
         if str(item.get("ticker", "")).upper() == ticker:
             return item
     return None
-
 
 def validate_spec_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not SPEC_ALPHA_REQUIRE_LIVE_QUOTE:
@@ -17794,7 +10498,6 @@ def validate_spec_price_against_quote(ticker: str, price: float) -> Tuple[bool, 
     if deviation > SPEC_ALPHA_QUOTE_DEVIATION_LIMIT:
         return False, f"SPEC_ALPHA trade rejected: price too far from live quote.\nLive quote: {round(quote, 2)}\nYour price: {round(price, 2)}\nMax deviation: {round(SPEC_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%", quote
     return True, "OK", quote
-
 
 def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
@@ -17862,7 +10565,6 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
     audit("SPEC_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
     return True, f"⚡ SPEC_ALPHA BUY RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if action is None else action.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(portfolio['cash'])}"
 
-
 def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
@@ -17912,7 +10614,6 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
     refresh_portfolio()
     audit("SPEC_SELL", f"{ticker} shares={shares} price={price} proceeds={proceeds} profit={realized_profit}")
     return True, f"⚡ SPEC_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized SPEC_ALPHA P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}"
-
 
 def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
     """
@@ -17980,7 +10681,6 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
     base["cash_reserve_pct"] = round(cash, 2)
     return base
 
-
 def compute_equity_snapshot_data() -> Dict[str, float]:
     refresh_portfolio()
     swing_positions = portfolio["positions"]
@@ -18006,7 +10706,6 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     equity = float(portfolio["cash"]) + positions_value
     return {"cash": round(float(portfolio["cash"]), 2), "positions_value": round(positions_value, 2), "swing_positions_value": round(swing_value, 2), "core_positions_value": round(core_value, 2), "core_cost_basis": round(core_cost, 2), "core_unrealized_profit": round(core_value - core_cost, 2), "spec_positions_value": round(spec_value, 2), "spec_cost_basis": round(spec_cost, 2), "spec_unrealized_profit": round(spec_value - spec_cost, 2), "equity": round(equity, 2)}
 
-
 def realized_performance_all_time() -> Dict[str, Any]:
     trades = load_trades()
     swing_profit = round(sum(float(t.get("profit", 0)) for t in trades), 2)
@@ -18018,7 +10717,6 @@ def realized_performance_all_time() -> Dict[str, Any]:
     base_capital = get_performance_base_capital()
     pct_val = None if base_capital <= 0 else (total_profit / base_capital) * 100
     return {"profit": total_profit, "pct": pct_val, "base_capital": round(base_capital, 2), "swing_realized_profit": swing_profit, "core_realized_profit": core_profit, "spec_realized_profit": spec_profit, "trade_records": len(trades) + len(core_trades) + len(spec_trades), "swing_trade_records": len(trades), "core_trade_records": len(core_trades), "spec_trade_records": len(spec_trades)}
-
 
 def sleeve_performance_summary() -> Dict[str, Any]:
     summary = _old_sleeve_performance_summary()
@@ -18033,7 +10731,6 @@ def sleeve_performance_summary() -> Dict[str, Any]:
     summary["total_profit"] = round(float(summary.get("total_profit", 0) or 0) + spec_profit, 2)
     summary["trade_records"] = int(summary.get("trade_records", 0) or 0) + len(spec_trades)
     return summary
-
 
 def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
@@ -18058,7 +10755,6 @@ def format_portfolio_allocation_plan() -> str:
         "• VCP/bear sleeves remain signal-driven tactical systems.\n"
         "• In hard drawdown mode, new entries pause and exits/management continue."
     )
-
 
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
     actions = plan.get("actions", []) or []
@@ -18099,7 +10795,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
     msg += "How to execute after broker fill:\n• specbuy TICKER SHARES at PRICE\n• specsell TICKER SHARES at PRICE\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_public_core_plan(plan: Dict[str, Any]) -> str:
     actions = plan.get("actions", []) or []
     ranked = [a for a in actions if a.get("rank") is not None]
@@ -18118,7 +10813,6 @@ def format_public_core_plan(plan: Dict[str, Any]) -> str:
     msg += public_signal_footer()
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_public_spec_plan(plan: Dict[str, Any]) -> str:
     actions = plan.get("actions", []) or []
     ranked = [a for a in actions if a.get("rank") is not None]
@@ -18136,7 +10830,6 @@ def format_public_spec_plan(plan: Dict[str, Any]) -> str:
         msg += "\n"
     msg += public_signal_footer()
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 def maybe_send_spec_alpha_signal() -> None:
     if not SPEC_ALPHA_ENABLED:
@@ -18169,11 +10862,9 @@ def maybe_send_spec_alpha_signal() -> None:
         logger.exception(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
         print(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
 
-
 def maybe_send_wealth_core_signal() -> None:
     _old_maybe_send_wealth_core_signal()
     maybe_send_spec_alpha_signal()
-
 
 def format_spec_portfolio_report() -> str:
     details = spec_position_market_value_details()
@@ -18186,14 +10877,12 @@ def format_spec_portfolio_report() -> str:
         msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\nTarget account weight: {row.get('target_account_pct')}%\n\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_spec_pnl_report() -> str:
     details = spec_position_market_value_details()
     trades = load_spec_trades()
     buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
     sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
     return f"⚡ SPEC_ALPHA P/L\n\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n💰 Total SPEC P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\nBuy records: {len(buys)}\nSell records: {len(sells)}"
-
 
 def format_spec_exposure_report() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -18203,7 +10892,6 @@ def format_spec_exposure_report() -> str:
     actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
     target_pct = float(plan.get("target_spec_account_pct", 0) or 0)
     return f"⚡ SPEC_ALPHA EXPOSURE\n\n💼 Total equity: {format_money(equity)}\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n🎯 Target SPEC: {round(target_pct, 2)}% of account\n📊 Actual SPEC: {round(actual_pct, 2)}% of account\n📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\nUse specplan for ranked BUY/ADD/HOLD/TRIM/SELL actions."
-
 
 def format_combined_portfolio_report() -> str:
     refresh_portfolio()
@@ -18236,7 +10924,6 @@ def format_combined_portfolio_report() -> str:
         for row in spec_rows:
             msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)}\nNow: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:
     text_clean = (text or "").strip()
@@ -18318,8 +11005,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
             return
     return _old_handle_command(text, update_id=update_id)
 
-
-
 # -----------------------------------------------------------------------------
 # V3.7 EXPORT / RESET HARDENING
 # -----------------------------------------------------------------------------
@@ -18343,7 +11028,6 @@ _V37_TABLE_EXPORT_ALLOWED = {
     "spec_signals",
 }
 
-
 def table_rows(table: str) -> List[Dict[str, Any]]:
     if table not in _V37_TABLE_EXPORT_ALLOWED:
         raise ValueError("Table export not allowed")
@@ -18357,7 +11041,6 @@ def table_rows(table: str) -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
-
 
 def export_state_bundle(prefix: str = "bot_state_export") -> str:
     """
@@ -18497,9 +11180,7 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     return zip_path
 
-
 _V37_OLD_RESET_ALL_PAPER_STATE = reset_all_paper_state
-
 
 def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
     """V3.7 reset: includes SPEC_ALPHA ledger cleanup after backup export."""
@@ -18531,7 +11212,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
     return ok, msg, backup_path
 
-
 # -----------------------------------------------------------------------------
 # V3.8 INSTITUTIONAL MONITOR LAYER
 # -----------------------------------------------------------------------------
@@ -18545,7 +11225,6 @@ INSTITUTIONAL_CONCENTRATION_WARN_PCT = float(os.getenv("INSTITUTIONAL_CONCENTRAT
 INSTITUTIONAL_TOP_POSITION_WARN_PCT = float(os.getenv("INSTITUTIONAL_TOP_POSITION_WARN_PCT", "15"))
 INSTITUTIONAL_VAR_LOOKBACK_TRADES = int(os.getenv("INSTITUTIONAL_VAR_LOOKBACK_TRADES", "50"))
 
-
 def _v38_float(value: Any, default: float = 0.0) -> float:
     try:
         val = float(value)
@@ -18553,10 +11232,8 @@ def _v38_float(value: Any, default: float = 0.0) -> float:
     except Exception:
         return default
 
-
 def _v38_pct(part: float, whole: float) -> float:
     return 0.0 if whole <= 0 else (part / whole) * 100.0
-
 
 def _v38_cluster_for_ticker(ticker: str) -> str:
     t = str(ticker).upper()
@@ -18583,7 +11260,6 @@ def _v38_cluster_for_ticker(ticker: str) -> str:
             return name
     return "other"
 
-
 def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
     entry_data = pos.get("entry_data", {}) if isinstance(pos, dict) else {}
     sleeve = str(entry_data.get("strategy_sleeve") or entry_data.get("sleeve") or "").upper()
@@ -18592,7 +11268,6 @@ def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
     if str(ticker).upper() in {"SQQQ", "SPXU", "SDOW", "TZA"}:
         return "BEAR_INVERSE"
     return "LONG_VCP_OR_TACTICAL"
-
 
 def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
     refresh_portfolio()
@@ -18668,7 +11343,6 @@ def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dic
 
     return holdings
 
-
 def institutional_datahealth_snapshot() -> Dict[str, Any]:
     refresh_portfolio()
     swing_positions = portfolio.get("positions", {}) or {}
@@ -18717,7 +11391,6 @@ def institutional_datahealth_snapshot() -> Dict[str, Any]:
             "Missing quotes may be temporary provider/API issues or market-closed behavior.",
         ],
     }
-
 
 def institutional_riskmatrix_snapshot() -> Dict[str, Any]:
     snapshot = compute_equity_snapshot_data()
@@ -18769,7 +11442,6 @@ def institutional_riskmatrix_snapshot() -> Dict[str, Any]:
         "warnings": warnings,
         "status": "WARNING" if warnings else "OK",
     }
-
 
 def institutional_stress_snapshot() -> Dict[str, Any]:
     risk = institutional_riskmatrix_snapshot()
@@ -18834,7 +11506,6 @@ def institutional_stress_snapshot() -> Dict[str, Any]:
         "note": "Scenario model is approximate and for monitoring only; it does not block trades.",
     }
 
-
 def institutional_execution_snapshot() -> Dict[str, Any]:
     trades = load_trades()
     rows = []
@@ -18874,7 +11545,6 @@ def institutional_execution_snapshot() -> Dict[str, Any]:
         "status": "WARNING" if worst_bps is not None and worst_bps > 100 else "OK",
         "note": "Core/SPEC are monthly ledger trades and do not always have a single signal-price slippage metric.",
     }
-
 
 def institutional_drift_snapshot() -> Dict[str, Any]:
     perf = realized_performance_all_time()
@@ -18916,7 +11586,6 @@ def institutional_drift_snapshot() -> Dict[str, Any]:
         "notes": notes,
     }
 
-
 def institutional_validation_snapshot() -> Dict[str, Any]:
     return {
         "strategy_version": STRATEGY_VERSION,
@@ -18942,7 +11611,6 @@ def institutional_validation_snapshot() -> Dict[str, Any]:
         ],
     }
 
-
 def institutional_snapshot() -> Dict[str, Any]:
     data = {}
     sections = [
@@ -18963,7 +11631,6 @@ def institutional_snapshot() -> Dict[str, Any]:
     data["trading_logic_changed"] = False
     return data
 
-
 def _v38_status_emoji(status: Any) -> str:
     s = str(status or "").upper()
     if s == "OK":
@@ -18973,7 +11640,6 @@ def _v38_status_emoji(status: Any) -> str:
     if s == "CRITICAL" or s == "ERROR":
         return "🔴"
     return "⚪"
-
 
 def format_institutional_status() -> str:
     snap = institutional_snapshot()
@@ -19008,7 +11674,6 @@ def format_institutional_status() -> str:
         "download_institutional | download_state"
     )
 
-
 def format_datahealth_status() -> str:
     d = institutional_datahealth_snapshot()
     missing = d.get("missing_quotes") or []
@@ -19027,7 +11692,6 @@ def format_datahealth_status() -> str:
         "This is diagnostic-only and does not block trades."
     )
 
-
 def format_riskmatrix_status() -> str:
     r = institutional_riskmatrix_snapshot()
     ledgers = "\n".join(f"• {x['ledger']}: {format_money(x['value'])} ({x['account_pct']}%)" for x in r.get("ledger_exposure", []))
@@ -19044,7 +11708,6 @@ def format_riskmatrix_status() -> str:
         f"{warnings}"
     )
 
-
 def format_stress_status() -> str:
     s = institutional_stress_snapshot()
     rows = "\n".join(
@@ -19060,7 +11723,6 @@ def format_stress_status() -> str:
         f"{rows}\n\n"
         "Approximate monitoring only. It does not block trades."
     )
-
 
 def format_execution_status() -> str:
     e = institutional_execution_snapshot()
@@ -19079,7 +11741,6 @@ def format_execution_status() -> str:
         "Recent rows:\n" + recent
     )
 
-
 def format_drift_status() -> str:
     d = institutional_drift_snapshot()
     perf = d.get("realized_performance", {})
@@ -19093,7 +11754,6 @@ def format_drift_status() -> str:
         f"Sample counts: swing {counts.get('swing_trades')} | core {counts.get('core_trades')} | spec {counts.get('spec_trades')}\n\n"
         f"{notes}"
     )
-
 
 def format_validation_status() -> str:
     v = institutional_validation_snapshot()
@@ -19114,16 +11774,13 @@ def format_validation_status() -> str:
         "Live validation rules:\n" + rules
     )
 
-
 def download_institutional_report() -> str:
     ts = ny_now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(DATA_DIR, f"institutional_snapshot_{ts}.json")
     write_json_file(path, institutional_snapshot())
     return path
 
-
 _V38_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
-
 
 def export_state_bundle(prefix: str = "bot_state_export") -> str:
     zip_path = _V38_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
@@ -19142,9 +11799,7 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
             pass
     return zip_path
 
-
 _V38_OLD_HANDLE_COMMAND = handle_command
-
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:
     text_clean = (text or "").strip()
@@ -19186,9 +11841,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
 
     return _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
-
-
-
 
 # -----------------------------------------------------------------------------
 # V3.9 EU-RETAIL DEPLOYMENT CANDIDATE
@@ -19249,7 +11901,7 @@ BEAR_STOCK_BUCKETS: Dict[str, str] = {
     "HWM": "defense_aerospace", "HEI": "defense_aerospace", "SPR": "defense_aerospace",
 }
 BEAR_WATCHLIST = list(dict.fromkeys(BEAR_STOCK_BUCKETS.keys()))
-ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
+ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # v3.9 bear-stock defaults. The sleeve is top-1, cash-first, and USD only.
 BEAR_MAX_SIGNALS_PER_SCAN = int(os.getenv("BEAR_MAX_SIGNALS_PER_SCAN", "1"))
@@ -19300,15 +11952,8 @@ def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
         return "BEAR STOCK RS"
     return _V39_OLD_SLEEVE_SHORT_LABEL(entry_data)
 
-
 def count_open_bear_positions() -> int:
-    refresh_portfolio()
-    count = 0
-    for pos in portfolio["positions"].values():
-        entry_data = pos.get("entry_data", {}) or {}
-        if entry_data.get("strategy_sleeve") in {"BEAR_INVERSE", "BEAR_STOCK"}:
-            count += 1
-    return count
+    return 0
 
 _V39_OLD_SLEEVE_FROM_TRADE = sleeve_from_trade
 
@@ -19323,7 +11968,6 @@ def sleeve_from_trade(trade: Dict[str, Any]) -> str:
         return "BEAR_STOCK"
     return _V39_OLD_SLEEVE_FROM_TRADE(trade)
 
-
 def _v39_ret(series: pd.Series, bars: int) -> Optional[float]:
     try:
         clean = series.dropna()
@@ -19337,146 +11981,9 @@ def _v39_ret(series: pd.Series, bars: int) -> Optional[float]:
     except Exception:
         return None
 
-
-def analyze_bear_signal(
-    ticker: str,
-    df: pd.DataFrame,
-    bear_details: Dict[str, Any],
-) -> Optional[Tuple[str, float, int, float, int, Dict[str, Any]]]:
-    """v3.9 robust health/defense top-1 bear-stock RS sleeve."""
-    if not BEAR_SLEEVE_ENABLED:
-        return None
-    ticker = normalize_ticker(ticker) or ""
-    if ticker not in BEAR_WATCHLIST:
-        return None
-    if not bear_details.get("active"):
-        return None
-    if df is None or df.empty or len(df) < 220:
-        return None
-
-    close = df["Close"].dropna()
-    volume = df["Volume"]
-    price = float(close.iloc[-1])
-    prev_close = float(close.iloc[-2])
-    if price <= 0 or prev_close <= 0:
-        return None
-
-    atr_val = atr(df).iloc[-1]
-    avg_vol = volume.rolling(20).mean().iloc[-1]
-    ma20 = close.rolling(20).mean().iloc[-1]
-    ma50 = close.rolling(50).mean().iloc[-1]
-    ma200 = close.rolling(200).mean().iloc[-1]
-    rsi_val = rsi(close).iloc[-1]
-    if any(pd.isna(x) for x in [atr_val, avg_vol, ma20, ma50, ma200, rsi_val]):
-        return None
-
-    atr_val = float(atr_val)
-    atr_pct = atr_val / price
-    avg_dollar_volume = float(avg_vol) * price
-    volume_ratio = float(volume.iloc[-1]) / float(avg_vol) if float(avg_vol) > 0 else 0.0
-    daily_move_pct = ((price - prev_close) / prev_close) * 100.0
-    close_loc = close_location(df)
-
-    if price < BEAR_MIN_PRICE or price > BEAR_STOCK_MAX_PRICE:
-        return None
-    if avg_dollar_volume < BEAR_MIN_AVG_DOLLAR_VOLUME:
-        return None
-    if atr_pct < BEAR_MIN_ATR_PCT or atr_pct > BEAR_MAX_ATR_PCT:
-        return None
-    if not (price > float(ma20) > float(ma50) and price > float(ma200)):
-        return None
-
-    ret21 = _v39_ret(close, 21)
-    ret63 = _v39_ret(close, 63)
-    if ret21 is None or ret63 is None or ret21 <= 0 or ret63 <= 0:
-        return None
-
-    frames = bear_details.get("frames", {}) if isinstance(bear_details, dict) else {}
-    spy_df = frames.get("SPY")
-    qqq_df = frames.get("QQQ")
-    if spy_df is None or getattr(spy_df, "empty", True) or len(spy_df) < 80:
-        spy_df = get_signal_dataframe("SPY", limit=260)
-    if qqq_df is None or getattr(qqq_df, "empty", True) or len(qqq_df) < 80:
-        qqq_df = get_signal_dataframe("QQQ", limit=260)
-    if spy_df is None or qqq_df is None or spy_df.empty or qqq_df.empty:
-        return None
-
-    spy_ret21 = _v39_ret(spy_df["Close"].dropna(), 21)
-    spy_ret63 = _v39_ret(spy_df["Close"].dropna(), 63)
-    qqq_ret21 = _v39_ret(qqq_df["Close"].dropna(), 21)
-    if spy_ret21 is None or spy_ret63 is None or qqq_ret21 is None:
-        return None
-
-    rel21_spy = ret21 - spy_ret21
-    rel63_spy = ret63 - spy_ret63
-    rel21_qqq = ret21 - qqq_ret21
-    if rel21_spy < BEAR_STOCK_MIN_REL_21_SPY:
-        return None
-    if rel63_spy < BEAR_STOCK_MIN_REL_63_SPY:
-        return None
-    if rel21_qqq < BEAR_STOCK_MIN_REL_21_QQQ:
-        return None
-
-    returns63 = close.pct_change().tail(63).dropna()
-    vol63_ann = float(returns63.std() * math.sqrt(252)) if not returns63.empty else 0.0
-    rank_score = ((0.40 * rel63_spy) + (0.25 * rel21_spy) + (0.15 * ret63) + (0.10 * ret21) - (0.10 * vol63_ann)) * 100.0
-    score = int(round(max(0.0, rank_score) * 10))
-
-    stop = price * (1.0 - BEAR_STOCK_CATASTROPHE_STOP_PCT)
-    risk = price - stop
-    if risk <= 0:
-        return None
-
-    refresh_portfolio()
-    account_equity = approximate_equity_from_portfolio()
-    available_cash = float(portfolio["cash"])
-    shares_by_risk = int((account_equity * BEAR_RISK_PCT) / risk)
-    shares_by_position_cap = int((account_equity * min(MAX_POSITION_EQUITY_PCT, BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT)) / price)
-    shares_by_cash = int((available_cash * CASH_USAGE_BUFFER) / price)
-    shares = min(shares_by_risk, shares_by_position_cap, shares_by_cash)
-    if shares <= 0:
-        return None
-
-    bucket = BEAR_STOCK_BUCKETS.get(ticker, "bear_stock")
-    metrics = {
-        "setup_type": "bear_stock_rs",
-        "strategy_sleeve": "BEAR_STOCK",
-        "strategy_family": BEAR_STRATEGY_VERSION,
-        "strategy_version": BEAR_STRATEGY_VERSION,
-        "bear_stock_bucket": bucket,
-        "bucket": bucket,
-        "breakout": False,
-        "atr": atr_val,
-        "atr_pct": atr_pct,
-        "volume_ratio": volume_ratio,
-        "daily_move_pct": daily_move_pct,
-        "close_location": close_loc,
-        "avg_dollar_volume": avg_dollar_volume,
-        "ret21": float(ret21),
-        "ret63": float(ret63),
-        "rel21_spy": rel21_spy,
-        "rel63_spy": rel63_spy,
-        "rel21_qqq": rel21_qqq,
-        "vol63": vol63_ann,
-        "bear_score": int(bear_details.get("score", 0) or 0),
-        "rank_score": rank_score,
-        "min_score_required": "RS filters",
-        "stop_model": "bear_stock_health_defense_v3_9_catastrophe_score_exit",
-        "exit_params": {
-            "breakeven_r_trigger": BEAR_BREAKEVEN_R_TRIGGER,
-            "partial_take_profit_r": BEAR_PARTIAL_TAKE_PROFIT_R,
-            "partial_take_profit_pct": BEAR_PARTIAL_TAKE_PROFIT_PCT,
-            "partial_take_profit_fraction": BEAR_PARTIAL_TAKE_PROFIT_FRACTION,
-            "trail_mult_early": BEAR_TRAIL_MULT_EARLY,
-            "trail_mult_late": BEAR_TRAIL_MULT_LATE,
-            "trail_tighten_pct": TRAIL_TIGHTEN_PCT,
-            "time_stop_days": BEAR_TIME_STOP_DAYS,
-            "time_stop_min_r": BEAR_TIME_STOP_MIN_R,
-            "max_holding_days": BEAR_MAX_HOLDING_DAYS,
-        },
-    }
-    return ticker, price, shares, stop, score, metrics
-
+def analyze_bear_signal(*args: Any, **kwargs: Any) -> None:
+    # Bear/inverse strategy removed in v4.8.
+    return None
 
 def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
@@ -19503,7 +12010,6 @@ def format_portfolio_allocation_plan() -> str:
         "• In hard drawdown mode, new entries pause and exits/management continue."
     )
 
-
 def _v38_cluster_for_ticker(ticker: str) -> str:
     t = str(ticker).upper()
     if t in BEAR_STOCK_BUCKETS:
@@ -19511,7 +12017,6 @@ def _v38_cluster_for_ticker(ticker: str) -> str:
     if t in WEALTH_ASSET_CLUSTERS:
         return WEALTH_ASSET_CLUSTERS[t]
     return "other"
-
 
 def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
     entry_data = pos.get("entry_data", {}) if isinstance(pos, dict) else {}
@@ -19586,7 +12091,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
 
     return _V39_OLD_HANDLE_COMMAND(text, update_id=update_id)
-
 
 # =============================================================================
 # V4 EXPANDED FUTURE-GROWTH ALPHA EXTENSION
@@ -19854,7 +12358,6 @@ def init_db() -> None:
     finally:
         conn.close()
 
-
 def row_to_growth_position(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "ticker": row["ticker"], "growth_position_id": row["growth_position_id"],
@@ -19867,7 +12370,6 @@ def row_to_growth_position(row: sqlite3.Row) -> Dict[str, Any]:
         "last_plan_id": row["last_plan_id"], "notes": row["notes"],
     }
 
-
 def load_growth_positions() -> Dict[str, Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -19876,7 +12378,6 @@ def load_growth_positions() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def load_growth_trades() -> List[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -19884,7 +12385,6 @@ def load_growth_trades() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
-
 
 def load_latest_growth_plan() -> Optional[Dict[str, Any]]:
     conn = db_connect()
@@ -19897,7 +12397,6 @@ def load_latest_growth_plan() -> Optional[Dict[str, Any]]:
         return data
     finally:
         conn.close()
-
 
 def save_growth_plan_signal(plan: Dict[str, Any]) -> str:
     plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
@@ -19917,7 +12416,6 @@ def save_growth_plan_signal(plan: Dict[str, Any]) -> str:
         )
     return plan_id
 
-
 def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
     try:
         details = market_details or market_regime_details()
@@ -19933,7 +12431,6 @@ def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = Non
         return True, "OK"
     except Exception as exc:
         return False, f"market filter error: {exc}"
-
 
 def growth_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
     try:
@@ -19980,7 +12477,6 @@ def growth_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
         print(f"[GROWTH SCORE ERROR] {ticker}: {exc}")
         return None
 
-
 def select_growth_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     selected: List[Dict[str, Any]] = []
     cluster_counts: Dict[str, int] = {}
@@ -19993,7 +12489,6 @@ def select_growth_alpha_assets(scored: List[Dict[str, Any]]) -> List[Dict[str, A
         if len(selected) >= GROWTH_ALPHA_TOP_N:
             break
     return selected
-
 
 def assign_growth_alpha_weights(top: List[Dict[str, Any]], growth_account_pct: float) -> List[Dict[str, Any]]:
     if not top:
@@ -20020,7 +12515,6 @@ def assign_growth_alpha_weights(top: List[Dict[str, Any]], growth_account_pct: f
         enriched.append(row)
     return enriched
 
-
 def growth_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     positions = load_growth_positions() if GROWTH_ALPHA_LEDGER_ENABLED else {}
     tickers = list(positions.keys())
@@ -20045,7 +12539,6 @@ def growth_position_market_value_details(prices: Optional[Dict[str, float]] = No
     return {"positions": positions, "rows": rows, "value": round(total_value, 2),
             "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2),
             "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
-
 
 def compute_growth_alpha_plan() -> Dict[str, Any]:
     refresh_portfolio()
@@ -20119,10 +12612,8 @@ def compute_growth_alpha_plan() -> Dict[str, Any]:
             "top": top, "actions": actions, "actionable": actionable, "all_scored": scored[:100],
             "universe_size": len(GROWTH_ALPHA_UNIVERSE), "scored_count": len(scored), "top_n": GROWTH_ALPHA_TOP_N}
 
-
 def latest_growth_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return {str(i.get("ticker", "")).upper(): i for i in plan.get("actions", []) or [] if i.get("ticker")}
-
 
 def growth_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker = ticker.upper()
@@ -20131,12 +12622,10 @@ def growth_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict
             return item
     return None
 
-
 def current_growth_plan_for_validation() -> Dict[str, Any]:
     plan = compute_growth_alpha_plan()
     save_growth_plan_signal(plan)
     return plan
-
 
 def validate_growth_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not GROWTH_ALPHA_REQUIRE_LIVE_QUOTE:
@@ -20150,7 +12639,6 @@ def validate_growth_price_against_quote(ticker: str, price: float) -> Tuple[bool
                        f"Live quote: {round(quote, 2)}\nYour price: {round(price, 2)}\n"
                        f"Max deviation: {round(GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%"), quote
     return True, "OK", quote
-
 
 def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
@@ -20236,7 +12724,6 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
                   f"📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
                   f"💵 Cash left: {format_money(portfolio['cash'])}")
 
-
 def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
@@ -20295,7 +12782,6 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
                   f"({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
                   f"🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}")
 
-
 _V310_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
 
 def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
@@ -20332,7 +12818,6 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
     base["cash_reserve_pct"] = round(cash, 2)
     return base
 
-
 _V310_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
 
 def compute_equity_snapshot_data() -> Dict[str, float]:
@@ -20352,7 +12837,6 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + growth_value, 2)
     return snapshot
 
-
 _V310_OLD_REALIZED = realized_performance_all_time
 
 def realized_performance_all_time() -> Dict[str, Any]:
@@ -20366,7 +12850,6 @@ def realized_performance_all_time() -> Dict[str, Any]:
     perf["growth_trade_records"] = len(growth_trades)
     perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(growth_trades)
     return perf
-
 
 def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
     msg = (
@@ -20413,7 +12896,6 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_growth_portfolio_report() -> str:
     details = growth_position_market_value_details()
     rows = details.get("rows", []) or []
@@ -20436,7 +12918,6 @@ def format_growth_portfolio_report() -> str:
                 f"Target account weight: {row.get('target_account_pct')}%\n\n")
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_growth_pnl_report() -> str:
     details = growth_position_market_value_details()
     trades = load_growth_trades()
@@ -20449,7 +12930,6 @@ def format_growth_pnl_report() -> str:
             f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
             f"💰 Total Growth P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
             f"Buy records: {len(buys)}\nSell records: {len(sells)}")
-
 
 def format_growth_exposure_report() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -20466,7 +12946,6 @@ def format_growth_exposure_report() -> str:
             f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
             "Use growthplan for ranked BUY/ADD/HOLD/TRIM/SELL actions.")
 
-
 _V310_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
 
 def format_combined_portfolio_report() -> str:
@@ -20482,7 +12961,6 @@ def format_combined_portfolio_report() -> str:
                 f"Value: {format_money(float(row['market_value']))}\n"
                 f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
@@ -20509,7 +12987,6 @@ def format_portfolio_allocation_plan() -> str:
         "• VCP/Bear-stock remains signal-driven tactical.\n"
         "• Options remain research-only and are not live-integrated."
     )
-
 
 def maybe_send_growth_alpha_signal() -> None:
     if not GROWTH_ALPHA_ENABLED:
@@ -20540,13 +13017,11 @@ def maybe_send_growth_alpha_signal() -> None:
         logger.exception(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
         print(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
 
-
 _V310_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
 
 def maybe_send_wealth_core_signal() -> None:
     _V310_OLD_MAYBE_SEND_MONTHLY()
     maybe_send_growth_alpha_signal()
-
 
 _V310_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
@@ -20562,7 +13037,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         print(f"[GROWTH EXPORT WARNING] {exc}")
     return zip_path
 
-
 _V310_OLD_RESET_ALL = reset_all_paper_state
 
 def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
@@ -20573,7 +13047,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM growth_signals")
         conn.execute("DELETE FROM meta WHERE key IN ('last_growth_alpha_month', 'last_growth_alpha_alert_ts')")
     return ok, msg + "\n✅ Growth Alpha positions/trades/signals cleared", backup_path
-
 
 _V310_OLD_HANDLE_COMMAND = handle_command
 
@@ -20664,8 +13137,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     return _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # =============================================================================
 # V4.1.1 FREEZE: AGGRESSIVE GROWTH + ALT-CRYPTO TACTICAL SWING EXTENSION
 # Freeze candidate from offline A-to-Z test: Core 20 / Growth 45 / SPEC 20 / Long VCP 5 / Crypto 10.
@@ -20741,7 +13212,6 @@ CRYPTO_ALPHA_TRAIL_ATR_MULT = float(os.getenv("CRYPTO_ALPHA_TRAIL_ATR_MULT", "3.
 CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT = float(os.getenv("CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT", "1.00"))
 CRYPTO_ALPHA_STRATEGY_VERSION = "crypto_swing_alt_majors_v4_1_1_breakout20"
 
-
 def get_crypto_quote(ticker: str) -> Optional[float]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
@@ -20761,7 +13231,6 @@ def get_crypto_quote(ticker: str) -> Optional[float]:
         print(f"[CRYPTO QUOTE ERROR] {ticker}: {exc}")
     return None
 
-
 def get_crypto_prices_batch(tickers: List[str]) -> Dict[str, float]:
     out: Dict[str, float] = {}
     for ticker in tickers:
@@ -20772,7 +13241,6 @@ def get_crypto_prices_batch(tickers: List[str]) -> Dict[str, float]:
         if price is not None and price > 0:
             out[nticker] = float(price)
     return out
-
 
 _V41_OLD_INIT_DB = init_db
 
@@ -20832,7 +13300,6 @@ def init_db() -> None:
     finally:
         conn.close()
 
-
 def row_to_crypto_position(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "ticker": row["ticker"],
@@ -20852,7 +13319,6 @@ def row_to_crypto_position(row: sqlite3.Row) -> Dict[str, Any]:
         "notes": row["notes"],
     }
 
-
 def load_crypto_positions() -> Dict[str, Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -20861,7 +13327,6 @@ def load_crypto_positions() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def load_crypto_trades() -> List[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -20869,7 +13334,6 @@ def load_crypto_trades() -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
-
 
 def load_latest_crypto_signal() -> Optional[Dict[str, Any]]:
     conn = db_connect()
@@ -20882,7 +13346,6 @@ def load_latest_crypto_signal() -> Optional[Dict[str, Any]]:
         return data
     finally:
         conn.close()
-
 
 def save_crypto_plan_signal(plan: Dict[str, Any]) -> str:
     plan_id = str(plan.get("plan_id") or uuid.uuid4().hex)
@@ -20905,7 +13368,6 @@ def save_crypto_plan_signal(plan: Dict[str, Any]) -> str:
             ),
         )
     return plan_id
-
 
 def crypto_position_market_value_details(prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     positions = load_crypto_positions()
@@ -20939,7 +13401,6 @@ def crypto_position_market_value_details(prices: Optional[Dict[str, float]] = No
         "total_profit": round(realized + (total_value - total_cost), 2),
     }
 
-
 def crypto_indicator_gate() -> Dict[str, Any]:
     rows = []
     ok_count = 0
@@ -20957,7 +13418,6 @@ def crypto_indicator_gate() -> Dict[str, Any]:
         rows.append({"ticker": sym, "price": round(price, 6), "ma50": round(ma50, 6), "ma200": round(ma200, 6), "ok": ok})
     gate_ok = ok_count >= CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200
     return {"ok": gate_ok, "ok_count": ok_count, "required": CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200, "rows": rows}
-
 
 def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
     try:
@@ -21018,7 +13478,6 @@ def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Op
     except Exception as exc:
         print(f"[CRYPTO SCORE ERROR] {ticker}: {exc}")
         return None
-
 
 def compute_crypto_alpha_plan() -> Dict[str, Any]:
     refresh_portfolio()
@@ -21127,7 +13586,6 @@ def compute_crypto_alpha_plan() -> Dict[str, Any]:
         "all_scored": scored,
     }
 
-
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:
     gate = plan.get("gate", {}) or {}
     risk = plan.get("risk_guard", {}) or {}
@@ -21179,14 +13637,12 @@ def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker = ticker.upper()
     for item in plan.get("top", []) or []:
         if str(item.get("ticker", "")).upper() == ticker:
             return item
     return None
-
 
 def validate_crypto_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE:
@@ -21200,7 +13656,6 @@ def validate_crypto_price_against_quote(ticker: str, price: float) -> Tuple[bool
                        f"Live quote: {round(quote, 8)}\nYour price: {round(price, 8)}\n"
                        f"Max deviation: {round(CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%"), quote
     return True, "OK", quote
-
 
 def record_crypto_buy(ticker: str, units: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
@@ -21290,7 +13745,6 @@ def record_crypto_buy(ticker: str, units: float, price: float, update_id: Option
                   f"💰 Amount: {format_money(amount)}\n"
                   f"💵 Cash left: {format_money(portfolio['cash'])}")
 
-
 def record_crypto_sell(ticker: str, units: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
@@ -21348,7 +13802,6 @@ def record_crypto_sell(ticker: str, units: float, price: float, update_id: Optio
                   f"📊 Realized crypto P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
                   f"💵 Cash now: {format_money(portfolio['cash'])}")
 
-
 _V41_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
 
 def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
@@ -21385,7 +13838,6 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
     base["cash_reserve_pct"] = round(cash, 2)
     return base
 
-
 _V41_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
 
 def compute_equity_snapshot_data() -> Dict[str, float]:
@@ -21405,7 +13857,6 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + crypto_value, 2)
     return snapshot
 
-
 _V41_OLD_REALIZED = realized_performance_all_time
 
 def realized_performance_all_time() -> Dict[str, Any]:
@@ -21419,7 +13870,6 @@ def realized_performance_all_time() -> Dict[str, Any]:
     perf["crypto_trade_records"] = len(crypto_trades)
     perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(crypto_trades)
     return perf
-
 
 _V41_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
 
@@ -21436,7 +13886,6 @@ def format_combined_portfolio_report() -> str:
                 f"Value: {format_money(float(row['market_value']))}\n"
                 f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_crypto_portfolio_report() -> str:
     details = crypto_position_market_value_details()
@@ -21460,7 +13909,6 @@ def format_crypto_portfolio_report() -> str:
                 f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_crypto_pnl_report() -> str:
     details = crypto_position_market_value_details()
     trades = load_crypto_trades()
@@ -21473,7 +13921,6 @@ def format_crypto_pnl_report() -> str:
             f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
             f"💰 Total Crypto P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
             f"Buy records: {len(buys)}\nSell records: {len(sells)}")
-
 
 def format_crypto_exposure_report() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -21489,7 +13936,6 @@ def format_crypto_exposure_report() -> str:
             f"📊 Actual Crypto: {round(actual_pct, 2)}% of account\n"
             f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
             "Use cryptoplan for BUY/HOLD/SELL actions.")
-
 
 def format_portfolio_allocation_plan() -> str:
     plan = dynamic_portfolio_allocation_targets()
@@ -21518,7 +13964,6 @@ def format_portfolio_allocation_plan() -> str:
         "• Options remain research-only."
     )
 
-
 _V41_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
 def export_state_bundle(prefix: str = "bot_state_export") -> str:
@@ -21533,7 +13978,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         print(f"[CRYPTO EXPORT WARNING] {exc}")
     return zip_path
 
-
 _V41_OLD_RESET_ALL = reset_all_paper_state
 
 def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
@@ -21543,7 +13987,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM crypto_trades")
         conn.execute("DELETE FROM crypto_signals")
     return ok, msg + "\n✅ Crypto Alpha positions/trades/signals cleared", backup_path
-
 
 _V41_OLD_HANDLE_COMMAND = handle_command
 
@@ -21632,7 +14075,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
     return _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
 # =============================================================================
 # V4.1.1 LIVE HOTFIX 2026-05-27
 # =============================================================================
@@ -21653,7 +14095,7 @@ STRATEGY_VERSION = os.getenv(
 BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "0") != "0"
 if not BEAR_SLEEVE_ENABLED:
     BEAR_WATCHLIST = []
-ALLOWED_BUY_TICKERS = set(WATCHLIST) | set(BEAR_WATCHLIST)
+ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # Public plan posting should be explicitly enabled after outputs are verified.
 CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "0") == "1"
@@ -21725,7 +14167,6 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:
         if isinstance(rows, list):
             plan[key] = [r for r in rows if str(r.get("ticker", "")).upper() not in SPEC_ALPHA_EXCLUDED_TICKERS]
     return plan
-
 
 _V411_HOTFIX_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
 
@@ -21804,7 +14245,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
     return _V411_HOTFIX_OLD_BEAR_STATUS_COMMAND(text_clean, update_id=update_id)
 
-
 # -----------------------------------------------------------------------------
 # V4.1.1 HOTFIX 2026-05-27
 # -----------------------------------------------------------------------------
@@ -21835,7 +14275,6 @@ SPEC_ALPHA_UNIVERSE = [
     if str(t).upper() not in SPEC_ALPHA_BLOCKLIST
 ]
 
-
 def _v411_plan_has_blocked_spec_ticker(plan: Dict[str, Any]) -> bool:
     try:
         for key in ("top", "actions", "actionable", "all_scored"):
@@ -21846,7 +14285,6 @@ def _v411_plan_has_blocked_spec_ticker(plan: Dict[str, Any]) -> bool:
     except Exception:
         return True
     return False
-
 
 # Override the Growth Alpha market filter to avoid evaluating a pandas DataFrame
 # as a boolean. The old code used `frames.get(symbol) or get_signal_dataframe(...)`,
@@ -21872,7 +14310,6 @@ def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = Non
         logger.exception(f"[GROWTH MARKET FILTER HOTFIX ERROR] {exc}")
         return False, f"market filter error: {exc}"
 
-
 # Ignore old active SPEC plans if they contain blocked corporate-action tickers.
 def current_spec_plan_for_validation() -> Dict[str, Any]:
     latest = load_latest_spec_plan()
@@ -21888,7 +14325,6 @@ def current_spec_plan_for_validation() -> Dict[str, Any]:
     save_spec_plan_signal(plan)
     return plan
 
-
 _V411_OLD_RECORD_SPEC_BUY = record_spec_buy
 
 def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
@@ -21899,7 +14335,6 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
             "No substitute ticker is allowed without offline research."
         )
     return _V411_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
-
 
 # Make public SPEC output robust even if an old cached plan is accidentally used.
 def format_public_spec_plan(plan: Dict[str, Any]) -> str:
@@ -21935,7 +14370,6 @@ def format_public_spec_plan(plan: Dict[str, Any]) -> str:
     msg += public_signal_footer()
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 # Diagnostics helpers including Growth Alpha and Crypto Alpha ledgers.
 def _v411_hotfix_cluster_for_ticker(ticker: str) -> str:
     t = str(ticker).upper()
@@ -21944,7 +14378,6 @@ def _v411_hotfix_cluster_for_ticker(ticker: str) -> str:
     if "CRYPTO_ALPHA_UNIVERSE" in globals() and t in set(CRYPTO_ALPHA_UNIVERSE) | set(CRYPTO_ALPHA_INDICATORS):
         return "crypto_alpha"
     return _v38_cluster_for_ticker(t)
-
 
 def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
     refresh_portfolio()
@@ -22011,7 +14444,6 @@ def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dic
 
     return holdings
 
-
 def institutional_datahealth_snapshot() -> Dict[str, Any]:
     refresh_portfolio()
     swing_positions = portfolio.get("positions", {}) or {}
@@ -22066,7 +14498,6 @@ def institutional_datahealth_snapshot() -> Dict[str, Any]:
             "Includes swing, core, SPEC, Growth Alpha, and Crypto Alpha ledgers after v4.1.1 hotfix.",
         ],
     }
-
 
 def institutional_stress_snapshot() -> Dict[str, Any]:
     risk = institutional_riskmatrix_snapshot()
@@ -22143,7 +14574,6 @@ def institutional_stress_snapshot() -> Dict[str, Any]:
         "notes": ["Approximate monitoring only; does not block trades.", "v4.1.1 hotfix scenarios include Growth and Crypto sleeves."],
     }
 
-
 def format_riskmatrix_status() -> str:
     r = institutional_riskmatrix_snapshot()
     equity = float(r.get("equity", 0) or 0)
@@ -22170,7 +14600,6 @@ def format_riskmatrix_status() -> str:
         f"{warnings}"
     )
 
-
 def format_stress_status() -> str:
     s = institutional_stress_snapshot()
     worst = s.get("worst_scenario", {}) or {}
@@ -22187,7 +14616,6 @@ def format_stress_status() -> str:
         f"{rows}\n\n"
         "Approximate monitoring only. It does not block trades."
     )
-
 
 # Add a small hotfix status command without replacing existing command handling.
 _V411_HOTFIX_OLD_HANDLE_COMMAND = handle_command
@@ -22209,8 +14637,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         )
         return
     return _V411_HOTFIX_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
 
 # -----------------------------------------------------------------------------
 # V4.2 IBKR READ-ONLY RECONCILIATION LAYER
@@ -22247,7 +14673,6 @@ IBKR_SYNC_ALLOW_QTY = os.getenv("IBKR_SYNC_ALLOW_QTY", "1") != "0"
 IBKR_BRIDGE_TIMEOUT = float(os.getenv("IBKR_BRIDGE_TIMEOUT", "45"))
 IBKR_BRIDGE_RETRIES = int(os.getenv("IBKR_BRIDGE_RETRIES", "2"))
 
-
 def _v42_float(value: Any, default: float = 0.0) -> float:
     try:
         x = float(value)
@@ -22257,10 +14682,8 @@ def _v42_float(value: Any, default: float = 0.0) -> float:
         pass
     return default
 
-
 def _v42_round(value: Any, digits: int = 2) -> float:
     return round(_v42_float(value), digits)
-
 
 def _v42_account_map(snapshot: Dict[str, Any]) -> Dict[str, str]:
     out: Dict[str, str] = {}
@@ -22287,14 +14710,12 @@ def _v42_account_map(snapshot: Dict[str, Any]) -> Dict[str, str]:
             continue
     return out
 
-
 def _v42_broker_cash(snapshot: Dict[str, Any]) -> float:
     m = _v42_account_map(snapshot)
     for key in ["TotalCashValue", "TotalCashBalance", "CashBalance", "AvailableFunds-S"]:
         if key in m:
             return _v42_float(m[key])
     return 0.0
-
 
 def _v42_broker_netliq(snapshot: Dict[str, Any]) -> float:
     m = _v42_account_map(snapshot)
@@ -22303,16 +14724,13 @@ def _v42_broker_netliq(snapshot: Dict[str, Any]) -> float:
             return _v42_float(m[key])
     return 0.0
 
-
 def _v42_broker_grosspos(snapshot: Dict[str, Any]) -> float:
     m = _v42_account_map(snapshot)
     return _v42_float(m.get("GrossPositionValue", 0.0))
 
-
 def _v42_normalize_broker_symbol(raw: Any) -> str:
     sym = normalize_ticker(str(raw or ""))
     return sym or str(raw or "").strip().upper()
-
 
 def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     positions: Dict[str, Dict[str, Any]] = {}
@@ -22342,7 +14760,6 @@ def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
         except Exception:
             continue
     return positions
-
 
 def _v42_bot_managed_positions() -> Dict[str, List[Dict[str, Any]]]:
     refresh_portfolio()
@@ -22384,11 +14801,9 @@ def _v42_bot_managed_positions() -> Dict[str, List[Dict[str, Any]]]:
         pass
     return rows
 
-
 def _v42_bot_cash() -> float:
     refresh_portfolio()
     return float(portfolio.get("cash", 0.0) or 0.0)
-
 
 # --- DB extension ---
 _V42_OLD_INIT_DB = init_db
@@ -22443,7 +14858,6 @@ def init_db() -> None:
         conn.commit()
     finally:
         conn.close()
-
 
 def _v42_store_snapshot(snapshot: Dict[str, Any], classification: Optional[Dict[str, Any]] = None) -> str:
     sid = str(snapshot.get("snapshot_id") or snapshot.get("id") or uuid.uuid4().hex)
@@ -22504,7 +14918,6 @@ def _v42_store_snapshot(snapshot: Dict[str, Any], classification: Optional[Dict[
             )
     return sid
 
-
 def _v42_latest_snapshot_from_db() -> Optional[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -22514,7 +14927,6 @@ def _v42_latest_snapshot_from_db() -> Optional[Dict[str, Any]]:
         return json_loads_dict(row["raw_json"])
     finally:
         conn.close()
-
 
 def _v42_fetch_snapshot() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not IBKR_RECON_ENABLED:
@@ -22558,7 +14970,6 @@ def _v42_fetch_snapshot() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if data:
         return True, "latest stored snapshot", data
     return False, "No IBKR bridge URL/file configured and no stored snapshot exists", None
-
 
 def _v42_reconcile_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     broker = _v42_broker_positions(snapshot)
@@ -22643,7 +15054,6 @@ def _v42_reconcile_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         ],
     }
 
-
 def _v42_fetch_store_reconcile() -> Tuple[bool, str, Optional[Dict[str, Any]], Optional[str]]:
     ok, info, snap = _v42_fetch_snapshot()
     if not ok or snap is None:
@@ -22657,11 +15067,9 @@ def _v42_fetch_store_reconcile() -> Tuple[bool, str, Optional[Dict[str, Any]], O
         )
     return True, info, rec, sid
 
-
 def _v42_format_money_signed(x: Any) -> str:
     val = _v42_float(x)
     return ("+" if val >= 0 else "") + format_money(val)
-
 
 def format_brokerstatus() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
@@ -22689,7 +15097,6 @@ def format_brokerstatus() -> str:
         "Read-only reconciliation only. No orders placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokerpositions() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
@@ -22714,7 +15121,6 @@ def format_brokerpositions() -> str:
         "Use brokersyncpreview to see supervised sync proposals."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokerexternal() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
@@ -22735,7 +15141,6 @@ def format_brokerexternal() -> str:
         f"Total external value: {format_money(float(rec.get('external_legacy_value', 0) or 0))}\n\n"
         f"{rows}"
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_brokerreconcile() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
@@ -22768,7 +15173,6 @@ def format_brokerreconcile() -> str:
         "No ledger changes were made."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokersyncpreview() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
@@ -22797,7 +15201,6 @@ def format_brokersyncpreview() -> str:
         "Use only after reviewing brokerreconcile."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v42_update_ledger_position_from_broker(conn: sqlite3.Connection, ledger: str, ticker: str, qty: float, avg: float) -> None:
     cost = qty * avg
     now = now_ts()
@@ -22812,7 +15215,6 @@ def _v42_update_ledger_position_from_broker(conn: sqlite3.Connection, ledger: st
     elif ledger == "TACTICAL":
         # Tactical positions are share/stop based; only sync quantity and entry price, leave stop/risk unchanged.
         conn.execute("UPDATE positions SET shares=?, entry_price=? WHERE ticker=?", (int(round(qty)), round(avg,6), ticker))
-
 
 def broker_sync_apply_confirmed() -> Tuple[bool, str]:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
@@ -22853,7 +15255,6 @@ def broker_sync_apply_confirmed() -> Tuple[bool, str]:
         + "\n\nExternal legacy positions were not adopted. Historical trade records were not rewritten."
     )
 
-
 def maybe_send_ibkr_reconcile_after_close() -> None:
     if not (IBKR_RECON_ENABLED and IBKR_RECON_AUTO_ENABLED):
         return
@@ -22873,14 +15274,12 @@ def maybe_send_ibkr_reconcile_after_close() -> None:
         logger.exception(f"[IBKR AUTO RECON ERROR] {exc}")
         send(f"⚠️ IBKR auto reconcile failed: {exc}")
 
-
 # Wrap monthly/after-close loop hook. This is called each main loop iteration.
 _V42_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
 
 def maybe_send_wealth_core_signal() -> None:
     _V42_OLD_MAYBE_SEND_MONTHLY()
     maybe_send_ibkr_reconcile_after_close()
-
 
 _V42_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
@@ -22901,7 +15300,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
     except Exception as exc:
         print(f"[V42 BROKER EXPORT WARNING] {exc}")
     return zip_path
-
 
 # Extend help and commands.
 _V42_OLD_HANDLE_COMMAND = handle_command
@@ -22939,8 +15337,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         send("⚠️ Dangerous sync command. To apply the preview, send exactly:\n\nbrokersyncapply CONFIRM")
         return
     return _V42_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
 
 # -----------------------------------------------------------------------------
 # V4.3 DISPLAY / OPERATIONAL STATUS WRAPPER
@@ -22990,8 +15386,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
         return
     return _V421_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # -----------------------------------------------------------------------------
 # V4.3 CORE COMMISSION / IBKR SYMBOL-MAPPING HOTFIX
 # -----------------------------------------------------------------------------
@@ -23033,7 +15427,6 @@ IBKR_UCITS_EXCHANGES = {
     "BATEUK", "TRQXUK", "AQUIS", "XLON", "LONDON",
 }
 
-
 def _v422_canonical_broker_symbol(contract: Dict[str, Any]) -> str:
     raw = contract.get("symbol") or contract.get("localSymbol")
     sym = _v42_normalize_broker_symbol(raw)
@@ -23045,7 +15438,6 @@ def _v422_canonical_broker_symbol(contract: Dict[str, Any]) -> str:
         if candidate in IBKR_CORE_SYMBOL_ALIASES and (exch in IBKR_UCITS_EXCHANGES or candidate not in WATCHLIST):
             return IBKR_CORE_SYMBOL_ALIASES[candidate]
     return sym
-
 
 def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:  # type: ignore[override]
     positions: Dict[str, Dict[str, Any]] = {}
@@ -23077,7 +15469,6 @@ def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
         except Exception:
             continue
     return positions
-
 
 def record_core_buy(  # type: ignore[override]
     ticker: str,
@@ -23245,7 +15636,6 @@ def record_core_buy(  # type: ignore[override]
         f"💵 Cash left: {format_money(portfolio['cash'])}"
     )
 
-
 _V422_OLD_HANDLE_COMMAND = handle_command
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
@@ -23290,8 +15680,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
     return _V422_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # -----------------------------------------------------------------------------
 # V4.3 COST-AWARE SMALL-ACCOUNT EXECUTION OVERLAY
 # -----------------------------------------------------------------------------
@@ -23331,13 +15719,11 @@ V43_SPEC_MIN_ORDER_DOLLARS = float(os.getenv("V43_SPEC_MIN_ORDER_DOLLARS", "75")
 V43_SPEC_AVOID_GROWTH_OVERLAP = os.getenv("V43_SPEC_AVOID_GROWTH_OVERLAP", "1").strip() != "0"
 V43_SPEC_MAX_NEW_BUYS_PER_SECTOR_SMALL = int(os.getenv("V43_SPEC_MAX_NEW_BUYS_PER_SECTOR_SMALL", "1"))
 
-
 def _v43_equity() -> float:
     try:
         return float(compute_equity_snapshot_data().get("equity", 0.0) or 0.0)
     except Exception:
         return 0.0
-
 
 def _v43_small_account_mode() -> bool:
     if not V43_COST_AWARE_ENABLED:
@@ -23345,12 +15731,10 @@ def _v43_small_account_mode() -> bool:
     eq = _v43_equity()
     return eq > 0 and eq < V43_SMALL_ACCOUNT_EQUITY
 
-
 def _v43_mark_skip(item: Dict[str, Any], reason: str, new_action: str = "SKIP") -> None:
     item["v43_original_action"] = item.get("action")
     item["action"] = new_action
     item["v43_skip_reason"] = reason
-
 
 def _v43_refresh_actionable(plan: Dict[str, Any]) -> Dict[str, Any]:
     plan["actionable"] = [
@@ -23358,7 +15742,6 @@ def _v43_refresh_actionable(plan: Dict[str, Any]) -> Dict[str, Any]:
         if str(a.get("action", "")).upper() in {"BUY", "ADD", "TRIM", "SELL"}
     ]
     return plan
-
 
 def _v43_position_tickers(loader_name: str) -> set:
     try:
@@ -23372,10 +15755,8 @@ def _v43_position_tickers(loader_name: str) -> set:
         pass
     return set()
 
-
 def _v43_has_position(loader_name: str, ticker: str) -> bool:
     return str(ticker).upper() in _v43_position_tickers(loader_name)
-
 
 # ---- Core cost-aware plan/action overlay ----
 _V43_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
@@ -23424,7 +15805,6 @@ def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-
 _V43_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -23442,7 +15822,6 @@ def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
         if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
             msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 _V43_OLD_RECORD_CORE_BUY = record_core_buy
 
@@ -23466,7 +15845,6 @@ def record_core_buy(ticker: str, shares: float, price: float, update_id: Optiona
         except Exception:
             pass
     return _V43_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
-
 
 # ---- Growth cost-aware plan/action overlay ----
 _V43_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
@@ -23517,7 +15895,6 @@ def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-
 _V43_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
 def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -23535,7 +15912,6 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
         if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
             msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 _V43_OLD_RECORD_GROWTH_BUY = record_growth_buy
 
@@ -23557,7 +15933,6 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
         except Exception:
             pass
     return _V43_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
-
 
 # ---- SPEC cost-aware plan/action overlay ----
 _V43_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
@@ -23614,7 +15989,6 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-
 _V43_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -23633,7 +16007,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overrid
         if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
             msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 _V43_OLD_RECORD_SPEC_BUY = record_spec_buy
 
@@ -23660,7 +16033,6 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
             pass
     return _V43_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
 
-
 # ---- v4.3 status / allocation / diagnostics labels ----
 _V43_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
 
@@ -23678,7 +16050,6 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
         msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 _V43_OLD_HANDLE_COMMAND = handle_command
 
@@ -23703,7 +16074,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         )
         return
     return _V43_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
 
 # -----------------------------------------------------------------------------
 # V4.4 MONTHLY ROTATION LOCK OVERLAY
@@ -23735,7 +16105,6 @@ V44_SPEC_HOLD_RANK_BUFFER = int(os.getenv("V44_SPEC_HOLD_RANK_BUFFER", "20"))
 V44_GROWTH_HOLD_RANK_BUFFER = int(os.getenv("V44_GROWTH_HOLD_RANK_BUFFER", "10"))
 V44_CORE_HOLD_RANK_BUFFER = int(os.getenv("V44_CORE_HOLD_RANK_BUFFER", "8"))
 
-
 def _v44_monthly_rebalance_window_info() -> Dict[str, Any]:
     """Return whether today is inside the configured monthly rebalance window."""
     current = ny_now()
@@ -23756,7 +16125,6 @@ def _v44_monthly_rebalance_window_info() -> Dict[str, Any]:
         }
     except Exception as exc:
         return {"open": False, "reason": f"Calendar check failed: {exc}", "session_number": None}
-
 
 def _v44_position_age_days(sleeve: str, ticker: str) -> Optional[float]:
     ticker = str(ticker).upper()
@@ -23782,7 +16150,6 @@ def _v44_position_age_days(sleeve: str, ticker: str) -> Optional[float]:
     except Exception:
         return None
 
-
 def _v44_min_hold_days(sleeve: str) -> int:
     if sleeve == "CORE":
         return V44_CORE_MIN_HOLD_DAYS
@@ -23791,7 +16158,6 @@ def _v44_min_hold_days(sleeve: str) -> int:
     if sleeve == "SPEC":
         return V44_SPEC_MIN_HOLD_DAYS
     return 21
-
 
 def _v44_hold_rank_buffer(sleeve: str) -> int:
     if sleeve == "CORE":
@@ -23802,7 +16168,6 @@ def _v44_hold_rank_buffer(sleeve: str) -> int:
         return V44_SPEC_HOLD_RANK_BUFFER
     return 10
 
-
 def _v44_scored_rank_map(plan: Dict[str, Any], sleeve: str) -> Dict[str, int]:
     ranked: Dict[str, int] = {}
     for idx, item in enumerate(plan.get("all_scored", []) or [], start=1):
@@ -23810,7 +16175,6 @@ def _v44_scored_rank_map(plan: Dict[str, Any], sleeve: str) -> Dict[str, int]:
         if ticker and ticker not in ranked:
             ranked[ticker] = idx
     return ranked
-
 
 def _v44_hard_monthly_exit(plan: Dict[str, Any], item: Dict[str, Any]) -> Tuple[bool, str]:
     """Hard exits bypass monthly lock only for real risk/allocation reasons."""
@@ -23833,14 +16197,12 @@ def _v44_hard_monthly_exit(plan: Dict[str, Any], item: Dict[str, Any]) -> Tuple[
             return True, f"Hard monthly exit reason: {item.get('reason')}"
     return False, "Rotation exit only."
 
-
 def _v44_lock_action(item: Dict[str, Any], sleeve: str, original_action: str, reason: str) -> None:
     item["v44_monthly_lock"] = True
     item["v44_original_action"] = original_action
     item["v44_lock_reason"] = reason
     item["action"] = "HOLD"
     item["reason"] = reason
-
 
 def _v44_apply_monthly_lock(plan: Dict[str, Any], sleeve: str) -> Dict[str, Any]:
     if not V44_MONTHLY_LOCK_ENABLED:
@@ -23897,15 +16259,12 @@ def _v44_apply_monthly_lock(plan: Dict[str, Any], sleeve: str) -> Dict[str, Any]
     }
     return _v43_refresh_actionable(plan)
 
-
 def original_action_label(action: str) -> str:
     action = str(action).upper()
     return {"SELL": "sell", "TRIM": "trim"}.get(action, action.lower())
 
-
 def _v44_locked_items(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [x for x in plan.get("actions", []) or [] if bool(x.get("v44_monthly_lock"))]
-
 
 def _v44_monthly_lock_note(plan: Dict[str, Any], sleeve_label_text: str) -> str:
     info = plan.get("v44_monthly_lock") or {}
@@ -23928,13 +16287,11 @@ def _v44_monthly_lock_note(plan: Dict[str, Any], sleeve_label_text: str) -> str:
             )
     return note
 
-
 # ---- Core monthly-lock overlay ----
 _V44_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
 
 def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_CORE_PLAN(), "CORE")
-
 
 _V44_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 
@@ -23946,13 +16303,11 @@ def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
         msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 # ---- Growth monthly-lock overlay ----
 _V44_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
 
 def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_GROWTH_PLAN(), "GROWTH")
-
 
 _V44_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
@@ -23964,13 +16319,11 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
         msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 # ---- SPEC monthly-lock overlay ----
 _V44_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
 
 def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_SPEC_PLAN(), "SPEC")
-
 
 _V44_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 
@@ -23981,7 +16334,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overrid
     if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
         msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 # ---- Validation-plan freshness guard ----
 # Existing databases may contain a still-valid v4.3 plan without v4.4 lock metadata.
@@ -23995,7 +16347,6 @@ def current_core_plan_for_validation() -> Dict[str, Any]:  # type: ignore[overri
         save_core_plan_signal(plan)
     return plan
 
-
 _V44_OLD_CURRENT_GROWTH_PLAN_FOR_VALIDATION = current_growth_plan_for_validation
 
 def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
@@ -24005,7 +16356,6 @@ def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[over
         save_growth_plan_signal(plan)
     return plan
 
-
 _V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
 
 def current_spec_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
@@ -24014,7 +16364,6 @@ def current_spec_plan_for_validation() -> Dict[str, Any]:  # type: ignore[overri
         plan = compute_spec_alpha_plan()
         save_spec_plan_signal(plan)
     return plan
-
 
 # ---- Sell guards: prevent accidental execution of locked monthly exits ----
 def _v44_locked_sell_message(sleeve: str, ticker: str, plan: Dict[str, Any]) -> Optional[str]:
@@ -24035,7 +16384,6 @@ def _v44_locked_sell_message(sleeve: str, ticker: str, plan: Dict[str, Any]) -> 
         )
     return None
 
-
 _V44_OLD_RECORD_CORE_SELL = record_core_sell
 
 def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
@@ -24049,7 +16397,6 @@ def record_core_sell(ticker: str, shares: float, price: float, update_id: Option
         except Exception:
             pass
     return _V44_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
-
 
 _V44_OLD_RECORD_GROWTH_SELL = record_growth_sell
 
@@ -24065,7 +16412,6 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
             pass
     return _V44_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
 
-
 _V44_OLD_RECORD_SPEC_SELL = record_spec_sell
 
 def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
@@ -24079,7 +16425,6 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
         except Exception:
             pass
     return _V44_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
-
 
 # ---- Labels/status ----
 _V44_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
@@ -24097,7 +16442,6 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
         msg += note
     return msg[:MAX_TELEGRAM_MESSAGE]
-
 
 _V44_OLD_HANDLE_COMMAND = handle_command
 
@@ -24130,8 +16474,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     return _V44_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # -----------------------------------------------------------------------------
 # V4.4.1 USER-FRIENDLY MONTHLY PLAN CLARITY OVERLAY
 # -----------------------------------------------------------------------------
@@ -24155,14 +16497,12 @@ V441_SPEC_LIMIT_BUFFER_PCT = float(os.getenv("V441_SPEC_LIMIT_BUFFER_PCT", "0.00
 V441_ALLOW_OVERWEIGHT_RESIZE_SELL = os.getenv("V441_ALLOW_OVERWEIGHT_RESIZE_SELL", "1").strip() != "0"
 V441_OVERWEIGHT_RESIZE_THRESHOLD = float(os.getenv("V441_OVERWEIGHT_RESIZE_THRESHOLD", "1.20"))
 
-
 def _v441_float(value: Any, default: float = 0.0) -> float:
     try:
         v = float(value)
         return v if math.isfinite(v) else default
     except Exception:
         return default
-
 
 def _v441_action_emoji(action: str) -> str:
     action = str(action or "HOLD").upper()
@@ -24176,7 +16516,6 @@ def _v441_action_emoji(action: str) -> str:
         "WATCH": "👀 WATCH",
     }.get(action, action)
 
-
 def _v441_qty_text(dollars: float, price: float) -> str:
     if dollars <= 0 or price <= 0:
         return "n/a"
@@ -24187,12 +16526,10 @@ def _v441_qty_text(dollars: float, price: float) -> str:
         return str(round(qty, 4)).rstrip("0").rstrip(".")
     return str(round(qty, 6)).rstrip("0").rstrip(".")
 
-
 def _v441_limit_price(price: float, buffer_pct: float) -> float:
     if price <= 0:
         return 0.0
     return round(price * (1.0 + buffer_pct), 4)
-
 
 def _v441_skip_reason(item: Dict[str, Any]) -> str:
     for key in ["v43_skip_reason", "v44_lock_reason", "skip_reason", "reason"]:
@@ -24200,7 +16537,6 @@ def _v441_skip_reason(item: Dict[str, Any]) -> str:
         if val:
             return str(val)
     return "Not actionable under current policy."
-
 
 def _v441_execution_line(item: Dict[str, Any], sleeve: str, limit_buffer: float) -> str:
     ticker = str(item.get("ticker", "?")).upper()
@@ -24233,7 +16569,6 @@ def _v441_execution_line(item: Dict[str, Any], sleeve: str, limit_buffer: float)
         line += f"   Why: {_v441_skip_reason(item)}\n"
     return line
 
-
 def _v441_plan_header(title: str, plan: Dict[str, Any], target_key: str, current_key: str) -> str:
     risk = plan.get("risk_guard", {}) or {}
     market = plan.get("market", "UNKNOWN")
@@ -24251,7 +16586,6 @@ def _v441_plan_header(title: str, plan: Dict[str, Any], target_key: str, current
         f"🎯 Target sleeve: {format_money(_v441_float(plan.get(target_key)))}\n"
         f"📦 Current sleeve: {format_money(_v441_float(plan.get(current_key)))}\n\n"
     )
-
 
 def _v441_format_monthly_plan(plan: Dict[str, Any], sleeve: str, title: str, target_key: str, current_key: str, limit_buffer: float, max_rank: int = 10) -> str:
     actions = plan.get("actions", []) or []
@@ -24303,7 +16637,6 @@ def _v441_format_monthly_plan(plan: Dict[str, Any], sleeve: str, title: str, tar
     msg += "• Use ACTUAL_FILL_PRICE after broker fill; do not enter broker average cost if it includes commission.\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 _V441_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -24316,7 +16649,6 @@ def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
         limit_buffer=V441_CORE_LIMIT_BUFFER_PCT,
         max_rank=WEALTH_CORE_TOP_N,
     )
-
 
 _V441_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
@@ -24331,7 +16663,6 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
         max_rank=GROWTH_ALPHA_TOP_N,
     )
 
-
 _V441_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -24344,7 +16675,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overrid
         limit_buffer=V441_SPEC_LIMIT_BUFFER_PCT,
         max_rank=SPEC_ALPHA_TOP_N,
     )
-
 
 def _v441_position_over_target(plan: Dict[str, Any], ticker: str, loader_name: str, target_multiplier: float = V441_OVERWEIGHT_RESIZE_THRESHOLD) -> Tuple[bool, str]:
     try:
@@ -24372,7 +16702,6 @@ def _v441_position_over_target(plan: Dict[str, Any], ticker: str, loader_name: s
     except Exception as exc:
         return False, str(exc)
 
-
 _V441_OLD_RECORD_GROWTH_SELL = record_growth_sell
 
 def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
@@ -24384,7 +16713,6 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
         except Exception:
             pass
     return _V441_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
-
 
 _V441_OLD_RECORD_SPEC_SELL = record_spec_sell
 
@@ -24398,7 +16726,6 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
             pass
     return _V441_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
 
-
 _V441_OLD_RECORD_CORE_SELL = record_core_sell
 
 def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
@@ -24410,7 +16737,6 @@ def record_core_sell(ticker: str, shares: float, price: float, update_id: Option
         except Exception:
             pass
     return _V441_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
-
 
 _V441_OLD_HANDLE_COMMAND = handle_command
 
@@ -24443,7 +16769,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     return _V441_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
 # =============================================================================
 # V4.4.2 PARTIAL-FILL + LEDGER CORRECTION HOTFIX
 # =============================================================================
@@ -24467,14 +16792,12 @@ V442_GROWTH_UNDERFILL_RATIO = float(os.getenv("V442_GROWTH_UNDERFILL_RATIO", "0.
 V442_GROWTH_UNDERFILL_MIN_DOLLARS = float(os.getenv("V442_GROWTH_UNDERFILL_MIN_DOLLARS", "75"))
 V442_ALLOW_LEDGER_EDIT = os.getenv("V442_ALLOW_LEDGER_EDIT", "1").strip() != "0"
 
-
 def _v442_action_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker_norm = normalize_ticker(str(ticker)) or ""
     for item in plan.get("actions", []) or []:
         if str(item.get("ticker", "")).upper() == ticker_norm:
             return item
     return None
-
 
 def _v442_validate_partial_monthly_buy(plan: Dict[str, Any], ticker: str, shares: float, price: float, sleeve: str) -> Tuple[bool, str]:
     if not V442_ALLOW_PARTIAL_FILL_RECORDING:
@@ -24502,7 +16825,6 @@ def _v442_validate_partial_monthly_buy(plan: Dict[str, Any], ticker: str, shares
             return False, f"fill price deviates too far from plan price ({round(deviation*100, 2)}% > {round(BUY_QUOTE_DEVIATION_LIMIT*100, 2)}%)"
     return True, "OK"
 
-
 def _v442_append_position_note(table: str, ticker: str, note: str) -> None:
     try:
         with db_tx() as conn:
@@ -24514,7 +16836,6 @@ def _v442_append_position_note(table: str, ticker: str, note: str) -> None:
             conn.execute(f"UPDATE {table} SET notes = ?, last_update_time = ? WHERE ticker = ?", (joined[:1000], now_ts(), ticker))
     except Exception as exc:
         print(f"[V4.4.2 NOTE WARNING] {ticker}: {exc}")
-
 
 _V442_OLD_RECORD_CORE_BUY = record_core_buy
 
@@ -24532,7 +16853,6 @@ def record_core_buy(ticker: str, shares: float, price: float, update_id: Optiona
             msg += "\n\n🧩 v4.4.2: recorded as broker partial fill below normal Core minimum-order threshold."
         return ok2, msg
     return _V442_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
-
 
 _V442_OLD_RECORD_GROWTH_BUY = record_growth_buy
 
@@ -24554,7 +16874,6 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
         return ok2, msg
     return _V442_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
 
-
 _V442_OLD_RECORD_SPEC_BUY = record_spec_buy
 
 def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
@@ -24572,7 +16891,6 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
             msg += "\n\n🧩 v4.4.2: recorded as broker partial fill below normal SPEC minimum-order threshold."
         return ok2, msg
     return _V442_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
-
 
 _V442_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
 
@@ -24612,7 +16930,6 @@ def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
         print(f"[V4.4.2 UNDERFILL PLAN WARNING] {exc}")
     return plan
 
-
 # Rewrap plan validation so the v4.4 monthly-lock layer sees the v4.4.2 underfill-adjusted Growth plan.
 def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
     latest = load_latest_growth_plan()
@@ -24625,7 +16942,6 @@ def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[over
         # Recompute rather than mutate an old stored plan if underfill status may have changed after broker fills.
         return compute_growth_alpha_plan()
     return plan
-
 
 def _v442_set_monthly_position(table: str, id_col: str, ticker: str, shares: float, avg_price: float, note: str) -> Tuple[bool, str]:
     ticker_norm = normalize_ticker(str(ticker)) or ""
@@ -24659,7 +16975,6 @@ def _v442_set_monthly_position(table: str, id_col: str, ticker: str, shares: flo
     except Exception as exc:
         return False, str(exc)
 
-
 def _v442_set_crypto_position(ticker: str, units: float, avg_price: float, note: str) -> Tuple[bool, str]:
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if not ticker_norm:
@@ -24688,7 +17003,6 @@ def _v442_set_crypto_position(ticker: str, units: float, avg_price: float, note:
     except Exception as exc:
         return False, str(exc)
 
-
 _V442_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
 def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -24708,7 +17022,6 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
     )
     return (msg + extra)[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     msg = _v441_format_monthly_plan(
         plan,
@@ -24721,7 +17034,6 @@ def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
     )
     return (msg + "\n🧩 v4.4.2: Core partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     msg = _v441_format_monthly_plan(
         plan,
@@ -24733,7 +17045,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overrid
         max_rank=SPEC_ALPHA_TOP_N,
     )
     return (msg + "\n🧩 v4.4.2: SPEC partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
-
 
 _V442_OLD_HANDLE_COMMAND = handle_command
 
@@ -24829,8 +17140,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
     return _V442_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # =============================================================================
 # V4.4.3 REPORTING / LABEL / VALIDATION CLEANUP
 # =============================================================================
@@ -24864,7 +17173,6 @@ V443_LIVE_VALIDATION_RULES = [
     "Do not enable broker order automation in this version; IBKR reconciliation remains read-only.",
     "Export download_state regularly, especially before redeploys or manual corrections.",
 ]
-
 
 def _v443_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -24907,7 +17215,6 @@ def _v443_label_cleanup(msg: Any) -> str:
     text = text.replace("v4.4.3.3", "v4.4.3").replace("V4.4.3.3", "V4.4.3")
     return text
 
-
 # ---- Validation snapshot cleanup ----
 def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     return {
@@ -24921,7 +17228,6 @@ def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[overr
             "Historical v3.8 modeled validation numbers are intentionally removed from the live validation text to avoid confusion.",
         ],
     }
-
 
 def format_validation_status() -> str:  # type: ignore[override]
     limitations = "\n".join(f"- {x}" for x in V443_KNOWN_LIMITATIONS)
@@ -24937,7 +17243,6 @@ def format_validation_status() -> str:  # type: ignore[override]
         "Reporting note: v4.4.3 changes labels/validation text only; strategy logic remains v4.4.2 partial-fill/monthly-lock/cost-aware."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 _V443_OLD_INSTITUTIONAL_SNAPSHOT = institutional_snapshot
 
 def institutional_snapshot() -> Dict[str, Any]:  # type: ignore[override]
@@ -24948,7 +17253,6 @@ def institutional_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     data["trading_logic_changed_by_v443"] = False
     data["reporting_cleanup"] = True
     return data
-
 
 # ---- Wrap existing report formatters with label cleanup ----
 _V443_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
@@ -24969,75 +17273,57 @@ _V443_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 _V443_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 _V443_OLD_FORMAT_CRYPTO_PLAN = format_crypto_alpha_plan
 
-
 def format_institutional_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_datahealth_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_riskmatrix_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_RISKMATRIX_STATUS())[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_stress_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_STRESS_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_execution_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_EXECUTION_STATUS())[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_drift_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_DRIFT_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_ALLOCATION_PLAN())[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_brokerstatus() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokerpositions() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERPOSITIONS())[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_brokerexternal() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKEREXTERNAL())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokerreconcile() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_brokersyncpreview() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
-
 
 def broker_sync_apply_confirmed() -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_BROKER_SYNC_APPLY_CONFIRMED()
     return ok, _v443_label_cleanup(msg)
 
-
 def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_GROWTH_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_CORE_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_SPEC_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_CRYPTO_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
-
 
 # ---- Relabel a few command response strings without changing behavior ----
 _V443_OLD_RECORD_CORE_BUY = record_core_buy
@@ -25046,20 +17332,17 @@ def record_core_buy(ticker: str, shares: float, price: float, update_id: Optiona
     ok, msg = _V443_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
 
-
 _V443_OLD_RECORD_GROWTH_BUY = record_growth_buy
 
 def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
 
-
 _V443_OLD_RECORD_SPEC_BUY = record_spec_buy
 
 def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
-
 
 # ---- Status/command cleanup ----
 _V443_OLD_HANDLE_COMMAND = handle_command
@@ -25094,7 +17377,6 @@ def _v443_status_text() -> str:
         "• Broker/risk/stress/validation labels now show v4.4.3.\n"
         "• Old v3.8 validation model text removed from validationstatus."
     )
-
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
     text_clean = (text or "").strip()
@@ -25141,8 +17423,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     return _V443_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
 
 # =============================================================================
 # V4.5 HYBRID CRYPTO + GROWTH / CORE / SPEC CANDIDATE
@@ -25247,7 +17527,6 @@ V45_KNOWN_LIMITATIONS = [
     "Long VCP and Bear signal engines are disabled by default in this candidate",
 ]
 
-
 def _v45_map_crypto_to_binance(ticker: str) -> Optional[str]:
     mapping = {
         "BTCUSD": "BTCUSDT",
@@ -25255,7 +17534,6 @@ def _v45_map_crypto_to_binance(ticker: str) -> Optional[str]:
         "SOLUSD": "SOLUSDT",
     }
     return mapping.get(str(ticker).upper())
-
 
 def _v45_binance_klines(symbol: str, interval: str = "4h", limit: int = 500) -> Optional[pd.DataFrame]:
     try:
@@ -25283,10 +17561,8 @@ def _v45_binance_klines(symbol: str, interval: str = "4h", limit: int = 500) -> 
         print(f"[V4.5 BINANCE ERROR] {symbol} {interval}: {exc}")
         return None
 
-
 def _v45_ema(series: pd.Series, span: int) -> pd.Series:
     return series.ewm(span=span, adjust=False).mean()
-
 
 def _v45_crypto_daily_btc_gate() -> Dict[str, Any]:
     rows = []
@@ -25309,10 +17585,8 @@ def _v45_crypto_daily_btc_gate() -> Dict[str, Any]:
         rows.append({"ticker": sym, "price": round(price, 6), "ma50": round(ma50, 6), "ma200": round(ma200, 6), "ok": ok})
     return {"ok": btc_ok, "btc_ok": btc_ok, "ok_count": ok_count_2of3, "required": 1, "required_4h": 2, "gate2_ok": ok_count_2of3 >= 2, "rows": rows}
 
-
 def crypto_indicator_gate() -> Dict[str, Any]:  # type: ignore[override]
     return _v45_crypto_daily_btc_gate()
-
 
 def _v45_crypto_daily_score(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
     try:
@@ -25372,7 +17646,6 @@ def _v45_crypto_daily_score(ticker: str, gate_ref_ret: Optional[float] = None) -
     except Exception as exc:
         print(f"[V4.5 CRYPTO DAILY SCORE ERROR] {ticker}: {exc}")
         return None
-
 
 def _v45_crypto_4h_compression_score(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
     try:
@@ -25443,10 +17716,8 @@ def _v45_crypto_4h_compression_score(ticker: str, gate_ref_ret: Optional[float] 
         print(f"[V4.5 CRYPTO 4H SCORE ERROR] {ticker}: {exc}")
         return None
 
-
 def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:  # type: ignore[override]
     return _v45_crypto_daily_score(ticker, gate_ref_ret=gate_ref_ret)
-
 
 def compute_crypto_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     refresh_portfolio()
@@ -25589,7 +17860,6 @@ def compute_crypto_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
         "module_weights": {"daily_breakout": V45_CRYPTO_DAILY_WEIGHT, "four_hour_compression": V45_CRYPTO_4H_WEIGHT},
     }
 
-
 def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:  # type: ignore[override]
     ticker = ticker.upper()
     for item in plan.get("actions", []) or []:
@@ -25599,7 +17869,6 @@ def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict
         if str(item.get("ticker", "")).upper() == ticker:
             return item
     return None
-
 
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     gate = plan.get("gate", {}) or {}
@@ -25656,7 +17925,6 @@ def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 _V45_OLD_DYNAMIC_TARGETS = dynamic_portfolio_allocation_targets
 
 def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
@@ -25698,21 +17966,19 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[ov
     base["cash_reserve_pct"] = round(cash, 2)
     return base
 
-
 # Suppress tactical scan noise when VCP/Bear allocations are intentionally 0.
 _V45_OLD_SCAN_MARKET = scan_market
 
-def scan_market() -> bool:  # type: ignore[override]
-    if V45_SUPPRESS_DISABLED_TACTICAL_SCANS and not V45_LONG_VCP_SIGNAL_ENGINE_ENABLED and not BEAR_SLEEVE_ENABLED:
-        print("[V4.5 SCAN SKIP] Long VCP and Bear signal engines are disabled in v4.5; no tactical scan run.")
-        try:
-            set_meta("last_scan_day", ny_date_str())
-            set_meta("last_scan_bar", ny_date_str())
-        except Exception:
-            pass
-        return True
-    return _V45_OLD_SCAN_MARKET()
-
+def scan_market() -> bool:
+    # Legacy VCP/Bear scanner removed in v4.8. Final scan_market override routes to Swing Alpha.
+    try:
+        set_meta("last_scan_day", ny_date_str())
+        bar = expected_daily_bar_date()
+        if bar:
+            set_meta("last_scan_bar_date", bar)
+    except Exception:
+        pass
+    return True
 
 # Validation and reporting labels.
 def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
@@ -25732,7 +17998,6 @@ def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[overr
         ],
     }
 
-
 def format_validation_status() -> str:  # type: ignore[override]
     limitations = "\n".join(f"- {x}" for x in V45_KNOWN_LIMITATIONS)
     rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
@@ -25746,7 +18011,6 @@ def format_validation_status() -> str:  # type: ignore[override]
         f"{rules}\n\n"
         "Reporting note: v4.5 changes allocation and crypto logic; IBKR remains read-only and execution remains manual."
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def _v45_label_cleanup(msg: Any) -> str:
     text = _v443_label_cleanup(str(msg)) if '_v443_label_cleanup' in globals() else str(msg)
@@ -25776,7 +18040,6 @@ _V45_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 _V45_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 _V45_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 _V45_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
-
 
 def format_institutional_status() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
@@ -25852,7 +18115,6 @@ def _v45_status_text() -> str:
         "• Bear/inverse sleeve and Long VCP allocation are 0 by default in v4.5."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
     text_clean = (text or "").strip()
     text_lower = text_clean.lower()
@@ -25863,9 +18125,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         send(format_validation_status())
         return
     return _V45_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
-
 
 # =============================================================================
 # V4.6 FREEZE CANDIDATE - SWING ALPHA + HYBRID CRYPTO + MONTHLY ROTATION
@@ -26040,7 +18299,6 @@ def init_db() -> None:  # type: ignore[override]
     finally:
         conn.close()
 
-
 def load_swing_alpha_positions() -> Dict[str, Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -26067,7 +18325,6 @@ def load_swing_alpha_positions() -> Dict[str, Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def load_swing_alpha_trades() -> List[Dict[str, Any]]:
     conn = db_connect()
     try:
@@ -26076,16 +18333,13 @@ def load_swing_alpha_trades() -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def _v46_ema(series: pd.Series, span: int) -> pd.Series:
     return series.ewm(span=span, adjust=False).mean()
-
 
 def _v46_macd_hist(close: pd.Series) -> pd.Series:
     macd = _v46_ema(close, 12) - _v46_ema(close, 26)
     sig = _v46_ema(macd, 9)
     return macd - sig
-
 
 def _v46_vah_val_proxy(df: pd.DataFrame, window: int = 20) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     try:
@@ -26108,7 +18362,6 @@ def _v46_vah_val_proxy(df: pd.DataFrame, window: int = 20) -> Tuple[Optional[flo
         return poc, wq(0.85), wq(0.15)
     except Exception:
         return None, None, None
-
 
 def swing_alpha_position_market_value_details() -> Dict[str, Any]:
     positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
@@ -26136,7 +18389,6 @@ def swing_alpha_position_market_value_details() -> Dict[str, Any]:
     realized = round(sum(float(t.get("realized_profit") or 0.0) for t in load_swing_alpha_trades() if str(t.get("side")).upper() == "SELL"), 2)
     return {"rows": rows, "value": round(value, 2), "cost_basis": round(cost, 2), "unrealized_profit": round(value - cost, 2), "realized_profit": realized, "total_profit": round((value - cost) + realized, 2)}
 
-
 def _v46_position_symbols_in_monthly_ledgers() -> set:
     out = set()
     try:
@@ -26148,7 +18400,6 @@ def _v46_position_symbols_in_monthly_ledgers() -> set:
     except Exception:
         pass
     return {str(x).upper() for x in out}
-
 
 def swing_alpha_market_filter_ok() -> Tuple[bool, str]:
     try:
@@ -26163,7 +18414,6 @@ def swing_alpha_market_filter_ok() -> Tuple[bool, str]:
         return True, "SPY and QQQ above MA200"
     except Exception as exc:
         return False, f"market filter error: {exc}"
-
 
 def _v46_score_swing_candidate(ticker: str) -> Optional[Dict[str, Any]]:
     df = get_historical(ticker, limit=260)
@@ -26243,7 +18493,6 @@ def _v46_score_swing_candidate(ticker: str) -> Optional[Dict[str, Any]]:
         "strategy_version": SWING_ALPHA_STRATEGY_VERSION,
     }
 
-
 def compute_swing_alpha_plan() -> Dict[str, Any]:
     snapshot = compute_equity_snapshot_data()
     equity = float(snapshot.get("equity", 0) or 0)
@@ -26321,14 +18570,12 @@ def compute_swing_alpha_plan() -> Dict[str, Any]:
             actions.append({"ticker": ticker, "action": "SELL", "price": mark, "target_account_pct": 0.0, "target_value": 0.0, "current_value": float(current_rows.get(ticker, {}).get("market_value", 0) or 0), "suggested_dollars": float(current_rows.get(ticker, {}).get("market_value", 0) or 0), "reason": reason})
     return {"plan_id": uuid.uuid4().hex, "strategy_version": SWING_ALPHA_STRATEGY_VERSION, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "account_equity": round(equity,2), "target_swing_pct": round(target_pct*100,2), "target_swing_value": round(target_value,2), "current_swing_value": float(details.get("value",0) or 0), "current_swing_unrealized_profit": float(details.get("unrealized_profit",0) or 0), "market_ok": market_ok, "market_reason": market_reason, "risk_guard": risk, "universe_size": len(SWING_ALPHA_UNIVERSE), "scored_count": len(scored), "top": selected, "actions": actions, "actionable": [a for a in actions if str(a.get("action")).upper() in {"BUY","ADD","SELL","TRIM"}], "allocation": allocation}
 
-
 def save_swing_alpha_plan(plan: Dict[str, Any]) -> None:
     if not SWING_ALPHA_LEDGER_ENABLED:
         return
     with db_tx() as conn:
         conn.execute("UPDATE swing_alpha_signals SET status='INACTIVE' WHERE status='ACTIVE'")
         conn.execute("INSERT INTO swing_alpha_signals(id, time, plan_date, account_equity, swing_target_pct, plan_json, status) VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')", (plan.get("plan_id", uuid.uuid4().hex), now_ts(), ny_date_str(), float(plan.get("account_equity",0) or 0), float(plan.get("target_swing_pct",0) or 0), json_dumps(plan)))
-
 
 def load_latest_swing_alpha_signal() -> Optional[Dict[str, Any]]:
     conn = db_connect()
@@ -26340,14 +18587,12 @@ def load_latest_swing_alpha_signal() -> Optional[Dict[str, Any]]:
     finally:
         conn.close()
 
-
 def swing_alpha_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
     ticker = ticker.upper()
     for item in plan.get("actions", []) or []:
         if str(item.get("ticker", "")).upper() == ticker:
             return item
     return None
-
 
 def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:
     risk = plan.get("risk_guard", {}) or {}
@@ -26401,7 +18646,6 @@ def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_swing_alpha_portfolio_report() -> str:
     details = swing_alpha_position_market_value_details()
     rows = details.get("rows", []) or []
@@ -26424,7 +18668,6 @@ def format_swing_alpha_portfolio_report() -> str:
                 f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_swing_alpha_pnl_report() -> str:
     details = swing_alpha_position_market_value_details()
     trades = load_swing_alpha_trades()
@@ -26436,7 +18679,6 @@ def format_swing_alpha_pnl_report() -> str:
             f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit',0) or 0))}\n"
             f"✅ Realized P/L: {format_money(float(details.get('realized_profit',0) or 0))}\n"
             f"Buy records: {len(buys)}\nSell records: {len(sells)}")
-
 
 def format_swing_alpha_exposure_report() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -26453,7 +18695,6 @@ def format_swing_alpha_exposure_report() -> str:
             f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
             "Use swingplan for BUY/HOLD/SELL actions.")
 
-
 def _v46_validate_swing_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not SWING_ALPHA_REQUIRE_LIVE_QUOTE:
         return True, "OK", None
@@ -26464,7 +18705,6 @@ def _v46_validate_swing_quote(ticker: str, price: float) -> Tuple[bool, str, Opt
     if deviation > SWING_ALPHA_QUOTE_DEVIATION_LIMIT:
         return False, f"Swing Alpha trade rejected: your price is too far from live quote. Live quote: {round(quote,4)} | Your price: {round(price,4)} | Max deviation: {round(SWING_ALPHA_QUOTE_DEVIATION_LIMIT*100,2)}%", quote
     return True, "OK", quote
-
 
 def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:
     if not SWING_ALPHA_LEDGER_ENABLED:
@@ -26517,7 +18757,6 @@ def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: 
         mark_update_processed_tx(conn, update_id, "swing_alpha_buy")
     extra = "\n\n🧩 v4.6: recorded as broker partial fill below normal Swing Alpha minimum-order threshold." if partial_ok else ""
     return True, (f"🎯 SWING_ALPHA BUY RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if target is None else target.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(load_portfolio()['cash'])}{extra}")
-
 
 def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     if not SWING_ALPHA_LEDGER_ENABLED:
@@ -26634,7 +18873,6 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[ov
     base["cash_reserve_pct"] = round(cash, 2)
     return base
 
-
 def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
@@ -26663,7 +18901,6 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         "• Bear/VCP/Options remain disabled.\n"
         "• Read-only IBKR reconciliation only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_riskmatrix_status() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
@@ -26707,7 +18944,6 @@ def format_riskmatrix_status() -> str:  # type: ignore[override]
     msg += "\n" + ("✅ No concentration warnings." if not warnings else "⚠️ Warnings:\n" + "\n".join(f"• {w}" for w in warnings))
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_stress_status() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     equity = float(snapshot.get("equity", 0) or 0)
@@ -26733,7 +18969,6 @@ def format_stress_status() -> str:  # type: ignore[override]
 def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     return {"strategy_version": STRATEGY_VERSION, "strategy": V46_VALIDATION_STRATEGY_LABEL, "allocation": V46_ALLOCATION_LABEL, "known_limitations": list(V46_KNOWN_LIMITATIONS), "live_validation_rules": ["Core/Growth/SPEC remain monthly rotation sleeves; daily plans are monitoring unless monthly-lock allows action.", "Swing Alpha is tactical and separate from monthly ledgers.", "Crypto is tactical and separate, using BTC/ETH/SOL hybrid trend logic.", "Do not chase above max limit guide.", "Use partial-fill commands only for real broker fills already executed.", "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.", "Do not treat external legacy IBKR positions as bot-managed strategy positions.", "No broker order automation in v4.6; IBKR reconciliation remains read-only."]}
 
-
 def format_validation_status() -> str:  # type: ignore[override]
     limitations = "\n".join(f"- {x}" for x in V46_KNOWN_LIMITATIONS)
     rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
@@ -26745,7 +18980,6 @@ def format_validation_status() -> str:  # type: ignore[override]
             "Live validation rules:\n"
             f"{rules}\n\n"
             "Reporting note: v4.6 adds Swing Alpha and changes allocation; IBKR remains read-only and execution remains manual.")[:MAX_TELEGRAM_MESSAGE]
-
 
 def _v46_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -26838,7 +19072,6 @@ def _v46_status_text() -> str:
         "• Read-only IBKR reconciliation only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
     text_clean = (text or "").strip()
     text_lower = text_clean.lower()
@@ -26910,8 +19143,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         send(msg if ok else "❌ ERROR: " + msg)
         return
     return _V46_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
 
 # =============================================================================
 # V4.6.2 - SWING ALPHA LIVE SIGNAL REPLACEMENT LAYER
@@ -27078,7 +19309,6 @@ def setup_label(setup_type: str) -> str:  # type: ignore[override]
         return "🎯 MACD + VAH Reclaim"
     return _V461_OLD_SETUP_LABEL(setup_type)
 
-
 def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
     action = str(item.get("action", "BUY")).upper()
@@ -27114,7 +19344,6 @@ def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
         "• This replaces the disabled VCP/Bear tactical entry path."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
     positions = load_swing_alpha_positions() if SWING_ALPHA_LEDGER_ENABLED else {}
@@ -27136,7 +19365,6 @@ def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
         "• Use Swing Alpha ledger only."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
     return (
@@ -27151,7 +19379,6 @@ def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
         f"{public_signal_footer()}"
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v461_public_swing_exit(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
     return (
@@ -27163,7 +19390,6 @@ def _v461_public_swing_exit(item: Dict[str, Any]) -> str:
         f"{public_signal_footer()}"
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:
     try:
         set_meta("last_swing_alpha_auto_scan_day", day)
@@ -27171,7 +19397,6 @@ def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:
             set_meta("last_swing_alpha_auto_scan_bar", bar)
     except Exception:
         pass
-
 
 def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     """Run Swing Alpha as the live tactical scan engine."""
@@ -27286,7 +19511,6 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         "• IBKR reconciliation is read-only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     return {
         "strategy_version": STRATEGY_VERSION,
@@ -27306,7 +19530,6 @@ def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[overr
         ],
     }
 
-
 def format_validation_status() -> str:  # type: ignore[override]
     limitations = "\n".join(f"- {x}" for x in V461_KNOWN_LIMITATIONS)
     rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
@@ -27320,7 +19543,6 @@ def format_validation_status() -> str:  # type: ignore[override]
         f"{rules}\n\n"
         "Reporting note: v4.6.2 replaces disabled VCP/Bear live signal path with Swing Alpha; IBKR remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def _v461_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -27418,7 +19640,6 @@ def _v461_status_text() -> str:
         "• Read-only IBKR reconciliation only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
     text_clean = (text or "").strip()
     text_lower = text_clean.lower()
@@ -27494,8 +19715,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     return _V461_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
 # ---- Swing Alpha live position management / exit alerts ----
 def _v461_send_swing_exit_once(ticker: str, reason_key: str, message: str, public_item: Optional[Dict[str, Any]] = None) -> None:
     today = ny_date_str()
@@ -27506,7 +19725,6 @@ def _v461_send_swing_exit_once(ticker: str, reason_key: str, message: str, publi
     send(message[:MAX_TELEGRAM_MESSAGE])
     if PUBLIC_SIGNAL_ENABLED and SWING_ALPHA_PUBLIC_SIGNAL_ENABLED and public_item is not None:
         send_public_signal(_v461_public_swing_exit(public_item))
-
 
 def manage_swing_alpha_positions() -> None:
     """Alert-only management for Swing Alpha positions.
@@ -27597,15 +19815,12 @@ def manage_swing_alpha_positions() -> None:
         except Exception as exc:
             logger.exception(f"[SWING ALPHA MANAGE ERROR] {ticker}: {exc}")
 
-
 _V461_OLD_MANAGE_POSITIONS = manage_positions
 
 def manage_positions() -> None:  # type: ignore[override]
-    # Keep old manager for any legacy tactical/VCP positions, then manage Swing Alpha.
-    _V461_OLD_MANAGE_POSITIONS()
+    # v4.8.1 active-only: legacy VCP/Bear position manager is not called.
+    # Swing Alpha is the only tactical stock manager.
     manage_swing_alpha_positions()
-
-
 
 # ---- v4.6.2 deployment-readiness cleanup ----
 # Keep scanstatus aligned with the new Swing Alpha scan path. v4.6.1 marked
@@ -27640,7 +19855,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     return _V462_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
 # =============================================================================
 # V4.6.3 MONTHLY DASHBOARD + CRYPTO AUTO ALERTS
 # =============================================================================
@@ -27669,11 +19883,9 @@ V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN = int(os.getenv("V463_CRYPTO_AUTO_CHECK_INTE
 V463_CRYPTO_DAILY_STATUS_MINUTE = int(os.getenv("V463_CRYPTO_DAILY_STATUS_MINUTE", str(16 * 60 + 25)))
 V463_CRYPTO_SEND_NO_ACTION_DAILY = os.getenv("V463_CRYPTO_SEND_NO_ACTION_DAILY", "1").strip() != "0"
 
-
 def _v463_after_minute(minute: int) -> bool:
     n = ny_now()
     return (n.hour * 60 + n.minute) >= int(minute)
-
 
 def _v463_plan_actions(plan: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not plan:
@@ -27686,7 +19898,6 @@ def _v463_plan_actions(plan: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if str(item.get("action", "")).upper() in {"BUY", "ADD", "TRIM", "SELL"}:
             out.append(item)
     return out
-
 
 def _v463_summarize_plan(label: str, plan: Optional[Dict[str, Any]], error: Optional[str] = None) -> str:
     if error:
@@ -27710,13 +19921,11 @@ def _v463_summarize_plan(label: str, plan: Optional[Dict[str, Any]], error: Opti
         parts.append(f"+{len(acts)-4} more")
     return f"• {label}: ⚠️ " + "; ".join(parts)
 
-
 def _v463_crypto_gate_signature(plan: Dict[str, Any]) -> str:
     gate = plan.get("gate", {}) or {}
     rows = gate.get("rows", []) or []
     row_sig = ",".join(f"{str(r.get('ticker','')).upper()}:{1 if r.get('ok') else 0}" for r in rows)
     return f"btc={1 if gate.get('btc_ok') else 0}|gate2={1 if gate.get('gate2_ok') else 0}|rows={row_sig}"
-
 
 def _v463_crypto_action_signature(plan: Dict[str, Any]) -> str:
     acts = _v463_plan_actions(plan)
@@ -27729,7 +19938,6 @@ def _v463_crypto_action_signature(plan: Dict[str, Any]) -> str:
             f"{round(float(item.get('target_value',0) or 0),2)}:{round(float(item.get('current_value',0) or 0),2)}"
         )
     return "|".join(parts)
-
 
 def _v463_prepare_dashboard_plans() -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Dict[str, str]]:
     errors: Dict[str, str] = {}
@@ -27759,7 +19967,6 @@ def _v463_prepare_dashboard_plans() -> Tuple[Optional[Dict[str, Any]], Optional[
         errors["Crypto"] = str(exc)
     return core_plan, growth_plan, spec_plan, crypto_plan, errors
 
-
 def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optional[Dict[str, Any]], spec_plan: Optional[Dict[str, Any]], crypto_plan: Optional[Dict[str, Any]], errors: Dict[str, str]) -> str:
     try:
         win = _v44_monthly_rebalance_window_info()
@@ -27786,7 +19993,6 @@ def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optio
         "• IBKR remains read-only; no orders are placed by the bot.\n"
         + ("\nDetailed Core/Growth/SPEC plans follow." if V463_MONTHLY_SEND_DETAILED_PLANS else "")
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False) -> bool:
     if not (V463_MONTHLY_DASHBOARD_ENABLED or force):
@@ -27829,7 +20035,6 @@ def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False)
         set_meta("last_spec_alpha_alert_ts", str(now_ts()))
         audit("V463_MONTHLY_DASHBOARD", f"month={month_key} errors={list(errors.keys())}")
     return True
-
 
 def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:
     if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
@@ -27884,7 +20089,6 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:
     audit("V463_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
     return True
 
-
 # Replace the chained monthly hook with a unified user-friendly hook.
 def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
     try:
@@ -27899,7 +20103,6 @@ def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
         maybe_send_ibkr_reconcile_after_close()
     except Exception as exc:
         logger.exception(f"[V4.6.3 IBKR AUTO ERROR] {exc}")
-
 
 def _v463_label_cleanup(text: Any) -> str:
     out = str(text)
@@ -27922,7 +20125,6 @@ _V463_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
 _V463_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
 _V463_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 
-
 def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     msg = _v463_label_cleanup(_V463_OLD_FORMAT_ALLOCATION_PLAN())
     note = (
@@ -27931,7 +20133,6 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         "• Crypto auto-checks separately because it is tactical, not monthly.\n"
     )
     return (msg + note)[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_validation_status() -> str:  # type: ignore[override]
     msg = _v463_label_cleanup(_V463_OLD_FORMAT_VALIDATION())
@@ -27943,34 +20144,26 @@ def format_validation_status() -> str:  # type: ignore[override]
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_institutional_status() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_INSTITUTIONAL())
-
 
 def format_datahealth_status() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_DATAHEALTH())
 
-
 def format_riskmatrix_status() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_RISK())
-
 
 def format_stress_status() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_STRESS())
 
-
 def format_brokerstatus() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSTATUS())
-
 
 def format_brokerreconcile() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERRECONCILE())
 
-
 def format_brokersyncpreview() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSYNCPREVIEW())
-
 
 def _v463_status_text() -> str:
     try:
@@ -28043,12 +20236,10 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
         print(f"[V4.6.3 EXPORT WARNING] {exc}")
     return zip_path
 
-
 # ---- v4.6.3 final label/user-facing cleanup ----
 # Keep crypto daily status closer to U.S. after-close by default; the 4h/action
 # checks are still throttled separately by V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN.
 V463_CRYPTO_DAILY_STATUS_MINUTE = int(os.getenv("V463_CRYPTO_DAILY_STATUS_MINUTE", str(16 * 60 + 30)))
-
 
 def _v463_label_cleanup(text: Any) -> str:  # type: ignore[override]
     out = str(text)
@@ -28071,33 +20262,26 @@ def _v463_label_cleanup(text: Any) -> str:  # type: ignore[override]
         pass
     return out[:MAX_TELEGRAM_MESSAGE]
 
-
 _V463_FINAL_OLD_CORE_PLAN_FORMAT = format_wealth_core_plan
 _V463_FINAL_OLD_GROWTH_PLAN_FORMAT = format_growth_alpha_plan
 _V463_FINAL_OLD_SPEC_PLAN_FORMAT = format_spec_alpha_plan
 _V463_FINAL_OLD_CRYPTO_PLAN_FORMAT = format_crypto_alpha_plan
 _V463_FINAL_OLD_SWING_PLAN_FORMAT = format_swing_alpha_plan
 
-
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_CORE_PLAN_FORMAT(plan))
-
 
 def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_GROWTH_PLAN_FORMAT(plan))
 
-
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_SPEC_PLAN_FORMAT(plan))
-
 
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_CRYPTO_PLAN_FORMAT(plan))
 
-
 def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_SWING_PLAN_FORMAT(plan))
-
 
 def _v463_cryptostatus_text() -> str:
     alloc = dynamic_portfolio_allocation_targets()
@@ -28124,7 +20308,6 @@ def _v463_cryptostatus_text() -> str:
         "cryptoportfolio | cryptopnl | cryptoexposure"
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 _V463_FINAL_OLD_HANDLE_COMMAND = handle_command
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
@@ -28141,12 +20324,8 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     return _V463_FINAL_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
-
-
-
-
 # =============================================================================
-# V4.7 - LIVE OUTPUT CLEANUP / ACTIVE-SLEEVE PORTFOLIO FIX
+# V4.7.1 - LIVE OUTPUT CLEANUP / ACTIVE-SLEEVE PORTFOLIO FIX
 # =============================================================================
 # Purpose:
 # - Fix portfolio header so Swing Alpha is included in the top summary.
@@ -28154,26 +20333,24 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 # - Keep legacy DB/schema/helpers only for historical exports and backward-compatible
 #   state handling. No scoring/allocation/entry/exit logic changed.
 
-V47_VERSION = "v4.7-active-sleeve-cleanup-20-45-15-10-10-monitor"
+V47_VERSION = "v4.7.1-active-sleeve-cleanup-compact-20-45-15-10-10-monitor"
 if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
     STRATEGY_VERSION = V47_VERSION
 
-V47_STRATEGY_LOGIC_LABEL = "v4.7 active-sleeve cleanup over v4.6.3 monthly dashboard + crypto alerts"
+V47_STRATEGY_LOGIC_LABEL = "v4.7.1 active-sleeve cleanup over v4.6.3 monthly dashboard + crypto alerts"
 V47_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10"
-
 
 def _v47_label_cleanup(text: Any) -> str:
     out = str(text)
     replacements = [
-        ("v4.6.3", "v4.7"), ("V4.6.3", "V4.7"),
-        ("v4.6.2", "v4.7"), ("V4.6.2", "V4.7"),
-        ("v4.6.1", "v4.7"), ("V4.6.1", "V4.7"),
-        ("v4.5", "v4.7"), ("V4.5", "V4.7"),
+        ("v4.6.3", "v4.7"), ("V4.6.3", "V4.7.1"),
+        ("v4.6.2", "v4.7"), ("V4.6.2", "V4.7.1"),
+        ("v4.6.1", "v4.7"), ("V4.6.1", "V4.7.1"),
+        ("v4.5", "v4.7"), ("V4.5", "V4.7.1"),
     ]
     for old, new in replacements:
         out = out.replace(old, new)
     return out[:MAX_TELEGRAM_MESSAGE]
-
 
 def _v47_rows_section(title: str, rows: List[Dict[str, Any]], include_stop: bool = False) -> str:
     if not rows:
@@ -28202,7 +20379,6 @@ def _v47_rows_section(title: str, rows: List[Dict[str, Any]], include_stop: bool
             msg += f"📦 {row.get('ticker', '?')} — row format error: {exc}\n\n"
     return msg
 
-
 def format_combined_portfolio_report() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     cash = float(snapshot.get("cash", 0) or 0)
@@ -28216,7 +20392,7 @@ def format_combined_portfolio_report() -> str:  # type: ignore[override]
     equity = float(snapshot.get("equity", 0) or 0)
 
     msg = (
-        "📋 PORTFOLIO v4.7\n\n"
+        "📋 PORTFOLIO v4.7.1\n\n"
         f"💵 Cash: {format_money(cash)}\n"
         f"🏛️ Core value: {format_money(core_value)}\n"
         f"🚀 Growth Alpha value: {format_money(growth_value)}\n"
@@ -28255,7 +20431,6 @@ def format_combined_portfolio_report() -> str:  # type: ignore[override]
         msg += "No open active bot-managed positions.\n"
     return msg
 
-
 _V47_OLD_OPEN_RISK_DETAILS = open_risk_details
 
 def open_risk_details() -> Dict[str, float]:  # type: ignore[override]
@@ -28291,12 +20466,11 @@ def open_risk_details() -> Dict[str, float]:  # type: ignore[override]
     details["swing_alpha_value"] = float(snapshot.get("swing_alpha_positions_value", 0) or 0)
     return details
 
-
 def _v47_equity_text() -> str:
     snapshot = compute_equity_snapshot_data()
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
     lines = [
-        "💼 ACCOUNT EQUITY v4.7",
+        "💼 ACCOUNT EQUITY v4.7.1",
         "",
         f"💵 Cash: {format_money(snapshot['cash'])}",
         f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
@@ -28311,11 +20485,10 @@ def _v47_equity_text() -> str:
         lines.insert(3, f"⚠️ Legacy tactical positions: {format_money(legacy_value)}")
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v47_openrisk_text() -> str:
     details = open_risk_details()
     return (
-        "🛡️ OPEN RISK v4.7\n\n"
+        "🛡️ OPEN RISK v4.7.1\n\n"
         f"💼 Equity: {format_money(details['equity'])}\n"
         f"⚠️ Initial open risk: {format_money(details['initial_risk_dollars'])} "
         f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
@@ -28324,7 +20497,6 @@ def _v47_openrisk_text() -> str:
         f"🎯 Swing Alpha stop risk: {format_money(details.get('swing_alpha_risk_dollars', 0))}\n"
         f"🚦 Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 def _v47_scanstatus_text() -> str:
     refresh_portfolio()
@@ -28337,7 +20509,7 @@ def _v47_scanstatus_text() -> str:
     except Exception:
         swing_count = 0
     return (
-        "🧭 SCAN STATUS v4.7\n\n"
+        "🧭 SCAN STATUS v4.7.1\n\n"
         f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
         f"📅 Last tactical scan day/bar: {last_scan_day} / {last_scan_bar}\n"
         f"🎯 Swing Alpha positions: {swing_count}/{SWING_ALPHA_MAX_OPEN_POSITIONS}\n"
@@ -28350,7 +20522,6 @@ def _v47_scanstatus_text() -> str:
         + (f"\n⚠️ Legacy inactive tactical positions: {legacy_count}" if legacy_count else "")
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def _v47_status_text() -> str:
     try:
         win = _v44_monthly_rebalance_window_info()
@@ -28358,7 +20529,7 @@ def _v47_status_text() -> str:
     except Exception:
         win_txt = "n/a"
     return (
-        "🛠️ V4.7 ACTIVE-SLEEVE CLEANUP STATUS\n\n"
+        "🛠️ V4.7.1 ACTIVE-SLEEVE CLEANUP STATUS\n\n"
         f"Strategy display: {STRATEGY_VERSION}\n"
         "Strategy logic: v4.6.3 monthly dashboard + crypto alerts + Swing Alpha live signals\n"
         f"Allocation: {V47_ALLOCATION_LABEL}\n"
@@ -28380,7 +20551,6 @@ def _v47_status_text() -> str:
         "• IBKR reconciliation remains read-only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 _V47_OLD_FORMAT_ALLOCATION = format_portfolio_allocation_plan
 _V47_OLD_FORMAT_VALIDATION = format_validation_status
 _V47_OLD_FORMAT_INSTITUTIONAL = format_institutional_status
@@ -28391,12 +20561,11 @@ _V47_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
 _V47_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
 _V47_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 
-
 def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
     return (
-        "🏛️ ACTIVE ALLOCATION PLAN v4.7\n\n"
+        "🏛️ ACTIVE ALLOCATION PLAN v4.7.1\n\n"
         "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n"
@@ -28414,11 +20583,10 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         "• IBKR reconciliation is read-only; no broker orders are placed.\n"
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_validation_status() -> str:  # type: ignore[override]
     return (
-        "🧪 VALIDATION STATUS v4.7\n\n"
-        "Strategy: v4.7 active-sleeve cleanup over v4.6.3 logic\n"
+        "🧪 VALIDATION STATUS v4.7.1\n\n"
+        "Strategy: v4.7.1 active-sleeve cleanup over v4.6.3 logic\n"
         f"Allocation: {V47_ALLOCATION_LABEL}\n\n"
         "Known limitations:\n"
         "- Strategy remains aggressive and growth/swing/crypto-led.\n"
@@ -28435,34 +20603,26 @@ def format_validation_status() -> str:  # type: ignore[override]
         "• Disabled VCP/Bear/Options are not active live sleeves.\n"
     )[:MAX_TELEGRAM_MESSAGE]
 
-
 def format_institutional_status() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_INSTITUTIONAL()).replace("v4.6.3", "v4.7")[:MAX_TELEGRAM_MESSAGE]
-
 
 def format_datahealth_status() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_DATAHEALTH())
 
-
 def format_riskmatrix_status() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_RISK())
-
 
 def format_stress_status() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_STRESS())
 
-
 def format_brokerstatus() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERSTATUS())
-
 
 def format_brokerreconcile() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERRECONCILE())
 
-
 def format_brokersyncpreview() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_BROKERSYNCPREVIEW())
-
 
 def _v47_sleevestatus_text() -> str:
     snapshot = compute_equity_snapshot_data()
@@ -28474,7 +20634,7 @@ def _v47_sleevestatus_text() -> str:
         except Exception:
             return 0.0
     return (
-        "🧭 ACTIVE SLEEVE STATUS v4.7\n\n"
+        "🧭 ACTIVE SLEEVE STATUS v4.7.1\n\n"
         f"💼 Equity: {format_money(equity)}\n"
         f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n\n"
         f"🏛️ Core: {format_money(snapshot.get('core_positions_value', 0))} / target {alloc.get('core_wealth_pct')}%\n"
@@ -28487,7 +20647,6 @@ def _v47_sleevestatus_text() -> str:
         "• Bear/inverse: 0% — disabled.\n"
         "• Options: 0% — research-only, not live."
     )[:MAX_TELEGRAM_MESSAGE]
-
 
 _V47_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
@@ -28505,16 +20664,15 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
                 "no_strategy_logic_changed": True,
             }), indent=2))
     except Exception as exc:
-        print(f"[V4.7 EXPORT WARNING] {exc}")
+        print(f"[V4.7.1 EXPORT WARNING] {exc}")
     return zip_path
-
 
 _V47_OLD_HANDLE_COMMAND = handle_command
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
     text_clean = (text or "").strip()
     text_lower = text_clean.lower()
-    if text_lower in {"v47status", "cleanupstatus", "activelevers", "activeledgers"}:
+    if text_lower in {"v47status", "v471status", "cleanupstatus", "activelevers", "activeledgers"}:
         send(_v47_status_text())
         return
     if text_lower == "equity":
@@ -28531,7 +20689,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     if text_lower in {"help", "/help"}:
         send(
-            "Commands v4.7:\n"
+            "Commands v4.7.1:\n"
             "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus | v47status | sleevestatus\n"
             "wealthplan | corestatus | coreportfolio | corepnl | coreexposure | corebuy | coresell\n"
             "growthplan | growthstatus | growthportfolio | growthpnl | growthexposure | growthbuy | growthsell\n"
@@ -28543,7 +20701,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         )
         return
     if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
-        send("ℹ️ v4.7: Legacy VCP/Bear/Options sleeves are not active live strategies. Swing Alpha replaced the tactical stock signal path. No VCP/Bear action is available.")
+        send("ℹ️ v4.7.1: Legacy VCP/Bear/Options sleeves are not active live strategies. Swing Alpha replaced the tactical stock signal path. No VCP/Bear action is available.")
         return
     if text_lower == "portfolio":
         send(format_combined_portfolio_report())
@@ -28551,6 +20709,361 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     return _V47_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
+# =============================================================================
+# V4.8 - ACTIVE-ONLY SINGLE-FILE CLEANUP
+# =============================================================================
+# Surgical cleanup over v4.7.1:
+# - Legacy VCP/Bear/Options live strategy paths are removed/blocked.
+# - Active sleeves remain unchanged: Core, Growth, SPEC, Swing Alpha, Crypto.
+# - IBKR reconciliation remains read-only.
+# - No scoring/allocation/risk/entry logic changed for active sleeves.
+
+V48_VERSION = "v4.8.1-active-only-clean-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
+    STRATEGY_VERSION = V48_VERSION
+
+LEGACY_TACTICAL_REMOVED = True
+BEAR_SLEEVE_ENABLED = False
+BEAR_WATCHLIST = []
+V2_MAX_SIGNALS_PER_SCAN = 0
+V2_ALLOW_VCP = False
+V2_ALLOW_BREAKOUTS = False
+V2_ALLOW_PULLBACKS = False
+V2_ALLOW_MEDIUM = False
+V2_ALLOW_WEAK = False
+V45_LONG_VCP_ALLOC = 0.0
+V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = False
+V46_LONG_VCP_ALLOC = 0.0
+V46_BEAR_ALLOC = 0.0
+
+V48_LOGIC_LABEL = "v4.8 active-only clean over v4.7.1 active sleeves"
+V48_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10"
+
+def sleeve_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
+    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
+    labels = {
+        "CORE_WEALTH": "🏛️ CORE WEALTH",
+        "GROWTH_ALPHA": "🚀 GROWTH ALPHA",
+        "SPEC_ALPHA": "⚡ SPEC ALPHA",
+        "SWING_ALPHA": "🎯 SWING ALPHA",
+        "CRYPTO_ALPHA": "🪙 CRYPTO ALPHA",
+    }
+    if sleeve in labels:
+        return labels[sleeve]
+    if sleeve in {"LONG_VCP", "BEAR_INVERSE", "BEAR_STOCK"}:
+        return "⚪ REMOVED LEGACY SLEEVE"
+    return f"⚙️ {sleeve or 'ACTIVE BOT'}"
+
+def sleeve_short_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
+    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
+    if sleeve in {"LONG_VCP", "BEAR_INVERSE", "BEAR_STOCK"}:
+        return "REMOVED_LEGACY"
+    return sleeve or "ACTIVE_BOT"
+
+def setup_label(setup_type: str) -> str:  # type: ignore[override]
+    setup = str(setup_type or "").lower()
+    if "macd" in setup or "vah" in setup or "swing" in setup:
+        return "🎯 Swing Alpha MACD + VAH Reclaim"
+    if "crypto" in setup:
+        return "🪙 Crypto Hybrid Major Trend"
+    if setup in {"vcp_breakout", "bear_vcp_inverse"}:
+        return "⚪ Removed legacy setup"
+    return f"⚙️ {setup_type}"
+
+def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
+    try:
+        md = market_regime_details()
+    except Exception:
+        md = {"condition": "UNCERTAIN", "score": None, "max_score": 8}
+    try:
+        risk = portfolio_risk_guard_details()
+    except Exception:
+        risk = {"hard_active": False, "soft_active": False, "recommended_action": "Normal risk mode."}
+    market = str(md.get("condition", "UNCERTAIN")).upper()
+    if risk.get("hard_active"):
+        core, growth, spec, swing, crypto = 20.0, 0.0, 0.0, 0.0, 0.0
+    elif market == "BULL":
+        core, growth, spec, swing, crypto = V46_CORE_ALLOC, V46_GROWTH_ALLOC, V46_SPEC_ALLOC, V46_SWING_ALLOC, V46_CRYPTO_ALLOC
+    elif market == "BEAR":
+        core, growth, spec, swing, crypto = 20.0, 0.0, 0.0, 0.0, 0.0
+    else:
+        core, growth, spec, swing, crypto = 20.0, 20.0, 8.0, 5.0, 5.0
+    if risk.get("soft_active") and not risk.get("hard_active"):
+        growth *= 0.50
+        spec *= 0.50
+        swing *= 0.50
+        crypto *= 0.50
+    if not GROWTH_ALPHA_ENABLED:
+        growth = 0.0
+    if not SPEC_ALPHA_ENABLED:
+        spec = 0.0
+    if not SWING_ALPHA_ENABLED:
+        swing = 0.0
+    if not CRYPTO_ALPHA_ENABLED:
+        crypto = 0.0
+    cash = max(0.0, 100.0 - core - growth - spec - swing - crypto)
+    return {
+        "strategy_version": "v4_8_1_active_only_dynamic_allocation",
+        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "market": market,
+        "market_score": md.get("score"),
+        "max_market_score": md.get("max_score", 8),
+        "risk_guard": risk,
+        "core_wealth_pct": round(core, 2),
+        "growth_alpha_pct": round(growth, 2),
+        "spec_alpha_pct": round(spec, 2),
+        "swing_alpha_pct": round(swing, 2),
+        "crypto_alpha_pct": round(crypto, 2),
+        "long_vcp_tactical_pct": 0.0,
+        "bear_inverse_tactical_pct": 0.0,
+        "cash_reserve_pct": round(cash, 2),
+    }
+
+def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
+    plan = dynamic_portfolio_allocation_targets()
+    risk = plan.get("risk_guard", {}) or {}
+    return (
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.8.1\n\n"
+        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        f"🕒 NY time: {plan.get('ny_time')}\n"
+        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
+        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
+        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
+        "Target account buckets:\n"
+        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
+        f"💵 Cash reserve / unused: {plan.get('cash_reserve_pct')}%\n\n"
+        "Removed from live bot:\n"
+        "• Legacy VCP: removed/replaced by Swing Alpha.\n"
+        "• Bear / inverse sleeve: removed.\n"
+        "• Options: not present in live bot.\n\n"
+        "Rules:\n"
+        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
+        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
+        "• IBKR reconciliation is read-only; no broker orders are placed."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+def format_validation_status() -> str:  # type: ignore[override]
+    return (
+        "🧪 VALIDATION STATUS v4.8.1\n\n"
+        "Strategy: v4.8.1 active-only clean over v4.8\n"
+        "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
+        "Known limitations:\n"
+        "- v4.8 keeps v4.7.1 active strategy logic; this patch removes disabled legacy code paths.\n"
+        "- Swing Alpha and Crypto remain aggressive tactical sleeves requiring forward validation.\n"
+        "- Backtests are not broker-grade execution guarantees.\n"
+        "- Manual execution and read-only IBKR reconciliation are still required.\n"
+        "- Crypto permission/gate required before crypto trades.\n\n"
+        "Live validation rules:\n"
+        "• Use corebuy/growthbuy/specbuy/swingbuy/cryptobuy only for their matching ledgers.\n"
+        "• Legacy bought/sold VCP/Bear commands are intentionally disabled.\n"
+        "• Do not chase above max entry guide.\n"
+        "• Reconcile with IBKR after manual fills.\n"
+        "• External legacy IBKR positions remain outside bot strategy."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+def _v48_status_text() -> str:
+    try:
+        win = _v44_monthly_rebalance_window_info()
+        win_txt = f"{yes_no(bool(win.get('open')))} — {win.get('reason')}"
+    except Exception:
+        win_txt = "n/a"
+    return (
+        "🛠️ V4.8.1 ACTIVE-ONLY CLEANUP STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        f"Strategy logic: {V48_LOGIC_LABEL}\n"
+        f"Allocation: {V48_ALLOCATION_LABEL}\n"
+        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)} | Window: {win_txt}\n"
+        f"Swing Alpha live signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED)}\n"
+        f"Crypto auto-check: {yes_no(V463_CRYPTO_AUTO_CHECK_ENABLED)}\n"
+        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)} | read-only only\n\n"
+        "Removed from live code path:\n"
+        "• Legacy VCP bought/sold strategy\n"
+        "• Bear / inverse strategy\n"
+        "• Options strategy placeholder\n\n"
+        "Active commands remain:\n"
+        "core*, growth*, spec*, swing*, crypto*, broker*, monthlydashboard, withdrawal/export/status commands."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+# v4.8 visible-report label wrappers.
+def _v48_label_cleanup(text: Any) -> str:
+    out = str(text)
+    for old in ["v4.7.1", "V4.7.1", "v4.7", "V4.7", "v4.6.3", "V4.6.3", "v4.6.2", "V4.6.2"]:
+        out = out.replace(old, "v4.8" if old.startswith("v") else "V4.8")
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+_V48_OLD_COMBINED_PORTFOLIO_REPORT = format_combined_portfolio_report
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    return _v48_label_cleanup(_V48_OLD_COMBINED_PORTFOLIO_REPORT())
+
+def _v48_equity_text() -> str:
+    return _v48_label_cleanup(_v47_equity_text())
+
+def _v48_openrisk_text() -> str:
+    return _v48_label_cleanup(_v47_openrisk_text())
+
+def _v48_scanstatus_text() -> str:
+    return _v48_label_cleanup(_v47_scanstatus_text())
+
+def _v48_sleevestatus_text() -> str:
+    return _v48_label_cleanup(_v47_sleevestatus_text())
+
+_V48_OLD_RISKMATRIX = format_riskmatrix_status
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v48_label_cleanup(_V48_OLD_RISKMATRIX())
+
+_V48_OLD_STRESS = format_stress_status
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v48_label_cleanup(_V48_OLD_STRESS())
+
+_V48_OLD_INSTITUTIONAL = format_institutional_status
+def format_institutional_status() -> str:  # type: ignore[override]
+    return _v48_label_cleanup(_V48_OLD_INSTITUTIONAL())
+
+_V48_OLD_DATAHEALTH = format_datahealth_status
+def format_datahealth_status() -> str:  # type: ignore[override]
+    return _v48_label_cleanup(_V48_OLD_DATAHEALTH())
+
+_V48_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V48_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
+    try:
+        summary_path = os.path.join(DATA_DIR, "v4_8_1_active_only_manifest.json")
+        with open(summary_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "strategy_version": STRATEGY_VERSION,
+                "logic": V48_LOGIC_LABEL,
+                "allocation": V48_ALLOCATION_LABEL,
+                "removed_live_strategies": ["LONG_VCP", "BEAR_INVERSE", "OPTIONS"],
+                "active_ledgers": ["CORE_WEALTH", "GROWTH_ALPHA", "SPEC_ALPHA", "SWING_ALPHA", "CRYPTO_ALPHA"],
+                "ibkr_reconciliation": "read_only",
+            }, f, indent=2)
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.write(summary_path, arcname="v4_8_1_active_only_manifest.json")
+    except Exception as exc:
+        print(f"[V4.8 EXPORT MANIFEST ERROR] {exc}")
+    return zip_path
+
+_V48_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    first = text_lower.split()[0] if text_lower else ""
+    if text_lower in {"v481status", "v48status", "activeonlystatus", "cleanupstatus"}:
+        send(_v48_status_text())
+        return
+    if text_lower == "portfolio":
+        send(format_combined_portfolio_report())
+        return
+    if text_lower == "equity":
+        send(_v48_equity_text())
+        return
+    if text_lower == "openrisk":
+        send(_v48_openrisk_text())
+        return
+    if text_lower == "scanstatus":
+        send(_v48_scanstatus_text())
+        return
+    if text_lower == "sleevestatus":
+        send(_v48_sleevestatus_text())
+        return
+    if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
+        send("ℹ️ v4.8.1: Legacy VCP/Bear/Options strategies were removed from the live bot. Swing Alpha owns the tactical stock signal path.")
+        return
+    if first in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
+        send("❌ Legacy VCP/Bear bought/sold commands are disabled in v4.8.1. Use swingbuy/swingsell for Swing Alpha, or core/growth/spec/crypto commands for their ledgers.")
+        return
+    if text_lower in {"help", "/help"}:
+        send(
+            "Commands v4.8.1:\n"
+            "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus | v481status | v48status | sleevestatus\n"
+            "wealthplan | corestatus | coreportfolio | corepnl | coreexposure | corebuy | coresell\n"
+            "growthplan | growthstatus | growthportfolio | growthpnl | growthexposure | growthbuy | growthsell\n"
+            "specplan | specstatus | specportfolio | specpnl | specexposure | specbuy | specsell\n"
+            "swingstatus | swingplan | swingportfolio | swingpnl | swingexposure | swingbuy | swingsell | forcescan\n"
+            "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptopnl | cryptoexposure | cryptobuy | cryptosell\n"
+            "brokerstatus | brokerreconcile | brokerpositions | brokerexternal | brokersyncpreview | brokersyncapply CONFIRM\n"
+            "monthlydashboard | download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume"
+        )
+        return
+    return _V48_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+# ---- v4.8.1 active-only verification cleanup ----
+V481_LOGIC_LABEL = "v4.8.1 active-only clean; v4.8 strategy logic unchanged"
+
+def v481_status_text() -> str:
+    base = _v48_status_text()
+    base = base.replace("V4.8 ACTIVE-ONLY CLEANUP STATUS", "V4.8.1 ACTIVE-ONLY CLEANUP STATUS")
+    base = base.replace("v4.8-active-only-clean", "v4.8.1-active-only-clean")
+    base += "\n\n🧪 v4.8.1 check: legacy VCP/Bear manager is not called; active tactical management is Swing Alpha only."
+    return base[:MAX_TELEGRAM_MESSAGE]
+
+_V481_OLD_HANDLE_COMMAND = handle_command
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower == "v481status":
+        send(v481_status_text())
+        return
+    return _V481_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+# v4.8.1 visible label wrappers for all user-facing active reports.
+def _v481_label_cleanup(text: Any) -> str:
+    out = str(text)
+    out = out.replace("v4.8.1.1", "v4.8.1")
+    out = out.replace("V4.8.1.1", "V4.8.1")
+    out = out.replace("v4.8-active-only-clean", "v4.8.1-active-only-clean")
+    out = out.replace("V4.8 ACTIVE-ONLY", "V4.8.1 ACTIVE-ONLY")
+    out = out.replace("v4.8 RECON", "v4.8.1 RECON")
+    out = out.replace("V4.8 RECON", "V4.8.1 RECON")
+    out = out.replace(" v4.8\n", " v4.8.1\n")
+    out = out.replace(" v4.8 |", " v4.8.1 |")
+    out = out.replace(" v4.8", " v4.8.1")
+    out = out.replace("V4.8", "V4.8.1")
+    out = out.replace("v4.8.1.1", "v4.8.1")
+    out = out.replace("V4.8.1.1", "V4.8.1")
+    out = out.replace("v4.8: Legacy", "v4.8.1: Legacy")
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+_V481_COMBINED_PORTFOLIO_REPORT = format_combined_portfolio_report
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_COMBINED_PORTFOLIO_REPORT())
+
+_V481_EQUITY_TEXT_BASE = _v48_equity_text
+def _v48_equity_text() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_EQUITY_TEXT_BASE())
+
+_V481_OPENRISK_TEXT_BASE = _v48_openrisk_text
+def _v48_openrisk_text() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_OPENRISK_TEXT_BASE())
+
+_V481_SCANSTATUS_TEXT_BASE = _v48_scanstatus_text
+def _v48_scanstatus_text() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_SCANSTATUS_TEXT_BASE())
+
+_V481_SLEEVE_TEXT_BASE = _v48_sleevestatus_text
+def _v48_sleevestatus_text() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_SLEEVE_TEXT_BASE())
+
+_V481_RISK_BASE = format_riskmatrix_status
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_RISK_BASE())
+
+_V481_STRESS_BASE = format_stress_status
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_STRESS_BASE())
+
+_V481_VALIDATION_BASE = format_validation_status
+def format_validation_status() -> str:  # type: ignore[override]
+    return _v481_label_cleanup(_V481_VALIDATION_BASE())
 
 if __name__ == "__main__":
     main()
