@@ -106,7 +106,7 @@ SESSION = requests.Session()
 
 NY_TZ = ZoneInfo("America/New_York")
 
-STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v3.8-aggressive-45-15-40-monitor")
+STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v4.8.3-final-freeze-20-45-15-10-10-monitor")
 INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
 
 # Risk / execution controls.
@@ -21064,6 +21064,819 @@ def format_stress_status() -> str:  # type: ignore[override]
 _V481_VALIDATION_BASE = format_validation_status
 def format_validation_status() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_VALIDATION_BASE())
+
+
+# =============================================================================
+# V4.8.2 - PUBLIC SIGNALS + CRYPTO AUTO-CHECK CLEANUP
+# =============================================================================
+# Purpose:
+# - Stop daily no-action Crypto Alpha spam after market close.
+# - Keep Crypto Alpha auto alerts event-driven: new action, action cleared, or gate change.
+# - Add public-channel versions of strategic signals with percentage sizing only.
+# - Keep all active trading logic from v4.8.1 unchanged.
+# - No broker orders are placed; IBKR reconciliation remains read-only.
+
+V482_VERSION = "v4.8.2-public-signals-crypto-alerts-20-45-15-10-10-monitor"
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
+    STRATEGY_VERSION = V482_VERSION
+
+V482_STRATEGY_LOGIC_LABEL = "v4.8.2 active-only clean + public strategic alerts + event-driven crypto checks"
+V482_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10"
+
+# Public-channel controls. Global PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID remain the master switch.
+# These sleeve-level controls default to ON only if the global public switch is ON.
+CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "1").strip() != "0"
+GROWTH_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("GROWTH_ALPHA_PUBLIC_SIGNAL_ENABLED", "1").strip() != "0"
+SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED", "1").strip() != "0"
+SWING_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("SWING_ALPHA_PUBLIC_SIGNAL_ENABLED", "1").strip() != "0"
+CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED = os.getenv("CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED", "1").strip() != "0"
+V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED = os.getenv("V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED", "1").strip() != "0"
+V482_PUBLIC_MONTHLY_DETAIL_ENABLED = os.getenv("V482_PUBLIC_MONTHLY_DETAIL_ENABLED", "1").strip() != "0"
+V482_PUBLIC_CRYPTO_ACTION_ENABLED = os.getenv("V482_PUBLIC_CRYPTO_ACTION_ENABLED", "1").strip() != "0"
+V482_PUBLIC_CRYPTO_GATE_STATUS_ENABLED = os.getenv("V482_PUBLIC_CRYPTO_GATE_STATUS_ENABLED", "0").strip() == "1"
+
+# Crypto no-action daily messages are too noisy for live operation. Keep event-driven checks.
+V482_CRYPTO_SEND_NO_ACTION_DAILY = os.getenv("V482_CRYPTO_SEND_NO_ACTION_DAILY", "0").strip() == "1"
+try:
+    V463_CRYPTO_SEND_NO_ACTION_DAILY = V482_CRYPTO_SEND_NO_ACTION_DAILY
+except Exception:
+    pass
+
+_V482_OLD_PUBLIC_SIGNAL_FOOTER = public_signal_footer
+
+def public_signal_footer() -> str:  # type: ignore[override]
+    return (
+        "⚠️ Not financial advice. Automated trading-bot alert for education, monitoring, and forward testing only.\n"
+        "Do your own research and due diligence. Use your own account size, risk tolerance, tax situation, and execution plan.\n"
+        "Signals can be wrong, delayed, invalidated, or affected by gaps, slippage, data errors, news, and market conditions.\n"
+        "I may personally hold, buy, or sell mentioned instruments.\n"
+        "Any paid access or membership fee is for bot maintenance, infrastructure, data, development, and alert access only — "
+        "not for personalized financial advice, account management, profit guarantees, or investment recommendations."
+    )
+
+
+def public_channel_terms_text() -> str:  # type: ignore[override]
+    return (
+        "📌 CHANNEL DISCLAIMER\n\n"
+        "This channel shares automated trading-bot alerts for educational, monitoring, and forward-testing purposes only.\n\n"
+        "Nothing posted here is financial advice, investment advice, personalized advice, portfolio management, or a guarantee of profit. "
+        "I am not your financial adviser and I do not know your account size, risk tolerance, tax situation, goals, or execution ability.\n\n"
+        "Trading stocks, ETFs/ETPs, crypto, and high-volatility assets can cause losses. Losses can happen because of gaps, slippage, "
+        "delayed execution, bad data, earnings, news, market events, liquidity, or system errors.\n\n"
+        "Public alerts use percentage/risk guidance instead of my private share counts. Everyone must size positions independently.\n\n"
+        "I may personally hold, buy, or sell instruments mentioned here. Signals may be delayed, wrong, changed, or invalidated. "
+        "Past performance, backtests, paper results, and forward tests do not guarantee future results.\n\n"
+        "Any paid access or membership fee, if offered, is for bot maintenance, infrastructure, data, development, and access to automated alerts only. "
+        "It is not payment for guaranteed returns, personalized advice, or account management."
+    )
+
+
+def _v482_pct_text(value: Any, decimals: int = 2) -> str:
+    try:
+        if value is None:
+            return "n/a"
+        v = float(value)
+        if decimals <= 0:
+            return f"{round(v):.0f}%"
+        return f"{round(v, decimals)}%"
+    except Exception:
+        return "n/a"
+
+
+def _v482_item_target_pct(item: Dict[str, Any], plan: Optional[Dict[str, Any]] = None) -> Optional[float]:
+    for key in ("target_account_pct", "target_pct", "account_pct", "target_weight_pct"):
+        try:
+            if item.get(key) is not None:
+                return float(item.get(key))
+        except Exception:
+            pass
+    try:
+        tv = float(item.get("target_value", 0) or 0)
+        eq = float((plan or {}).get("account_equity", 0) or 0)
+        if eq > 0 and tv > 0:
+            return (tv / eq) * 100.0
+    except Exception:
+        pass
+    return None
+
+
+def _v482_item_price(item: Dict[str, Any]) -> Any:
+    return item.get("signal_price", item.get("plan_price", item.get("price", item.get("mark_price"))))
+
+
+def _v482_item_max_entry(item: Dict[str, Any]) -> Any:
+    return item.get("max_valid_entry", item.get("max_entry", item.get("max_limit")))
+
+
+def _v482_public_plan_lines(label: str, plan: Optional[Dict[str, Any]], limit: int = 6) -> List[str]:
+    if not plan:
+        return [f"• {label}: unavailable"]
+    acts = _v463_plan_actions(plan)
+    if not acts:
+        return [f"• {label}: no actionable trade now"]
+    lines = [f"• {label}:"]
+    for item in acts[:limit]:
+        action = str(item.get("action", "?")).upper()
+        ticker = str(item.get("ticker", "?")).upper()
+        pct = _v482_item_target_pct(item, plan)
+        price = _v482_item_price(item)
+        max_entry = _v482_item_max_entry(item)
+        stop = item.get("stop")
+        detail = f"  - {action} {ticker} | target guide {_v482_pct_text(pct)} of account"
+        if price is not None:
+            detail += f" | ref {fmt_public_number(price)}"
+        if max_entry is not None:
+            detail += f" | max {fmt_public_number(max_entry)}"
+        if stop is not None:
+            detail += f" | stop {fmt_public_number(stop)}"
+        lines.append(detail)
+    if len(acts) > limit:
+        lines.append(f"  - +{len(acts) - limit} more actionable item(s)")
+    return lines
+
+
+def format_public_monthly_dashboard(core_plan: Optional[Dict[str, Any]], growth_plan: Optional[Dict[str, Any]], spec_plan: Optional[Dict[str, Any]], crypto_plan: Optional[Dict[str, Any]], errors: Dict[str, str]) -> str:
+    lines: List[str] = []
+    lines.append("🗓️ MONTHLY BOT ACTION DASHBOARD")
+    lines.append("")
+    lines.append(f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}")
+    lines.append(f"Allocation model: {V482_ALLOCATION_LABEL}")
+    lines.append("")
+    lines.append("Monthly rotation sleeves:")
+    for label, plan in (("Core", core_plan), ("Growth Alpha", growth_plan), ("SPEC Alpha", spec_plan)):
+        if errors.get(label.split()[0]):
+            lines.append(f"• {label}: error — {errors.get(label.split()[0])}")
+        else:
+            acts = _v463_plan_actions(plan)
+            if acts:
+                lines.append(f"• {label}: {len(acts)} actionable item(s). See public plan details below.")
+            else:
+                lines.append(f"• {label}: no actionable trade now.")
+    lines.append("")
+    lines.append("Tactical sleeves:")
+    try:
+        crypto_actions = _v463_plan_actions(crypto_plan)
+        lines.append(f"• Crypto Alpha: {len(crypto_actions)} actionable item(s) now." if crypto_actions else "• Crypto Alpha: no actionable trade now / gate may be off.")
+    except Exception:
+        lines.append("• Crypto Alpha: unavailable.")
+    lines.append("• Swing Alpha: tactical entries/exits are sent separately when valid setups trigger.")
+    lines.append("")
+    lines.append("Public sizing note: use percentage guidance only; calculate your own shares/units.")
+    lines.append("")
+    lines.append(public_signal_footer())
+    return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_public_monthly_plan(label: str, plan: Optional[Dict[str, Any]]) -> str:
+    lines = [f"📋 {label.upper()} PUBLIC PLAN", ""]
+    lines.extend(_v482_public_plan_lines(label, plan, limit=8))
+    lines.append("")
+    lines.append("Use your own account size and execution. No exact private share counts are provided.")
+    lines.append("")
+    lines.append(public_signal_footer())
+    return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_public_crypto_plan(plan: Dict[str, Any], reason: str = "crypto action") -> str:
+    gate = plan.get("gate", {}) or {}
+    lines = ["🪙 CRYPTO ALPHA ALERT", "", f"Reason: {reason}", f"🕒 NY time: {plan.get('ny_time')}"]
+    lines.append(f"Daily BTC gate: {yes_no(bool(gate.get('btc_ok')))}")
+    lines.append(f"4h module gate: {yes_no(bool(gate.get('gate2_ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200)")
+    lines.append("")
+    acts = _v463_plan_actions(plan)
+    if acts:
+        lines.append("Actionable crypto items:")
+        for item in acts[:6]:
+            action = str(item.get("action", "?")).upper()
+            ticker = str(item.get("ticker", "?")).upper()
+            pct = _v482_item_target_pct(item, plan)
+            price = _v482_item_price(item)
+            max_entry = _v482_item_max_entry(item)
+            stop = item.get("stop")
+            line = f"• {action} {ticker} | target guide {_v482_pct_text(pct)} of account"
+            if price is not None:
+                line += f" | ref {fmt_public_number(price)}"
+            if max_entry is not None:
+                line += f" | max {fmt_public_number(max_entry)}"
+            if stop is not None:
+                line += f" | stop {fmt_public_number(stop)}"
+            lines.append(line)
+    else:
+        lines.append("No public crypto trade action now.")
+    lines.append("")
+    lines.append(public_signal_footer())
+    return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
+
+
+def _v482_public_enabled_for_monthly() -> bool:
+    return bool(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)
+
+
+def _v482_send_public_monthly_bundle(core_plan: Optional[Dict[str, Any]], growth_plan: Optional[Dict[str, Any]], spec_plan: Optional[Dict[str, Any]], crypto_plan: Optional[Dict[str, Any]], errors: Dict[str, str]) -> None:
+    if not _v482_public_enabled_for_monthly():
+        return
+    ok, info = send_public_signal(format_public_monthly_dashboard(core_plan, growth_plan, spec_plan, crypto_plan, errors))
+    if not ok:
+        send(f"⚠️ Public monthly dashboard failed: {info}")
+        return
+    if not V482_PUBLIC_MONTHLY_DETAIL_ENABLED:
+        return
+    if CORE_PUBLIC_SIGNAL_ENABLED and core_plan is not None:
+        send_public_signal(format_public_monthly_plan("Core", core_plan))
+    if GROWTH_ALPHA_PUBLIC_SIGNAL_ENABLED and growth_plan is not None:
+        send_public_signal(format_public_monthly_plan("Growth Alpha", growth_plan))
+    if SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED and spec_plan is not None:
+        send_public_signal(format_public_monthly_plan("SPEC Alpha", spec_plan))
+
+
+_V482_OLD_SEND_V463_MONTHLY_DASHBOARD = send_v463_monthly_dashboard
+
+def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False) -> bool:  # type: ignore[override]
+    # Preserve private behavior first. Public forwarding is added only when an actual monthly dashboard is sent.
+    sent_private = _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force=force, preview_only=preview_only)
+    if sent_private and not preview_only:
+        try:
+            core_plan, growth_plan, spec_plan, crypto_plan, errors = _v463_prepare_dashboard_plans()
+            month_key = ny_now().strftime("%Y-%m")
+            if get_meta("last_v482_public_monthly_dashboard_month") != month_key:
+                _v482_send_public_monthly_bundle(core_plan, growth_plan, spec_plan, crypto_plan, errors)
+                set_meta("last_v482_public_monthly_dashboard_month", month_key)
+                set_meta("last_v482_public_monthly_dashboard_ts", str(now_ts()))
+        except Exception as exc:
+            logger.exception(f"[V4.8.2 PUBLIC MONTHLY DASHBOARD ERROR] {exc}")
+            send(f"⚠️ Public monthly dashboard failed: {exc}")
+    return sent_private
+
+
+_V482_OLD_MAYBE_SEND_CRYPTO_ALPHA_AUTO_SIGNAL = maybe_send_crypto_alpha_auto_signal
+
+def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: ignore[override]
+    if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
+        return False
+    if not CRYPTO_ALPHA_ENABLED:
+        return False
+    n = ny_now()
+    if not force:
+        last_ts = get_meta("last_v482_crypto_auto_check_ts") or get_meta("last_v463_crypto_auto_check_ts")
+        if last_ts:
+            try:
+                elapsed = (now_ts() - float(last_ts)) / 60.0
+                if elapsed < max(15, V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN):
+                    return False
+            except Exception:
+                pass
+    try:
+        plan = compute_crypto_alpha_plan()
+    except Exception as exc:
+        logger.exception(f"[V4.8.2 CRYPTO AUTO CHECK ERROR] {exc}")
+        if force:
+            send(f"⚠️ Crypto auto-check failed: {exc}")
+        return False
+    set_meta("last_v482_crypto_auto_check_ts", str(now_ts()))
+    gate_sig = _v463_crypto_gate_signature(plan)
+    action_sig = _v463_crypto_action_signature(plan)
+    last_gate = get_meta("last_v482_crypto_gate_signature") or get_meta("last_v463_crypto_gate_signature")
+    last_action = get_meta("last_v482_crypto_action_signature") or get_meta("last_v463_crypto_action_signature")
+    reason = ""
+    public_reason = ""
+    if force:
+        reason = "manual check"
+    elif action_sig != last_action:
+        if action_sig != "NO_ACTION":
+            reason = "new crypto action"
+            public_reason = reason
+        elif last_action and last_action != "NO_ACTION":
+            reason = "crypto action cleared"
+    elif last_gate is not None and gate_sig != last_gate:
+        reason = "crypto gate changed"
+        public_reason = reason if V482_PUBLIC_CRYPTO_GATE_STATUS_ENABLED else ""
+    if not reason:
+        if last_gate is None:
+            set_meta("last_v482_crypto_gate_signature", gate_sig)
+        if last_action is None:
+            set_meta("last_v482_crypto_action_signature", action_sig)
+        return False
+    header = f"🪙 CRYPTO AUTO CHECK v4.8.2 — {reason}\n\n"
+    send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
+    if public_reason and PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED:
+        ok, info = send_public_signal(format_public_crypto_plan(plan, reason=public_reason))
+        if not ok:
+            send(f"⚠️ Public crypto alert failed: {info}")
+    set_meta("last_v482_crypto_gate_signature", gate_sig)
+    set_meta("last_v482_crypto_action_signature", action_sig)
+    # Also set old keys so old wrappers do not produce duplicate messages.
+    set_meta("last_v463_crypto_gate_signature", gate_sig)
+    set_meta("last_v463_crypto_action_signature", action_sig)
+    audit("V482_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
+    return True
+
+
+def _v482_status_text() -> str:
+    base = v481_status_text()
+    base = base.replace("V4.8.1", "V4.8.2")
+    base = base.replace("v4.8.1", "v4.8.2")
+    extra = (
+        "\n\n📣 v4.8.2 public/crypto alert cleanup:\n"
+        f"• Global public enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
+        f"• Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
+        f"• Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
+        f"• Public Swing Alpha: {yes_no(SWING_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+        f"• Public Crypto Alpha: {yes_no(CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+        f"• Crypto no-action daily spam: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
+        "• Crypto auto alerts are event-driven: new action, action cleared, or gate change."
+    )
+    return (base + extra)[:MAX_TELEGRAM_MESSAGE]
+
+
+_V482_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v482status", "publicstatus", "v481status", "v48status", "activeonlystatus", "cleanupstatus"}:
+        send(_v482_status_text())
+        return
+    if text_lower in {"postchannelterms", "publicterms"}:
+        ok, info = send_public_signal(public_channel_terms_text())
+        send(f"Public terms status: {info if ok else 'FAILED - ' + info}")
+        return
+    if text_lower in {"testchannel", "testpublic"}:
+        ok, info = send_public_signal("✅ Public channel test from v4.8.2. If you see this, public forwarding works.\n\n" + public_signal_footer())
+        send(f"Public test status: {info if ok else 'FAILED - ' + info}")
+        return
+    if text_lower in {"publicdashboard", "publicmonthlydashboard", "testpublicdashboard"}:
+        try:
+            core_plan, growth_plan, spec_plan, crypto_plan, errors = _v463_prepare_dashboard_plans()
+            _v482_send_public_monthly_bundle(core_plan, growth_plan, spec_plan, crypto_plan, errors)
+            send("Public dashboard test sent if PUBLIC_SIGNAL_ENABLED=1 and SIGNAL_CHANNEL_ID is configured.")
+        except Exception as exc:
+            logger.exception(f"[V4.8.2 PUBLIC DASHBOARD TEST ERROR] {exc}")
+            send(f"Public dashboard test failed: {exc}")
+        return
+    return _V482_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+# Label cleanup for v4.8.2 on user-facing reports.
+def _v482_label_cleanup(text: Any) -> str:
+    out = str(text)
+    out = out.replace("v4.8.1", "v4.8.2")
+    out = out.replace("V4.8.1", "V4.8.2")
+    out = out.replace("v4.8", "v4.8.2")
+    out = out.replace("V4.8", "V4.8.2")
+    out = out.replace("v4.8.2.2", "v4.8.2")
+    out = out.replace("V4.8.2.2", "V4.8.2")
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+_V482_PORTFOLIO_BASE = format_combined_portfolio_report
+
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    return _v482_label_cleanup(_V482_PORTFOLIO_BASE())
+
+_V482_RISK_BASE = format_riskmatrix_status
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v482_label_cleanup(_V482_RISK_BASE())
+
+_V482_STRESS_BASE = format_stress_status
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v482_label_cleanup(_V482_STRESS_BASE())
+
+_V482_VALIDATION_BASE = format_validation_status
+
+def format_validation_status() -> str:  # type: ignore[override]
+    return _v482_label_cleanup(_V482_VALIDATION_BASE())
+
+_V482_EXPORT_BASE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V482_EXPORT_BASE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("v482_public_crypto_alerts.json", json.dumps(safe_convert({
+                "version": V482_VERSION,
+                "strategy_logic": V482_STRATEGY_LOGIC_LABEL,
+                "allocation": V482_ALLOCATION_LABEL,
+                "public_global_enabled": PUBLIC_SIGNAL_ENABLED,
+                "signal_channel_id_configured": SIGNAL_CHANNEL_ID != 0,
+                "core_public_enabled": CORE_PUBLIC_SIGNAL_ENABLED,
+                "growth_public_enabled": GROWTH_ALPHA_PUBLIC_SIGNAL_ENABLED,
+                "spec_public_enabled": SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED,
+                "swing_public_enabled": SWING_ALPHA_PUBLIC_SIGNAL_ENABLED,
+                "crypto_public_enabled": CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED,
+                "monthly_public_dashboard_enabled": V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED,
+                "crypto_no_action_daily_enabled": V482_CRYPTO_SEND_NO_ACTION_DAILY,
+                "notes": "v4.8.2 stops daily no-action crypto spam and adds public strategic alerts with percentage-only sizing. No active strategy scoring/allocation changed.",
+            }), indent=2))
+    except Exception as exc:
+        print(f"[V4.8.2 EXPORT WARNING] {exc}")
+    return zip_path
+
+
+# =============================================================================
+# V4.8.3 - FINAL FREEZE POLISH: LABELS + EVENT-ONLY CRYPTO ALERTS
+# =============================================================================
+# Purpose:
+# - Keep v4.8.2 strategy and public forwarding intact.
+# - Remove remaining user-facing v4.8.1/v4.8.2 label noise.
+# - Make crypto auto alerts strictly event/action driven: no daily no-action spam
+#   and no passive gate-closed alerts.
+# - Do not change active strategy scoring, allocation, ledgers, IBKR behavior, or
+#   order execution behavior.
+
+V483_VERSION = "v4.8.3-final-freeze-20-45-15-10-10-monitor"
+V483_LOGIC_LABEL = "v4.8.3 final freeze: active-only Core/Growth/SPEC/Swing/Crypto with public alerts"
+V483_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V483_CRYPTO_ALERT_ON_GATE_OPEN = os.getenv("V483_CRYPTO_ALERT_ON_GATE_OPEN", "1").strip() != "0"
+
+if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
+    STRATEGY_VERSION = V483_VERSION
+
+
+def _v483_label_cleanup(text: Any) -> str:
+    out = str(text)
+    replacements = [
+        ("v4.8.2", "v4.8.3"), ("V4.8.2", "V4.8.3"),
+        ("v4.8.1", "v4.8.3"), ("V4.8.1", "V4.8.3"),
+        ("v4.8", "v4.8.3"), ("V4.8", "V4.8.3"),
+        ("v4.6.3", "v4.8.3"), ("V4.6.3", "V4.8.3"),
+        ("v4.6.2", "v4.8.3"), ("V4.6.2", "V4.8.3"),
+        ("v4.4.3", "v4.8.3"), ("V4.4.3", "V4.8.3"),
+        ("v4.3", "v4.8.3"), ("V4.3", "V4.8.3"),
+        ("v3.8", "v4.8.3"), ("V3.8", "V4.8.3"),
+        ("v3.7", "v4.8.3"), ("V3.7", "V4.8.3"),
+        ("v3.6", "v4.8.3"), ("V3.6", "V4.8.3"),
+    ]
+    for old, new in replacements:
+        out = out.replace(old, new)
+    # Undo accidental repeated replacements caused by generic v4.8 -> v4.8.3.
+    while "v4.8.3.3" in out or "V4.8.3.3" in out:
+        out = out.replace("v4.8.3.3", "v4.8.3").replace("V4.8.3.3", "V4.8.3")
+    return out[:MAX_TELEGRAM_MESSAGE]
+
+
+def v483_status_text() -> str:
+    try:
+        base = _v482_status_text()
+    except Exception:
+        base = "🛠️ V4.8.3 FINAL FREEZE STATUS\n"
+    base = _v483_label_cleanup(base)
+    extra = (
+        "\n\n✅ v4.8.3 final checks:\n"
+        f"• Strategy display: {STRATEGY_VERSION}\n"
+        f"• Allocation: {V483_ALLOCATION_LABEL}\n"
+        "• Active sleeves only: Core, Growth, SPEC, Swing Alpha, Crypto.\n"
+        "• Legacy VCP/Bear/Options are removed from live operation and command path.\n"
+        "• Crypto auto alerts are action/event driven; daily no-action crypto spam is off.\n"
+        "• Public channel uses percentage guidance only; no private share counts.\n"
+        "• IBKR reconciliation remains read-only; no broker orders are placed."
+    )
+    return (base + extra)[:MAX_TELEGRAM_MESSAGE]
+
+
+_V483_OLD_CRYPTO_AUTO = maybe_send_crypto_alpha_auto_signal
+
+def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: ignore[override]
+    """Event-only crypto auto alerts.
+
+    Sends only for:
+    - manual force checks,
+    - new actionable BUY/ADD/TRIM/SELL,
+    - previously actionable state clearing,
+    - optional gate-open informational alert when V483_CRYPTO_ALERT_ON_GATE_OPEN=1.
+
+    It does not send daily no-action plans and does not send passive gate-closed alerts.
+    """
+    if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
+        return False
+    if not CRYPTO_ALPHA_ENABLED:
+        return False
+    if not force:
+        last_ts = get_meta("last_v483_crypto_auto_check_ts") or get_meta("last_v482_crypto_auto_check_ts") or get_meta("last_v463_crypto_auto_check_ts")
+        if last_ts:
+            try:
+                elapsed = (now_ts() - float(last_ts)) / 60.0
+                if elapsed < max(15, V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN):
+                    return False
+            except Exception:
+                pass
+    try:
+        plan = compute_crypto_alpha_plan()
+    except Exception as exc:
+        logger.exception(f"[V4.8.3 CRYPTO AUTO CHECK ERROR] {exc}")
+        if force:
+            send(f"⚠️ Crypto auto-check failed: {exc}")
+        return False
+
+    set_meta("last_v483_crypto_auto_check_ts", str(now_ts()))
+    gate_sig = _v463_crypto_gate_signature(plan)
+    action_sig = _v463_crypto_action_signature(plan)
+    last_gate = get_meta("last_v483_crypto_gate_signature") or get_meta("last_v482_crypto_gate_signature") or get_meta("last_v463_crypto_gate_signature")
+    last_action = get_meta("last_v483_crypto_action_signature") or get_meta("last_v482_crypto_action_signature") or get_meta("last_v463_crypto_action_signature")
+
+    reason = ""
+    public_reason = ""
+    if force:
+        reason = "manual check"
+    elif action_sig != last_action:
+        if action_sig != "NO_ACTION":
+            reason = "new crypto action"
+            public_reason = reason
+        elif last_action and last_action != "NO_ACTION":
+            reason = "crypto action cleared"
+    elif V483_CRYPTO_ALERT_ON_GATE_OPEN and last_gate is not None and gate_sig != last_gate:
+        gate = plan.get("gate", {}) or {}
+        if bool(gate.get("btc_ok")) or bool(gate.get("gate2_ok")):
+            reason = "crypto gate opened"
+            if V482_PUBLIC_CRYPTO_GATE_STATUS_ENABLED:
+                public_reason = reason
+
+    if not reason:
+        if last_gate is None:
+            set_meta("last_v483_crypto_gate_signature", gate_sig)
+        if last_action is None:
+            set_meta("last_v483_crypto_action_signature", action_sig)
+        # Keep older keys in sync to avoid older wrappers producing duplicates.
+        set_meta("last_v482_crypto_gate_signature", gate_sig)
+        set_meta("last_v482_crypto_action_signature", action_sig)
+        set_meta("last_v463_crypto_gate_signature", gate_sig)
+        set_meta("last_v463_crypto_action_signature", action_sig)
+        return False
+
+    header = f"🪙 CRYPTO AUTO CHECK v4.8.3 — {reason}\n\n"
+    send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
+    if public_reason and PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED:
+        ok, info = send_public_signal(format_public_crypto_plan(plan, reason=public_reason))
+        if not ok:
+            send(f"⚠️ Public crypto alert failed: {info}")
+
+    for prefix in ("last_v483", "last_v482", "last_v463"):
+        set_meta(f"{prefix}_crypto_gate_signature", gate_sig)
+        set_meta(f"{prefix}_crypto_action_signature", action_sig)
+    audit("V483_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
+    return True
+
+
+# Final label wrappers.
+_V483_FORMAT_PORTFOLIO_BASE = format_combined_portfolio_report
+_V483_FORMAT_RISK_BASE = format_riskmatrix_status
+_V483_FORMAT_STRESS_BASE = format_stress_status
+_V483_FORMAT_VALIDATION_BASE = format_validation_status
+
+try:
+    _V483_FORMAT_INSTITUTIONAL_BASE = format_institutional_status
+except Exception:
+    _V483_FORMAT_INSTITUTIONAL_BASE = None
+
+try:
+    _V483_FORMAT_DATAHEALTH_BASE = format_datahealth_status
+except Exception:
+    _V483_FORMAT_DATAHEALTH_BASE = None
+
+try:
+    _V483_FORMAT_EXECUTION_BASE = format_execution_status
+except Exception:
+    _V483_FORMAT_EXECUTION_BASE = None
+
+try:
+    _V483_FORMAT_DRIFT_BASE = format_drift_status
+except Exception:
+    _V483_FORMAT_DRIFT_BASE = None
+
+try:
+    _V483_FORMAT_SCANSTATUS_BASE = format_scan_status
+except Exception:
+    _V483_FORMAT_SCANSTATUS_BASE = None
+
+try:
+    _V483_FORMAT_OPENRISK_BASE = format_open_risk
+except Exception:
+    _V483_FORMAT_OPENRISK_BASE = None
+
+try:
+    _V483_FORMAT_SLEEVE_BASE = format_sleevestatus
+except Exception:
+    _V483_FORMAT_SLEEVE_BASE = None
+
+
+def format_combined_portfolio_report() -> str:  # type: ignore[override]
+    return _v483_label_cleanup(_V483_FORMAT_PORTFOLIO_BASE())
+
+
+def format_riskmatrix_status() -> str:  # type: ignore[override]
+    return _v483_label_cleanup(_V483_FORMAT_RISK_BASE())
+
+
+def format_stress_status() -> str:  # type: ignore[override]
+    return _v483_label_cleanup(_V483_FORMAT_STRESS_BASE())
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    return _v483_label_cleanup(_V483_FORMAT_VALIDATION_BASE())
+
+
+if _V483_FORMAT_INSTITUTIONAL_BASE is not None:
+    def format_institutional_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_INSTITUTIONAL_BASE())
+
+if _V483_FORMAT_DATAHEALTH_BASE is not None:
+    def format_datahealth_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_DATAHEALTH_BASE())
+
+if _V483_FORMAT_EXECUTION_BASE is not None:
+    def format_execution_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_EXECUTION_BASE())
+
+if _V483_FORMAT_DRIFT_BASE is not None:
+    def format_drift_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_DRIFT_BASE())
+
+if _V483_FORMAT_SCANSTATUS_BASE is not None:
+    def format_scan_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_SCANSTATUS_BASE())
+
+if _V483_FORMAT_OPENRISK_BASE is not None:
+    def format_open_risk() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_OPENRISK_BASE())
+
+if _V483_FORMAT_SLEEVE_BASE is not None:
+    def format_sleevestatus() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_SLEEVE_BASE())
+
+
+_V483_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus"}:
+        send(v483_status_text())
+        return
+    if text_lower in {"bearstatus", "vcpstatus"}:
+        send(
+            "ℹ️ V4.8.3 ACTIVE-ONLY STATUS\n\n"
+            "Legacy VCP, Bear/inverse, and Options strategies are removed from live operation.\n"
+            "Swing Alpha owns the tactical stock signal path.\n\n"
+            "Use: swingstatus, swingplan, swingbuy, swingsell."
+        )
+        return
+    if text_lower.split(" ")[0] in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
+        send(
+            "❌ Legacy VCP/Bear bought/sold commands are disabled in v4.8.3.\n\n"
+            "Use the active ledger commands only:\n"
+            "• corebuy / coresell\n"
+            "• growthbuy / growthsell\n"
+            "• specbuy / specsell\n"
+            "• swingbuy / swingsell\n"
+            "• cryptobuy / cryptosell"
+        )
+        return
+    return _V483_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+_V483_EXPORT_BASE = export_state_bundle
+
+def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+    zip_path = _V483_EXPORT_BASE(prefix=prefix)
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("v483_final_freeze.json", json.dumps(safe_convert({
+                "version": V483_VERSION,
+                "strategy_logic": V483_LOGIC_LABEL,
+                "allocation": V483_ALLOCATION_LABEL,
+                "crypto_alerts": "event/action driven; daily no-action spam disabled; passive gate-closed alerts disabled",
+                "public_channel": "enabled when PUBLIC_SIGNAL_ENABLED=1 and SIGNAL_CHANNEL_ID is configured; percentage guidance only",
+                "ibkr": "read-only reconciliation only; no broker orders placed",
+            }), indent=2))
+    except Exception as exc:
+        print(f"[V4.8.3 EXPORT WARNING] {exc}")
+    return zip_path
+
+
+
+# Final crypto label cleanup after v4.8.3 auto-alert override.
+_V483_FORMAT_CRYPTO_BASE = format_crypto_alpha_plan
+
+def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+    return _v483_label_cleanup(_V483_FORMAT_CRYPTO_BASE(plan))
+
+try:
+    _V483_FORMAT_CRYPTO_STATUS_BASE = format_crypto_alpha_status
+    def format_crypto_alpha_status() -> str:  # type: ignore[override]
+        return _v483_label_cleanup(_V483_FORMAT_CRYPTO_STATUS_BASE())
+except Exception:
+    pass
+
+
+
+# =============================================================================
+# V4.8.3 FINAL USER-FACING POLISH OVERRIDE
+# =============================================================================
+# This last block is intentionally label/alert routing only.
+# It does not change strategy scoring, allocation, risk, ledgers, IBKR, or execution.
+
+def v483_final_status_text() -> str:
+    return (
+        "🧊 V4.8.3 FINAL FREEZE STATUS\n\n"
+        f"Strategy display: {STRATEGY_VERSION}\n"
+        "Strategy logic: active-only Core/Growth/SPEC/Swing/Crypto with public strategic alerts and actionable crypto checks\n"
+        "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
+        "Disabled from live operation: legacy VCP 0%, Bear/inverse 0%, Options 0%\n\n"
+        f"Public channel enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
+        f"Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
+        f"Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
+        f"Public Swing Alpha signals: {yes_no(SWING_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+        f"Public Crypto actionable alerts: {yes_no(CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED)}\n"
+        f"Crypto daily no-action alerts: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
+        f"Crypto gate-open info alerts: {yes_no(V483_CRYPTO_ALERT_ON_GATE_OPEN)}\n"
+        f"IBKR reconciliation: {yes_no(IBKR_RECON_ENABLED)} read-only\n\n"
+        "Expected automatic alerts:\n"
+        "• Monthly Core/Growth/SPEC dashboard after market close in rebalance window.\n"
+        "• Public monthly dashboard/details if public channel is enabled.\n"
+        "• Swing Alpha private/public entry/exit alerts near tactical scan window when valid.\n"
+        "• Crypto private/public alerts only when actionable by default; no daily no-action spam.\n\n"
+        "No broker orders are placed by this bot."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def v483_final_help_text() -> str:
+    return (
+        "Commands v4.8.3:\n"
+        "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus\n"
+        "wealthplan | corestatus | coreportfolio | corebuy TICKER QTY at PRICE fee FEE | coresell TICKER QTY at PRICE\n"
+        "growthplan | growthstatus | growthportfolio | growthbuy TICKER QTY at PRICE | growthsell TICKER QTY at PRICE\n"
+        "specplan | specstatus | specportfolio | specbuy TICKER QTY at PRICE | specsell TICKER QTY at PRICE\n"
+        "swingstatus | swingplan | swingportfolio | swingbuy TICKER QTY at PRICE | swingsell TICKER QTY at PRICE\n"
+        "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptobuy TICKER UNITS at PRICE | cryptosell TICKER UNITS at PRICE\n"
+        "brokerstatus | brokerreconcile | brokersyncpreview | brokersyncapply CONFIRM\n"
+        "monthlydashboard | publicdashboard | testpublic | postchannelterms\n"
+        "download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume\n\n"
+        "Removed legacy commands: bought/sold/editbuy/editsell/voidbuy. Use swingbuy/swingsell for Swing Alpha."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_validation_status() -> str:  # type: ignore[override]
+    return (
+        "🧪 VALIDATION STATUS v4.8.3\n\n"
+        "Strategy: v4.8.3 active-only clean + public strategic alerts + actionable crypto checks\n"
+        "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
+        "Known limitations:\n"
+        "- v4.8.3 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.\n"
+        "- Swing Alpha MACD+VAH and Crypto BTC/ETH/SOL hybrid require forward validation.\n"
+        "- Backtests are not broker-grade execution guarantees.\n"
+        "- Manual execution and read-only IBKR reconciliation are still required.\n"
+        "- Crypto permission/gate/action required before crypto trades.\n"
+        "- Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.\n\n"
+        "Live validation rules:\n"
+        "• Core/Growth/SPEC remain monthly rotation sleeves; daily checks are monitoring unless monthly-lock allows action.\n"
+        "• Swing Alpha is tactical and separate; use swingbuy/swingsell only.\n"
+        "• Crypto is tactical and separate; auto alerts are actionable-only by default.\n"
+        "• Public channel uses percentage guidance only, not private shares/cash.\n"
+        "• Use brokerreconcile/brokersyncpreview after manual fills.\n"
+        "• Do not treat external legacy IBKR positions as bot-managed strategy positions.\n"
+        "• No broker order automation in v4.8.3; IBKR reconciliation remains read-only."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+_V483_FINAL_OLD_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower in {"v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
+        send(v483_final_status_text())
+        return
+    if text_lower in {"help", "/help"}:
+        send(v483_final_help_text())
+        return
+    if text_lower in {"testchannel", "testpublic"}:
+        ok, info = send_public_signal("✅ Public channel test from v4.8.3. If you see this, public forwarding works.\n\n" + public_signal_footer())
+        send(f"Public test status: {info if ok else 'FAILED - ' + info}")
+        return
+    return _V483_FINAL_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+
+
+# V4.8.3 final command-output label cleanup.
+# Some status commands are produced inline by the command router rather than by
+# named formatter functions. Intercept them last so all visible labels are v4.8.3.
+_V483_FINAL_HANDLE_COMMAND = handle_command
+
+def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    text_clean = (text or "").strip()
+    text_lower = text_clean.lower()
+    if text_lower == "equity":
+        send(_v483_label_cleanup(_v48_equity_text()))
+        return
+    if text_lower == "scanstatus":
+        send(_v483_label_cleanup(_v48_scanstatus_text()))
+        return
+    if text_lower == "openrisk":
+        send(_v483_label_cleanup(_v48_openrisk_text()))
+        return
+    if text_lower == "sleevestatus":
+        send(_v483_label_cleanup(_v48_sleevestatus_text()))
+        return
+    return _V483_FINAL_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 if __name__ == "__main__":
     main()
