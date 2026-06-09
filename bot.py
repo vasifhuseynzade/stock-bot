@@ -107,16 +107,12 @@ SESSION = requests.Session()
 NY_TZ = ZoneInfo("America/New_York")
 
 STRATEGY_VERSION = os.getenv("STRATEGY_VERSION", "v4.8.3-final-freeze-20-45-15-10-10-monitor")
-INITIAL_CASH = float(os.getenv("INITIAL_CASH", "4000"))
+INITIAL_CASH = float(os.getenv("INITIAL_CASH", "0"))
 
 # Risk / execution controls.
-MIN_CASH_REQUIRED = float(os.getenv("MIN_CASH_REQUIRED", "100"))
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "12"))
 MAX_TOTAL_RISK = float(os.getenv("MAX_TOTAL_RISK", "0.06"))
 MAX_POSITION_EQUITY_PCT = float(os.getenv("MAX_POSITION_EQUITY_PCT", "0.20"))
 CASH_USAGE_BUFFER = float(os.getenv("CASH_USAGE_BUFFER", "0.98"))
-SIGNAL_COOLDOWN_SEC = int(os.getenv("SIGNAL_COOLDOWN_SEC", str(24 * 3600)))
-STOP_COOLDOWN_SEC = int(os.getenv("STOP_COOLDOWN_SEC", "1800"))
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))
 MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 
@@ -130,29 +126,8 @@ MAX_ENTRY_EXTENSION_PCT = float(os.getenv("MAX_ENTRY_EXTENSION_PCT", "0.01"))
 # -----------------------------------------------------------------------------
 # Legacy VCP/Bear/Options strategies were removed from the live code path.
 # Minimal constants remain only so older helper/report paths cannot raise NameError.
-LEGACY_TACTICAL_REMOVED = True
-V2_MAX_SIGNALS_PER_SCAN = 0
-V2_ALLOW_BREAKOUTS = False
-V2_ALLOW_VCP = False
-V2_ALLOW_MEDIUM = False
-V2_ALLOW_WEAK = False
-V2_ALLOW_PULLBACKS = False
-V2_MIN_MARKET_SCORE = 999
-V2_MIN_SCORE = 999
-V2_BREAKOUT_MIN_SCORE = 999
-V2_VCP_MIN_SCORE = 999
-V2_PULLBACK_MIN_SCORE = 999
-V2_WEAK_MIN_SCORE = 999
 BEAR_SLEEVE_ENABLED = False
-BEAR_BLOCK_LONG_SIGNALS_IN_BEAR = False
-BEAR_STRATEGY_VERSION = "removed_in_v4_8"
 BEAR_WATCHLIST: List[str] = []
-BEAR_ENTRY_SCORE = 999
-BEAR_EXIT_SCORE = 0
-BEAR_MAX_SIGNALS_PER_SCAN = 0
-BEAR_MAX_OPEN_POSITIONS = 0
-BEAR_RISK_PCT = 0.0
-BEAR_MAX_HOLDING_DAYS = 0
 
 # -----------------------------------------------------------------------------
 # V3.6 PRIVATE WEALTH SLEEVE - CORE ETF ROTATION + CORE LEDGER
@@ -169,8 +144,6 @@ WEALTH_SLEEVE_ENABLED = os.getenv("WEALTH_SLEEVE_ENABLED", "1") != "0"
 WEALTH_STRATEGY_VERSION = os.getenv("WEALTH_STRATEGY_VERSION", "wealth_core_rotation_v3_6_core_ledger")
 WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.45"))
 WEALTH_CORE_TOP_N = int(os.getenv("WEALTH_CORE_TOP_N", "5"))
-WEALTH_ALERT_REPEAT_DAYS = int(os.getenv("WEALTH_ALERT_REPEAT_DAYS", "20"))
-WEALTH_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("WEALTH_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 15)))
 WEALTH_MIN_SCORE = float(os.getenv("WEALTH_MIN_SCORE", "-0.20"))
 
 WEALTH_CORE_UNIVERSE = [
@@ -193,17 +166,6 @@ WEALTH_DEFENSIVE_ALLOWED = {"BIL", "SGOV", "SHY", "IEF", "TLT", "GLD", "IAU", "X
 # It adds private allocation intelligence, concentration control, volatility
 # weighting, sleeve reporting, and drawdown guardrails.
 WEALTH_DYNAMIC_ALLOCATION_ENABLED = os.getenv("WEALTH_DYNAMIC_ALLOCATION_ENABLED", "1") != "0"
-WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.45"))
-WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.45"))
-WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.45"))
-WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.45"))
-WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.15"))
-WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.10"))
-WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
-WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
-WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.05"))
-WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.15"))
-WEALTH_MIN_CASH_RESERVE_PCT = float(os.getenv("WEALTH_MIN_CASH_RESERVE_PCT", "0.00"))
 
 WEALTH_VOL_WEIGHTING_ENABLED = os.getenv("WEALTH_VOL_WEIGHTING_ENABLED", "1") != "0"
 WEALTH_SCORE_WEIGHTING_ENABLED = os.getenv("WEALTH_SCORE_WEIGHTING_ENABLED", "1") != "0"
@@ -222,9 +184,7 @@ CORE_REQUIRE_LIVE_QUOTE = os.getenv("CORE_REQUIRE_LIVE_QUOTE", "1") != "0"
 CORE_QUOTE_DEVIATION_LIMIT = float(os.getenv("CORE_QUOTE_DEVIATION_LIMIT", "0.05"))
 CORE_MIN_TRADE_DOLLARS = float(os.getenv("CORE_MIN_TRADE_DOLLARS", "25"))
 CORE_ACTION_DOLLAR_THRESHOLD = float(os.getenv("CORE_ACTION_DOLLAR_THRESHOLD", "50"))
-CORE_REBALANCE_SELL_CONFIRM_MONTHS = int(os.getenv("CORE_REBALANCE_SELL_CONFIRM_MONTHS", "2"))
 CORE_POSITION_EPSILON = float(os.getenv("CORE_POSITION_EPSILON", "0.000001"))
-CORE_CASH_RESERVE_PROTECT = os.getenv("CORE_CASH_RESERVE_PROTECT", "1") != "0"
 CORE_ALLOW_FRACTIONAL_SHARES = os.getenv("CORE_ALLOW_FRACTIONAL_SHARES", "1") != "0"
 CORE_ALLOW_BUY_OUTSIDE_PLAN = os.getenv("CORE_ALLOW_BUY_OUTSIDE_PLAN", "0") != "0"
 
@@ -232,7 +192,6 @@ PORTFOLIO_RISK_GUARD_ENABLED = os.getenv("PORTFOLIO_RISK_GUARD_ENABLED", "1") !=
 PORTFOLIO_SOFT_DD_REDUCE_PCT = float(os.getenv("PORTFOLIO_SOFT_DD_REDUCE_PCT", "0.12"))
 PORTFOLIO_HARD_DD_PAUSE_PCT = float(os.getenv("PORTFOLIO_HARD_DD_PAUSE_PCT", "0.20"))
 PORTFOLIO_DD_LOOKBACK_DAYS = int(os.getenv("PORTFOLIO_DD_LOOKBACK_DAYS", "400"))
-PORTFOLIO_RISK_ALERT_REPEAT_DAYS = int(os.getenv("PORTFOLIO_RISK_ALERT_REPEAT_DAYS", "1"))
 
 WEALTH_ASSET_CLUSTERS = {
     # Broad equity / growth
@@ -251,11 +210,6 @@ WEALTH_ASSET_CLUSTERS = {
 
 # These prevent typo buys like UBST when the real signal was UPST.
 
-REQUIRE_ACTIVE_SIGNAL_FOR_BUY = os.getenv("REQUIRE_ACTIVE_SIGNAL_FOR_BUY", "1") != "0"
-
-REQUIRE_BUY_TICKER_IN_WATCHLIST = os.getenv("REQUIRE_BUY_TICKER_IN_WATCHLIST", "1") != "0"
-
-REQUIRE_LIVE_QUOTE_FOR_BUY = os.getenv("REQUIRE_LIVE_QUOTE_FOR_BUY", "1") != "0"
 
 # Reject manual buy price if it is too far from current quote.
 
@@ -299,15 +253,12 @@ WITHDRAWAL_ALERT_REPEAT_DAYS = int(os.getenv("WITHDRAWAL_ALERT_REPEAT_DAYS", "7"
 
 REQUIRE_FRESH_DAILY_CANDLE = os.getenv("REQUIRE_FRESH_DAILY_CANDLE", "1") != "0"
 
-FAIL_CLOSED_ON_EARNINGS_UNKNOWN = os.getenv("FAIL_CLOSED_ON_EARNINGS_UNKNOWN", "1") != "0"
 
 MANAGE_ONLY_REGULAR_HOURS = os.getenv("MANAGE_ONLY_REGULAR_HOURS", "1") != "0"
 
-PRICE_MISSING_ALERT_THRESHOLD = int(os.getenv("PRICE_MISSING_ALERT_THRESHOLD", "3"))
 
 # Earnings lookahead. Default kept at 7 days to preserve prior behavior,
 # but you can raise it to 10 if you want stricter earnings avoidance.
-EARNINGS_LOOKAHEAD_DAYS = int(os.getenv("EARNINGS_LOOKAHEAD_DAYS", "7"))
 
 # Telegram safety.
 
@@ -419,7 +370,6 @@ WEAK: List[str] = []
 WATCHLIST = list(dict.fromkeys(STRONG))
 
 # Manual buys may come from either the long VCP watchlist or the bear inverse sleeve.
-ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # -----------------------------------------------------------------------------
 # GENERAL HELPERS
@@ -464,21 +414,6 @@ def json_loads_dict(raw: Optional[str]) -> Dict[str, Any]:
 
         return {}
 
-def json_loads_list(raw: Optional[str]) -> List[Any]:
-
-    if not raw:
-
-        return []
-
-    try:
-
-        data = json.loads(raw)
-
-        return data if isinstance(data, list) else []
-
-    except Exception:
-
-        return []
 
 def is_finite_positive(value: float) -> bool:
 
@@ -578,23 +513,6 @@ def format_money(value: float) -> str:
 
     return f"${round(value, 2)}"
 
-def pct_from_entry(entry_price: Any, exit_price: Any) -> Optional[float]:
-
-    try:
-
-        entry = float(entry_price)
-
-        exit_ = float(exit_price)
-
-        if entry <= 0:
-
-            return None
-
-        return ((exit_ - entry) / entry) * 100
-
-    except Exception:
-
-        return None
 
 def format_pct(value: Optional[float]) -> str:
 
@@ -606,35 +524,6 @@ def format_pct(value: Optional[float]) -> str:
 
     return f"{sign}{round(value, 2)}%"
 
-def format_plain_pct(value: Any, decimals: int = 0) -> str:
-
-    """
-
-    Format a normal percent without plus/minus sign.
-
-    Used for position-size guide like:
-
-    17.86 -> 18%
-
-    """
-
-    try:
-
-        if value is None:
-
-            return "n/a"
-
-        value_float = float(value)
-
-        if decimals <= 0:
-
-            return f"{int(round(value_float))}%"
-
-        return f"{round(value_float, decimals)}%"
-
-    except Exception:
-
-        return "n/a"
 
 def get_performance_base_capital() -> float:
 
@@ -678,7 +567,7 @@ def maybe_set_performance_base_from_cash_tx(
 
     """
 
-    Sets performance base capital after clean reset + setcash.
+    Sets performance base capital after a clean reset + depositcash.
 
     It only auto-sets if:
 
@@ -736,37 +625,6 @@ def maybe_set_performance_base_from_cash_tx(
 
         )
 
-def realized_performance_all_time() -> Dict[str, Any]:
-    """
-    All-time realized P/L from swing trades plus core realized sells.
-
-    This does NOT include open unrealized P/L.
-    """
-    trades = load_trades()
-    swing_profit = round(sum(float(t.get("profit", 0)) for t in trades), 2)
-
-    core_trades = load_core_trades() if CORE_LEDGER_ENABLED else []
-    core_profit = round(
-        sum(float(t.get("realized_profit") or 0.0) for t in core_trades if str(t.get("side")).upper() == "SELL"),
-        2,
-    )
-
-    total_profit = round(swing_profit + core_profit, 2)
-    base_capital = get_performance_base_capital()
-    pct = None
-    if base_capital > 0:
-        pct = (total_profit / base_capital) * 100
-
-    return {
-        "profit": total_profit,
-        "swing_profit": swing_profit,
-        "core_realized_profit": core_profit,
-        "pct": pct,
-        "base_capital": round(base_capital, 2),
-        "trade_records": len(trades) + len(core_trades),
-        "swing_trade_records": len(trades),
-        "core_trade_records": len(core_trades),
-    }
 
 def market_label(market: str) -> str:
 
@@ -782,47 +640,6 @@ def market_label(market: str) -> str:
 
     return labels.get(str(market).upper(), f"⚪ {market}")
 
-def setup_label(setup_type: str) -> str:
-    setup = str(setup_type).lower()
-
-    if setup == "breakout":
-        return "🚀 RS Breakout"
-
-    if setup == "vcp_breakout":
-        return "📦 VCP Breakout"
-
-    if setup == "bear_vcp_inverse":
-        return "🐻 Inverse VCP Bear Sleeve"
-
-    if setup == "pullback":
-        return "🔁 Pullback"
-
-    if setup == "reclaim":
-        return "♻️ Reclaim"
-
-    return f"⚙️ {setup_type}"
-
-def sleeve_label(entry_data: Dict[str, Any]) -> str:
-    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
-
-    if sleeve == "BEAR_INVERSE":
-        return "🐻 BEAR INVERSE SLEEVE"
-
-    if sleeve == "LONG_VCP":
-        return "🐂 BULL / LONG VCP SLEEVE"
-
-    return f"⚙️ {sleeve}"
-
-def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
-    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
-
-    if sleeve == "BEAR_INVERSE":
-        return "BEAR INVERSE"
-
-    if sleeve == "LONG_VCP":
-        return "LONG VCP"
-
-    return sleeve
 
 def yes_no(value: bool) -> str:
 
@@ -882,7 +699,7 @@ def db_tx() -> Iterable[sqlite3.Connection]:
 
         conn.close()
 
-def init_db() -> None:
+def _old_init_db() -> None:
 
     conn = db_connect()
 
@@ -1338,9 +1155,6 @@ def upsert_position_tx(conn: sqlite3.Connection, ticker: str, pos: Dict[str, Any
 
     )
 
-def delete_position_tx(conn: sqlite3.Connection, ticker: str) -> None:
-
-    conn.execute("DELETE FROM positions WHERE ticker = ?", (ticker,))
 
 def load_trades() -> List[Dict[str, Any]]:
 
@@ -1474,53 +1288,6 @@ def load_signals() -> Dict[str, Any]:
 
         conn.close()
 
-def save_signal(ticker: str, signal_time: float, entry_data: Dict[str, Any]) -> None:
-
-    global last_signals
-
-    with db_tx() as conn:
-
-        conn.execute(
-
-            "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?) "
-
-            "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time, entry_data_json = excluded.entry_data_json",
-
-            (ticker, signal_time, json_dumps(entry_data)),
-
-        )
-
-    last_signals = load_signals()
-
-def save_signals() -> None:
-
-    """Compatibility function: persist current in-memory last_signals dict."""
-
-    with db_tx() as conn:
-
-        conn.execute("DELETE FROM signals")
-
-        for ticker, signal in last_signals.items():
-
-            if isinstance(signal, dict):
-
-                signal_time = float(signal.get("time", 0))
-
-                entry_data = signal.get("entry_data", {})
-
-            else:
-
-                signal_time = float(signal)
-
-                entry_data = {}
-
-            conn.execute(
-
-                "INSERT INTO signals(ticker, time, entry_data_json) VALUES (?, ?, ?)",
-
-                (ticker, signal_time, json_dumps(entry_data)),
-
-            )
 
 def clear_signals() -> None:
 
@@ -1532,71 +1299,6 @@ def clear_signals() -> None:
 
     last_signals = {}
 
-def get_cooldowns() -> Dict[str, float]:
-
-    conn = db_connect()
-
-    try:
-
-        rows = conn.execute("SELECT ticker, time FROM cooldowns").fetchall()
-
-        return {row["ticker"]: float(row["time"]) for row in rows}
-
-    finally:
-
-        conn.close()
-
-def set_cooldown(ticker: str, timestamp: float) -> None:
-
-    with db_tx() as conn:
-
-        conn.execute(
-
-            "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
-
-            "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
-
-            (ticker, timestamp),
-
-        )
-
-def get_breakout_levels(ticker: str) -> set:
-
-    conn = db_connect()
-
-    try:
-
-        row = conn.execute("SELECT levels_json FROM breakout_memory WHERE ticker = ?", (ticker,)).fetchone()
-
-        if not row:
-
-            return set()
-
-        return set(int(x) for x in json_loads_list(row["levels_json"]))
-
-    finally:
-
-        conn.close()
-
-def set_breakout_levels(ticker: str, levels: set) -> None:
-
-    with db_tx() as conn:
-
-        conn.execute(
-
-            "INSERT INTO breakout_memory(ticker, levels_json) VALUES (?, ?) "
-
-            "ON CONFLICT(ticker) DO UPDATE SET levels_json = excluded.levels_json",
-
-            (ticker, json_dumps(sorted(levels))),
-
-        )
-
-def clear_breakout_levels(ticker: str) -> None:
-
-    with db_tx() as conn:
-
-        conn.execute("DELETE FROM breakout_memory WHERE ticker = ?", (ticker,))
 
 def load_update_id() -> Optional[int]:
 
@@ -2030,77 +1732,6 @@ def fmt_public_number(value: Any, decimals: int = 2) -> str:
 
         return "n/a"
 
-def public_signal_footer() -> str:
-
-    return (
-
-        "⚠️ Not financial advice. Educational / forward-test bot alert only.\n"
-
-        "Do your own research and due diligence.\n"
-
-        "Use your own risk tolerance, account size, tax situation, and execution plan.\n"
-
-        "I may hold or trade this instrument. Signals can be wrong, delayed, or invalidated.\n"
-
-        "Paid access, if any, is for automated alerts only — no profit guarantee or personalized advice."
-
-    )
-
-def public_channel_terms_text() -> str:
-
-    return (
-
-        "📌 CHANNEL DISCLAIMER\n\n"
-
-        "This private channel shares automated trading-bot alerts for educational and forward-testing purposes only.\n\n"
-
-        "Nothing posted here is financial advice, investment advice, personalized advice, portfolio management, "
-
-        "or a guarantee of profit.\n\n"
-
-        "I am not your financial adviser. I do not know your financial situation, account size, risk tolerance, "
-
-        "tax situation, investment goals, or execution ability.\n\n"
-
-        "Trading stocks, ETFs, crypto-related equities, and high-volatility assets can cause losses. "
-
-        "Losses can happen because of gaps, slippage, delayed execution, bad data, earnings, news, market events, "
-
-        "or system errors.\n\n"
-
-        "All decisions are your own. Do your own research and due diligence before acting. "
-
-        "Never risk money you cannot afford to lose.\n\n"
-
-        "I may personally hold, buy, or sell instruments mentioned in this channel.\n\n"
-
-        "Signals may be delayed, wrong, changed, or invalidated by market conditions. "
-
-        "Past performance, paper-trading results, and forward-test results do not guarantee future results.\n\n"
-
-        "Any paid access, if offered later, is only for access to automated bot alerts and educational tracking. "
-
-        "It is not payment for guaranteed returns, personalized advice, or account management."
-
-    )
-
-def should_forward_public_position(pos: Dict[str, Any]) -> bool:
-
-    """
-
-    Only forward exits/partials to the public channel if the original entry
-
-    was also sent to the public channel.
-
-    This prevents old paper positions or manual/private positions from creating
-
-    confusing public exit signals.
-
-    """
-
-    entry_data = pos.get("entry_data", {}) or {}
-
-    return bool(entry_data.get("public_signal_sent"))
 
 def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
@@ -2184,172 +1815,6 @@ def send_public_signal(msg: Any) -> Tuple[bool, str]:
 
     return True, "sent"
 
-def format_public_entry_signal(
-
-    ticker: str,
-
-    entry_data: Dict[str, Any]
-
-) -> str:
-
-    setup = entry_data.get("setup_type", "unknown")
-
-    market = entry_data.get("market", "UNKNOWN")
-
-    position_size = format_plain_pct(
-
-        entry_data.get("position_size_pct"),
-
-        decimals=0
-
-    )
-
-    trade_risk = format_plain_pct(
-
-        entry_data.get("single_trade_risk_pct"),
-
-        decimals=2
-
-    )
-
-    return (
-
-        "📈 ENTRY SIGNAL\n\n"
-
-        f"🏷️ Ticker: {ticker}\n"
-
-        f"🌎 Market: {market_label(market)}\n"
-
-        f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
-
-        f"⚙️ Setup: {setup_label(setup)}\n\n"
-
-        f"🟢 ENTRY: {fmt_public_number(entry_data.get('signal_price'))}\n"
-
-        f"🟡 MAX ENTRY LIMIT: {fmt_public_number(entry_data.get('max_valid_entry'))}\n"
-
-        f"🔴 STOP/LOSS: {fmt_public_number(entry_data.get('stop'))}\n"
-
-        f"📐 POSITION SIZE GUIDE: about {position_size} of account value\n"
-
-        f"⚠️ Trade risk guide: about {trade_risk} of account value\n\n"
-
-        f"📊 RSI: {fmt_public_number(entry_data.get('rsi'), 1)}\n"
-
-        f"⭐ Score: {entry_data.get('score')}\n"
-
-        f"📊 Volume ratio: {fmt_public_number(entry_data.get('volume_ratio'))}\n\n"
-
-        f"{public_signal_footer()}"
-
-    )
-
-def format_public_partial_signal(
-
-    ticker: str,
-
-    price: float,
-
-    trade: Dict[str, Any]
-
-) -> str:
-
-    gain_pct = pct_from_entry(
-
-        trade.get("entry_price"),
-
-        price
-
-    )
-
-    entry_data = trade.get("entry_data", {}) or {}
-
-    partial_fraction = entry_data.get("partial_take_profit_fraction", PARTIAL_TAKE_PROFIT_FRACTION)
-
-    try:
-        partial_pct_label = int(round(float(partial_fraction) * 100))
-    except Exception:
-        partial_pct_label = int(round(PARTIAL_TAKE_PROFIT_FRACTION * 100))
-
-    return (
-
-        f"💰 PARTIAL TAKE-PROFIT (EXIT ~{partial_pct_label}% OF POSITION)\n\n"
-
-        f"🏷️ Ticker: {ticker}\n"
-
-        f"🧬 Sleeve: {sleeve_label(entry_data)}\n"
-
-        f"📤 Action: take partial profit on ~{partial_pct_label}% of your own position\n"
-
-        f"💵 Partial exit price: {fmt_public_number(price)} ({format_pct(gain_pct)})\n"
-
-        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
-
-        "Bot status: partial-profit condition triggered.\n"
-
-        "Review your own plan before taking any action.\n\n"
-
-        f"{public_signal_footer()}"
-
-    )
-
-def format_public_exit_signal(
-
-    ticker: str,
-
-    price: float,
-
-    trade: Dict[str, Any],
-
-    reason: str
-
-) -> str:
-
-    reason_label = {
-
-        "stop": "Stop / risk exit",
-
-        "manual": "Manual exit",
-
-        "time_stop": "Time stop",
-
-        "max_hold": "Max holding period",
-
-        "bear_regime_exit": "Bear regime cooled",
-
-    }.get(str(reason).lower(), str(reason))
-
-    exit_pct = pct_from_entry(
-
-        trade.get("entry_price"),
-
-        price
-
-    )
-
-    return (
-
-        "📉 EXIT SIGNAL\n\n"
-
-        f"🏷️ Ticker: {ticker}\n"
-
-        f"🧬 Sleeve: {sleeve_label(trade.get('entry_data', {}) or {})}\n"
-
-        f"📌 Reason: {reason_label}\n"
-
-        "📤 Action: exit your remaining position according to your own sizing\n"
-
-        f"💵 Exit price: {fmt_public_number(price)} ({format_pct(exit_pct)})\n"
-
-        f"🎯 R multiple: {fmt_public_number(trade.get('r_multiple'))}\n\n"
-
-        "Bot status: exit condition triggered.\n"
-
-        "Review your own plan before taking any action.\n\n"
-
-        f"{public_signal_footer()}"
-
-    )
 
 def get_updates() -> None:
 
@@ -2855,155 +2320,6 @@ def get_signal_dataframe(ticker: str, limit: int = 120) -> Optional[pd.DataFrame
 
     return get_historical(ticker, limit=limit)
 
-def is_daily_data_current(df: pd.DataFrame) -> bool:
-
-    if df is None or df.empty or "date" not in df.columns:
-
-        return False
-
-    try:
-
-        last_date = pd.to_datetime(df.iloc[-1]["date"]).date()
-
-        current_ny = ny_now()
-
-        today = current_ny.date()
-
-        schedule = NYSE.schedule(
-
-            start_date=today - timedelta(days=10),
-
-            end_date=today
-
-        )
-
-        if schedule.empty:
-
-            return False
-
-        sessions = [d.date() for d in schedule.index]
-
-        expected_session = sessions[-1]
-
-        # Before the near-close scan window, expect previous completed session.
-
-        # During/after near-close, today's synthetic intraday-built daily candle is acceptable.
-
-        if expected_session == today:
-
-            minutes = current_ny.hour * 60 + current_ny.minute
-
-            if minutes < (15 * 60 + 45):
-
-                if len(sessions) >= 2:
-
-                    expected_session = sessions[-2]
-
-        print(
-
-            f"[FRESH CHECK] "
-
-            f"last={last_date} "
-
-            f"expected={expected_session} "
-
-            f"ny={current_ny.strftime('%Y-%m-%d %H:%M')}"
-
-        )
-
-        return last_date >= expected_session
-
-    except Exception as exc:
-
-        print(f"[STALE CHECK ERROR] {exc}")
-
-        return False
-
-def earnings_status(ticker: str, days: int = 7) -> str:
-
-    """Return SOON, CLEAR, or UNKNOWN. UNKNOWN should generally fail closed."""
-
-    nticker = normalize_ticker(ticker)
-
-    if nticker is None:
-
-        return "UNKNOWN"
-
-    today = ny_now().date()
-
-    end_date = today + timedelta(days=days)
-
-    endpoints = [
-
-        # Documented broad-calendar style endpoint.
-
-        f"{FMP_BASE}/earnings-calendar?from={today.isoformat()}&to={end_date.isoformat()}&apikey={FMP_API_KEY}",
-
-        # Compatibility with prior script endpoint, if available on the user's plan.
-
-        f"{FMP_BASE}/earning-calendar-confirmed?symbol={nticker}&apikey={FMP_API_KEY}",
-
-    ]
-
-    any_valid_response = False
-
-    for url in endpoints:
-
-        try:
-
-            data = request_json(url, timeout=5, context=f"earnings {nticker}", retries=1)
-
-            if not isinstance(data, list):
-
-                continue
-
-            any_valid_response = True
-
-            for item in data:
-
-                if not isinstance(item, dict):
-
-                    continue
-
-                symbol = normalize_ticker(str(item.get("symbol", nticker)))
-
-                if symbol != nticker:
-
-                    continue
-
-                date_str = item.get("date") or item.get("fiscalDateEnding")
-
-                if not date_str:
-
-                    continue
-
-                try:
-
-                    earnings_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
-
-                except ValueError:
-
-                    continue
-
-                diff = (earnings_date - today).days
-
-                if 0 <= diff <= days:
-
-                    print(f"[EARNINGS SOON] {nticker} -> {earnings_date.isoformat()}")
-
-                    return "SOON"
-
-            # If broad calendar endpoint returned valid data and ticker wasn't found, this is clear.
-
-            if "earnings-calendar?" in url:
-
-                return "CLEAR"
-
-        except Exception as exc:
-
-            print(f"[EARNINGS ERROR] {nticker}: {exc}")
-
-    return "CLEAR" if any_valid_response else "UNKNOWN"
 
 # -----------------------------------------------------------------------------
 
@@ -3081,19 +2397,6 @@ def rolling_slope_positive(series: pd.Series, lookback: int = 10) -> bool:
     except Exception:
         return False
 
-def close_location(df: pd.DataFrame) -> float:
-    try:
-        high = float(df["High"].iloc[-1])
-        low = float(df["Low"].iloc[-1])
-        close = float(df["Close"].iloc[-1])
-
-        if high <= low:
-            return 0.5
-
-        return max(0.0, min(1.0, (close - low) / (high - low)))
-
-    except Exception:
-        return 0.5
 
 def market_regime_details() -> Dict[str, Any]:
     """
@@ -3185,40 +2488,6 @@ def frame_last_close_ma(df: Optional[pd.DataFrame], ma_period: int) -> Tuple[Opt
     except Exception:
         return None, None
 
-def bear_regime_details(market_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    return {"active": False, "score": 0, "max_score": 60, "exit_pressure_low": True, "entry_score_required": 999, "exit_score": 0, "notes": ["removed_in_v4_8"], "frames": {}}
-
-def compute_equity_snapshot_data() -> Dict[str, float]:
-    refresh_portfolio()
-
-    swing_positions = portfolio["positions"]
-    core_positions = load_core_positions() if CORE_LEDGER_ENABLED else {}
-    all_tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys())))
-    prices = get_prices_batch(all_tickers)
-
-    swing_value = 0.0
-    for ticker, pos in swing_positions.items():
-        price = prices.get(ticker, pos["price"])
-        swing_value += float(price) * int(pos["shares"])
-
-    core_value = 0.0
-    core_cost = 0.0
-    for ticker, pos in core_positions.items():
-        price = prices.get(ticker, pos.get("avg_entry_price", 0))
-        core_value += float(price) * float(pos["shares"])
-        core_cost += float(pos.get("cost_basis", 0) or 0)
-
-    positions_value = swing_value + core_value
-    equity = float(portfolio["cash"]) + positions_value
-    return {
-        "cash": round(float(portfolio["cash"]), 2),
-        "positions_value": round(positions_value, 2),
-        "swing_positions_value": round(swing_value, 2),
-        "core_positions_value": round(core_value, 2),
-        "core_cost_basis": round(core_cost, 2),
-        "core_unrealized_profit": round(core_value - core_cost, 2),
-        "equity": round(equity, 2),
-    }
 
 def save_equity_snapshot() -> None:
 
@@ -3248,7 +2517,7 @@ def save_equity_snapshot() -> None:
 
         )
 
-def open_risk_details() -> Dict[str, float]:
+def _V47_OLD_OPEN_RISK_DETAILS() -> Dict[str, float]:
     refresh_portfolio()
     positions = portfolio["positions"]
     prices = get_prices_batch(list(positions.keys()))
@@ -3437,6 +2706,254 @@ def load_withdrawals() -> List[Dict[str, Any]]:
 
         conn.close()
 
+def load_cash_deposits() -> List[Dict[str, Any]]:
+    conn = db_connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM cash_deposits ORDER BY time ASC"
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def cash_deposit_summary() -> Dict[str, Any]:
+    deposits = load_cash_deposits()
+    withdrawals = load_withdrawals()
+    deposited = round(sum(float(x.get("amount") or 0.0) for x in deposits), 2)
+    withdrawn = round(sum(float(x.get("amount") or 0.0) for x in withdrawals), 2)
+    net_external = round(deposited - withdrawn, 2)
+    return {
+        "cash_deposited": deposited,
+        "cash_withdrawn": withdrawn,
+        "deposited_cash": deposited,
+        "withdrawn_cash": withdrawn,
+        "net_external_cash": net_external,
+        "deposited_cash_total": deposited,
+        "withdrawn_cash_total": withdrawn,
+        "net_external_cash_flow": net_external,
+        "deposit_count": len(deposits),
+        "withdrawal_count": len(withdrawals),
+    }
+
+
+def _cash_deposit_total_tx(conn: sqlite3.Connection) -> float:
+    row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM cash_deposits"
+    ).fetchone()
+    return 0.0 if row is None else float(row["total"] or 0.0)
+
+
+def _increase_performance_base_for_deposit_tx(
+    conn: sqlite3.Connection,
+    amount: float,
+) -> None:
+    if not math.isfinite(amount) or amount <= 0:
+        return
+    row = conn.execute(
+        "SELECT value FROM meta WHERE key = 'performance_base_capital'"
+    ).fetchone()
+    existing = 0.0
+    if row is not None:
+        try:
+            existing = float(row["value"])
+        except (TypeError, ValueError):
+            existing = 0.0
+    new_base = max(0.0, existing) + amount
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES ('performance_base_capital', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (str(round(new_base, 2)),),
+    )
+
+
+def record_cash_deposit(
+    amount: float,
+    note: str = "",
+    update_id: Optional[int] = None,
+) -> Tuple[bool, str]:
+    if not math.isfinite(amount) or amount <= 0:
+        return False, "Deposit amount must be positive and finite."
+
+    refresh_portfolio()
+    snapshot_before = compute_equity_snapshot_data()
+    equity_before = float(snapshot_before.get("equity", 0.0) or 0.0)
+
+    with db_tx() as conn:
+        cash_before = get_cash(conn)
+        cash_after = cash_before + amount
+        set_cash_tx(conn, cash_after)
+
+        hwm_row = conn.execute(
+            "SELECT value FROM meta WHERE key = 'withdrawal_high_water_mark'"
+        ).fetchone()
+        hwm_before: Optional[float] = None
+        if hwm_row is not None:
+            try:
+                hwm_before = float(hwm_row["value"])
+            except (TypeError, ValueError):
+                hwm_before = None
+
+        if hwm_before is None or not math.isfinite(hwm_before) or hwm_before <= 0:
+            hwm_after = equity_before + amount
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES ('withdrawal_hwm_initialized_at', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(now_ts()),),
+            )
+        else:
+            hwm_after = hwm_before + amount
+
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('withdrawal_high_water_mark', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(round(hwm_after, 2)),),
+        )
+        _increase_performance_base_for_deposit_tx(conn, amount)
+
+        equity_after = equity_before + amount
+        conn.execute(
+            """
+            INSERT INTO cash_deposits(
+                id, time, amount, cash_before, cash_after,
+                equity_before, equity_after,
+                withdrawal_hwm_before, withdrawal_hwm_after,
+                note, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid.uuid4().hex,
+                now_ts(),
+                round(amount, 2),
+                round(cash_before, 2),
+                round(cash_after, 2),
+                round(equity_before, 2),
+                round(equity_after, 2),
+                None if hwm_before is None else round(hwm_before, 2),
+                round(hwm_after, 2),
+                str(note or ""),
+                now_ts(),
+            ),
+        )
+        mark_update_processed_tx(conn, update_id, "processed_depositcash")
+
+    refresh_portfolio()
+    audit(
+        "CASH_DEPOSIT",
+        f"amount={amount} equity_before={equity_before} cash_after={cash_after} hwm_after={hwm_after}",
+    )
+    return True, (
+        "CASH DEPOSIT RECORDED\n\n"
+        f"Amount: {format_money(amount)}\n"
+        f"Cash before: {format_money(cash_before)}\n"
+        f"Cash after: {format_money(cash_after)}\n"
+        f"Equity before: {format_money(equity_before)}\n"
+        f"Equity after: {format_money(equity_after)}\n"
+        f"Deposit-adjusted withdrawal HWM: {format_money(hwm_after)}\n\n"
+        "Deposits increase principal and do not count as profit."
+    )
+
+
+def format_cash_deposit_report() -> str:
+    summary = cash_deposit_summary()
+    deposits = load_cash_deposits()
+    msg = (
+        "CASH DEPOSITS v4.9.6\n\n"
+        f"Deposited cash: {format_money(summary['cash_deposited'])}\n"
+        f"Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
+        f"Net external cash: {format_money(summary['net_external_cash'])}\n"
+        f"Deposit records: {summary['deposit_count']}\n"
+        f"Withdrawal records: {summary['withdrawal_count']}\n\n"
+    )
+    if not deposits:
+        return msg + "No cash deposits recorded yet. Use: depositcash AMOUNT optional note"
+    msg += "Recent deposits:\n"
+    for item in deposits[-10:]:
+        dt = datetime.fromtimestamp(float(item["time"]), NY_TZ).strftime("%Y-%m-%d")
+        note = str(item.get("note") or "")
+        msg += (
+            f"{dt} | {format_money(float(item['amount']))} | "
+            f"cash after {format_money(float(item['cash_after']))}"
+        )
+        if note:
+            msg += f" | {note}"
+        msg += "\n"
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+
+def cash_flow_lines() -> str:
+    summary = cash_deposit_summary()
+    return (
+        f"Deposited cash: {format_money(summary['cash_deposited'])}\n"
+        f"Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
+        f"Net external cash: {format_money(summary['net_external_cash'])}"
+    )
+
+
+def format_withdrawal_plan_report() -> str:
+    plan = compute_withdrawal_plan()
+    if not plan["initialized"]:
+        return (
+            "WITHDRAWAL PLAN v4.9.6\n\n"
+            f"Equity: {format_money(plan['equity'])}\n"
+            f"Cash: {format_money(plan['cash'])}\n"
+            f"{cash_flow_lines()}\n\n"
+            f"Status: {plan['reason']}"
+        )[:MAX_TELEGRAM_MESSAGE]
+    return (
+        "WITHDRAWAL PLAN v4.9.6\n\n"
+        f"Phase: {plan['phase']}\n"
+        f"Equity: {format_money(plan['equity'])}\n"
+        f"Cash: {format_money(plan['cash'])}\n"
+        f"Deposit-adjusted HWM: {format_money(plan['high_water_mark'])}\n"
+        f"Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
+        f"Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
+        f"Gross suggested: {format_money(plan['gross_suggested'])}\n"
+        f"Cash cap: {format_money(plan['cash_cap'])}\n"
+        f"Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
+        f"{cash_flow_lines()}\n\n"
+        f"Days since withdrawal/review start: {plan['days_since_clock']}\n"
+        f"Eligible: {yes_no(plan['eligible'])}\n"
+        f"Reason: {plan['reason']}\n\n"
+        "Deposits are principal, not strategy profit."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_realized_pnl_report() -> str:
+    perf = realized_performance_all_time()
+    return (
+        "REALIZED P/L - ALL TIME v4.9.6\n\n"
+        f"Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        f"Performance base capital: {format_money(perf['base_capital'])}\n"
+        f"Trade records: {perf['trade_records']}\n\n"
+        f"Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
+        f"Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
+        f"Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
+        "Note: deposits/withdrawals are external cash flow, not realized strategy P/L."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+
+def format_summary_report() -> str:
+    perf = realized_performance_all_time()
+    wr = win_rate()
+    best, worst = ticker_stats()
+    duration = avg_trade_duration()
+    e = expectancy_summary()
+    return (
+        "SUMMARY v4.9.6\n\n"
+        f"Realized strategy P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        f"Performance base capital: {format_money(perf['base_capital'])}\n"
+        f"Win Rate: {wr}%\n"
+        f"Avg Duration: {duration}\n"
+        f"Avg R: {e['avg_r']}\n"
+        f"Profit Factor: {e['profit_factor']}\n\n"
+        f"Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
+        f"Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
+        f"Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
+        f"Best: {best[0]} ({format_money(best[1])})\n"
+        f"Worst: {worst[0]} ({format_money(worst[1])})"
+    )[:MAX_TELEGRAM_MESSAGE]
+
 def withdrawal_funny_note() -> str:
 
     jokes = [
@@ -3458,285 +2975,173 @@ def withdrawal_funny_note() -> str:
     return jokes[idx]
 
 def compute_withdrawal_plan() -> Dict[str, Any]:
-
     snapshot = compute_equity_snapshot_data()
-
     equity = float(snapshot["equity"])
-
     cash = float(snapshot["cash"])
-
+    flows = cash_deposit_summary()
     hwm = get_withdrawal_hwm()
 
     if hwm is None:
-
         return {
-
             "initialized": False,
-
             "equity": equity,
-
             "cash": cash,
-
             "high_water_mark": None,
-
             "profit_above_hwm": 0.0,
-
             "rate": 0.0,
-
             "gross_suggested": 0.0,
-
             "cash_cap": max(0.0, cash - WITHDRAWAL_MIN_CASH_AFTER),
-
             "suggested": 0.0,
-
             "eligible": False,
-
             "reason": "Withdrawal high-water mark is not initialized.",
-
             "days_since_clock": None,
-
+            **flows,
         }
 
     profit_above_hwm = equity - hwm
-
     if equity < WITHDRAWAL_BUILD_PHASE_EQUITY:
-
         rate = WITHDRAWAL_BUILD_PHASE_RATE
-
         phase = "BUILD"
-
     else:
-
         rate = WITHDRAWAL_PROFIT_RATE
-
         phase = "NORMAL"
 
     gross_suggested = max(0.0, profit_above_hwm * rate)
-
     cash_cap = max(0.0, cash - WITHDRAWAL_MIN_CASH_AFTER)
-
     suggested = min(gross_suggested, cash_cap)
 
     last_withdrawal_time = get_last_withdrawal_time()
-
     clock_start = last_withdrawal_time or get_withdrawal_hwm_initialized_at()
-
     days_since_clock = None
-
     if clock_start is not None:
-
         days_since_clock = (now_ts() - clock_start) / 86400
 
     eligible = True
-
     reason = "Eligible"
-
     if profit_above_hwm <= 0:
-
         eligible = False
-
-        reason = "No profit above high-water mark."
-
+        reason = "No profit above deposit-adjusted high-water mark. Deposits are not profit."
     elif profit_above_hwm < WITHDRAWAL_MIN_PROFIT:
-
         eligible = False
-
         reason = (
-
-            f"Profit above high-water mark is below minimum "
-
+            f"Profit above deposit-adjusted high-water mark is below minimum "
             f"{format_money(WITHDRAWAL_MIN_PROFIT)}."
-
         )
-
     elif suggested < WITHDRAWAL_MIN_AMOUNT:
-
         eligible = False
-
         reason = (
-
             f"Suggested withdrawal is below minimum "
-
             f"{format_money(WITHDRAWAL_MIN_AMOUNT)} or cash cap is too low."
-
         )
-
     elif days_since_clock is not None and days_since_clock < WITHDRAWAL_REVIEW_DAYS:
-
         eligible = False
-
         reason = (
-
             f"Review period not reached. "
-
             f"{round(days_since_clock, 1)} days passed; "
-
             f"target is {WITHDRAWAL_REVIEW_DAYS} days."
-
         )
 
     return {
-
         "initialized": True,
-
         "phase": phase,
-
         "equity": round(equity, 2),
-
         "cash": round(cash, 2),
-
         "high_water_mark": round(hwm, 2),
-
         "profit_above_hwm": round(profit_above_hwm, 2),
-
         "rate": rate,
-
         "gross_suggested": round(gross_suggested, 2),
-
         "cash_cap": round(cash_cap, 2),
-
         "suggested": round(suggested, 2),
-
         "eligible": eligible,
-
         "reason": reason,
-
         "days_since_clock": None if days_since_clock is None else round(days_since_clock, 1),
-
+        **flows,
     }
 
 def record_withdrawal(
-
     amount: float,
-
     note: str = "",
-
-    update_id: Optional[int] = None
-
+    update_id: Optional[int] = None,
 ) -> Tuple[bool, str]:
-
     if not math.isfinite(amount) or amount <= 0:
-
         return False, "Withdrawal amount must be positive and finite."
 
     refresh_portfolio()
-
     snapshot = compute_equity_snapshot_data()
-
     equity_before = float(snapshot["equity"])
-
     cash_before = float(snapshot["cash"])
 
     if amount > cash_before:
-
         return False, "Withdrawal amount is larger than available cash."
-
     if cash_before - amount < WITHDRAWAL_MIN_CASH_AFTER:
-
         return (
-
             False,
-
             f"Withdrawal rejected: cash after withdrawal would fall below "
-
-            f"{format_money(WITHDRAWAL_MIN_CASH_AFTER)}."
-
+            f"{format_money(WITHDRAWAL_MIN_CASH_AFTER)}.",
         )
 
     hwm_before = get_withdrawal_hwm()
-
     if hwm_before is None:
-
         return False, "Withdrawal high-water mark is not initialized."
 
-    # After withdrawal, keep HWM at the pre-withdrawal equity peak.
+    profit_above_hwm = equity_before - hwm_before
+    if profit_above_hwm <= 0:
+        return (
+            False,
+            "Withdrawal rejected: no profit above deposit-adjusted high-water mark. "
+            "Deposited cash is principal, not profit.",
+        )
+    if amount > profit_above_hwm + 0.01:
+        return (
+            False,
+            f"Withdrawal rejected: amount exceeds profit above deposit-adjusted HWM "
+            f"({format_money(profit_above_hwm)}). Deposited cash cannot be withdrawn as profit.",
+        )
 
     hwm_after = max(hwm_before, equity_before)
-
     cash_after = cash_before - amount
 
     with db_tx() as conn:
-
         set_cash_tx(conn, cash_after)
-
         conn.execute(
-
             """
-
             INSERT INTO withdrawals(
-
                 id, time, amount, equity_before, cash_before, cash_after,
-
                 high_water_mark_before, high_water_mark_after, note
-
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-
             """,
-
             (
-
                 uuid.uuid4().hex,
-
                 now_ts(),
-
                 round(amount, 2),
-
                 round(equity_before, 2),
-
                 round(cash_before, 2),
-
                 round(cash_after, 2),
-
                 round(hwm_before, 2),
-
                 round(hwm_after, 2),
-
                 str(note or ""),
-
             ),
-
         )
-
         conn.execute(
-
             "INSERT INTO meta(key, value) VALUES ('withdrawal_high_water_mark', ?) "
-
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-
             (str(round(hwm_after, 2)),),
-
         )
-
         mark_update_processed_tx(conn, update_id, "processed_withdrawal")
 
     refresh_portfolio()
-
     audit(
-
         "WITHDRAWAL",
-
-        f"amount={amount} equity_before={equity_before} "
-
-        f"cash_before={cash_before} cash_after={cash_after} "
-
-        f"hwm_before={hwm_before} hwm_after={hwm_after}"
-
+        f"amount={amount} equity_before={equity_before} cash_before={cash_before} "
+        f"cash_after={cash_after} hwm_before={hwm_before} hwm_after={hwm_after}",
     )
-
     return True, (
-
-        f"🏦 WITHDRAWAL RECORDED\n\n"
-
-        f"💸 Amount: {format_money(amount)}\n"
-
-        f"💼 Equity before: {format_money(equity_before)}\n"
-
-        f"💵 Cash before: {format_money(cash_before)}\n"
-
-        f"💵 Cash after: {format_money(cash_after)}\n"
-
-        f"🏔️ New high-water mark: {format_money(hwm_after)}"
-
+        "WITHDRAWAL RECORDED\n\n"
+        f"Amount: {format_money(amount)}\n"
+        f"Equity before: {format_money(equity_before)}\n"
+        f"Cash before: {format_money(cash_before)}\n"
+        f"Cash after: {format_money(cash_after)}\n"
+        f"Deposit-adjusted HWM: {format_money(hwm_after)}"
     )
 
 def maybe_send_withdrawal_signal() -> None:
@@ -3949,7 +3354,7 @@ def maybe_send_portfolio_risk_guard_alert(details: Optional[Dict[str, Any]] = No
     set_meta(last_key, today)
     send(format_portfolio_risk_guard(details=info))
 
-def sleeve_from_trade(trade: Dict[str, Any]) -> str:
+def _V39_OLD_SLEEVE_FROM_TRADE(trade: Dict[str, Any]) -> str:
     entry_data = trade.get("entry_data", {}) or {}
     sleeve = str(entry_data.get("strategy_sleeve") or "").upper()
     if sleeve:
@@ -3963,7 +3368,7 @@ def sleeve_from_trade(trade: Dict[str, Any]) -> str:
         return "LONG_VCP"
     return "LEGACY_OR_MANUAL"
 
-def sleeve_performance_summary() -> Dict[str, Any]:
+def _old_sleeve_performance_summary() -> Dict[str, Any]:
     trades = load_trades()
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for trade in trades:
@@ -4008,101 +3413,6 @@ def sleeve_performance_summary() -> Dict[str, Any]:
         "trade_records": len(trades) + len(core_trades),
     }
 
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
-    market_details = market_regime_details()
-    market = str(market_details.get("condition", "UNCERTAIN"))
-    bear_details = bear_regime_details(market_details=market_details)
-    risk = portfolio_risk_guard_details()
-
-    if not WEALTH_DYNAMIC_ALLOCATION_ENABLED:
-        core = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-        long_tactical = 0.30
-        bear = 0.0
-        cash = max(0.0, 1.0 - core - long_tactical - bear)
-    elif risk.get("hard_active"):
-        core = WEALTH_CORE_ALLOC_RISK_OFF
-        long_tactical = 0.0
-        bear = 0.0
-        cash = 1.0 - core
-    elif market == "BULL":
-        core = WEALTH_CORE_ALLOC_BULL
-        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_BULL
-        bear = WEALTH_BEAR_ALLOC_BULL
-        cash = 1.0 - core - long_tactical - bear
-    elif market == "BEAR":
-        core = WEALTH_CORE_ALLOC_BEAR
-        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_BEAR
-        bear = WEALTH_BEAR_ALLOC_BEAR if BEAR_SLEEVE_ENABLED else 0.0
-        cash = 1.0 - core - long_tactical - bear
-    else:
-        core = WEALTH_CORE_ALLOC_UNCERTAIN
-        long_tactical = WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN
-        bear = WEALTH_BEAR_ALLOC_UNCERTAIN if int(bear_details.get("score", 0) or 0) >= BEAR_EXIT_SCORE else 0.0
-        cash = 1.0 - core - long_tactical - bear
-
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        # Soft drawdown mode: cut tactical sleeve exposure and hold the difference as cash.
-        long_tactical *= 0.5
-        bear *= 0.75
-        cash = 1.0 - core - long_tactical - bear
-
-    if cash < WEALTH_MIN_CASH_RESERVE_PCT:
-        shortfall = WEALTH_MIN_CASH_RESERVE_PCT - cash
-        long_reduction = min(shortfall, max(0.0, long_tactical))
-        long_tactical -= long_reduction
-        shortfall -= long_reduction
-        if shortfall > 0:
-            bear_reduction = min(shortfall, max(0.0, bear))
-            bear -= bear_reduction
-            shortfall -= bear_reduction
-        if shortfall > 0:
-            core = max(0.0, core - shortfall)
-        cash = 1.0 - core - long_tactical - bear
-
-    # Normalize small floating leftovers.
-    values = {
-        "core_wealth_pct": max(0.0, core),
-        "long_vcp_tactical_pct": max(0.0, long_tactical),
-        "bear_inverse_tactical_pct": max(0.0, bear),
-        "cash_reserve_pct": max(0.0, cash),
-    }
-    total = sum(values.values())
-    if total > 0:
-        values = {k: v / total for k, v in values.items()}
-
-    return {
-        "strategy_version": "v3_5_dynamic_allocation",
-        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
-        "market": market,
-        "market_score": int(market_details.get("score", 0) or 0),
-        "bear_score": int(bear_details.get("score", 0) or 0),
-        "risk_guard": risk,
-        **{k: round(v * 100, 2) for k, v in values.items()},
-    }
-
-def format_portfolio_allocation_plan() -> str:
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.6\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
-        f"({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core wealth rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🐻 Bear inverse tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core sleeve is long-term/private allocation guidance.\n"
-        "• VCP/bear sleeves remain signal-driven tactical systems.\n"
-        "• In hard drawdown mode, new entries pause and exits/management continue."
-    )
 
 def format_portfolio_risk_guard(details: Optional[Dict[str, Any]] = None) -> str:
     info = details or portfolio_risk_guard_details()
@@ -4121,28 +3431,6 @@ def format_portfolio_risk_guard(details: Optional[Dict[str, Any]] = None) -> str
         f"Action: {info.get('recommended_action')}"
     )
 
-def format_sleeve_performance_report() -> str:
-    summary = sleeve_performance_summary()
-    rows = summary.get("rows", []) or []
-    msg = (
-        "📊 SLEEVE PERFORMANCE v3.6\n\n"
-        f"Total realized P/L: {format_money(float(summary.get('total_profit', 0) or 0))}\n"
-        f"Trade records: {summary.get('trade_records')}\n\n"
-    )
-    if not rows:
-        msg += "No trade records yet."
-        return msg
-
-    for row in rows:
-        pf = row.get("profit_factor")
-        msg += (
-            f"{row.get('sleeve')}\n"
-            f"  P/L: {format_money(float(row.get('profit', 0) or 0))}\n"
-            f"  Records: {row.get('trade_records')} | WR: {row.get('win_rate_pct')}% | "
-            f"PF: {pf if pf is not None else 'n/a'}\n"
-            f"  Avg record P/L: {format_money(float(row.get('avg_profit', 0) or 0))}\n\n"
-        )
-    return msg
 
 def pct_change_last(df: pd.DataFrame, bars: int) -> Optional[float]:
     try:
@@ -4282,7 +3570,7 @@ def assign_core_weights(top: List[Dict[str, Any]], core_account_pct: float) -> L
         enriched.append(row)
     return enriched
 
-def compute_wealth_core_plan() -> Dict[str, Any]:
+def _V43_OLD_COMPUTE_CORE_PLAN() -> Dict[str, Any]:
     """Build ranked, actionable private core wealth plan with ledger-aware actions."""
     refresh_portfolio()
 
@@ -4410,123 +3698,6 @@ def compute_wealth_core_plan() -> Dict[str, Any]:
         "ledger_enabled": CORE_LEDGER_ENABLED,
     }
 
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:
-    actions = plan.get("actions", []) or []
-    allocation = plan.get("allocation", {}) or {}
-    risk = plan.get("risk_guard", {}) or {}
-
-    msg = (
-        "🏛️ CORE WEALTH REBALANCE PLAN v3.6\n\n"
-        "Private bot only. This is a real core-ledger plan. Execute in broker first, then record with corebuy/coresell.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
-        f"({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"💼 Total equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
-        f"🏦 Target core sleeve: {plan.get('target_core_account_pct')}% = {format_money(float(plan.get('target_core_value', 0) or 0))}\n"
-        f"📦 Current core value: {format_money(float(plan.get('current_core_value', 0) or 0))}\n"
-        f"📈 Core unrealized P/L: {format_money(float(plan.get('current_core_unrealized_profit', 0) or 0))}\n\n"
-        "Portfolio bucket guide:\n"
-        f"• Core wealth: {allocation.get('core_wealth_pct')}%\n"
-        f"• Long VCP tactical: {allocation.get('long_vcp_tactical_pct')}%\n"
-        f"• Bear inverse tactical: {allocation.get('bear_inverse_tactical_pct')}%\n"
-        f"• Cash reserve: {allocation.get('cash_reserve_pct')}%\n\n"
-    )
-
-    if not actions:
-        msg += "No qualified core assets and no open core positions needing action."
-        return msg
-
-    ranked = [a for a in actions if a.get("rank") is not None]
-    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
-
-    if ranked:
-        msg += "🎯 Ranked core candidates — best to least attractive\n"
-        for item in ranked:
-            action = str(item.get("action", "HOLD")).upper()
-            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
-            msg += (
-                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('cluster', 'other')})\n"
-                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
-                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
-                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
-                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')}\n"
-            )
-        msg += "\n"
-
-    if exits:
-        msg += "🔴 Core exit / rotation candidates\n"
-        for item in exits:
-            msg += (
-                f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\n"
-                f"Reason: {item.get('reason', 'No longer qualified')}\n"
-            )
-        msg += "\n"
-
-    msg += (
-        "How to execute after broker fill:\n"
-        "• corebuy TICKER SHARES at PRICE\n"
-        "• coresell TICKER SHARES at PRICE\n\n"
-        "Core rules:\n"
-        "• BUY/ADD/HOLD/TRIM/SELL is monthly/slow allocation logic, not a swing stop system.\n"
-        "• The core ledger shares the same cash account, so swing sizing stays honest.\n"
-        "• Do not use normal bought/sold for core positions."
-    )
-
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def maybe_send_wealth_core_signal() -> None:
-    """Monthly private wealth-sleeve alert after market close."""
-    if not WEALTH_SLEEVE_ENABLED:
-        return
-
-    current_ny = ny_now()
-    minutes = current_ny.hour * 60 + current_ny.minute
-
-    if is_market_weekday(current_ny) and minutes < WEALTH_REVIEW_AFTER_CLOSE_MINUTE:
-        return
-
-    # Review at most once per calendar month, with a repeat-day guard.
-    month_key = current_ny.strftime("%Y-%m")
-    if get_meta("last_wealth_core_month") == month_key:
-        return
-
-    last_raw = get_meta("last_wealth_core_alert_ts")
-    if last_raw:
-        try:
-            days_since = (now_ts() - float(last_raw)) / 86400
-            if days_since < WEALTH_ALERT_REPEAT_DAYS:
-                return
-        except ValueError:
-            pass
-
-    try:
-        plan = compute_wealth_core_plan()
-        save_core_plan_signal(plan)
-        set_meta("last_wealth_core_month", month_key)
-        set_meta("last_wealth_core_alert_ts", str(now_ts()))
-        send(format_wealth_core_plan(plan))
-        audit("WEALTH_CORE_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
-    except Exception as exc:
-        logger.exception(f"[WEALTH CORE SIGNAL ERROR] {exc}")
-        print(f"[WEALTH CORE SIGNAL ERROR] {exc}")
-
-def risk_pct_for_ticker(ticker: str) -> Optional[float]:
-
-    if ticker in STRONG:
-
-        return 0.03
-
-    if ticker in MEDIUM:
-
-        return 0.02
-
-    if ticker in WEAK:
-
-        return 0.01
-
-    return None
 
 def approximate_equity_from_portfolio() -> float:
     snapshot = compute_equity_snapshot_data()
@@ -4668,79 +3839,6 @@ def expected_daily_bar_date() -> Optional[str]:
 
         return None
 
-def outstanding_signal_reservations(
-
-    expected_bar_date: Optional[str]
-
-) -> Tuple[float, float, List[str]]:
-
-    """
-
-    Reserve risk/capital for already-sent signals from the same daily candle.
-
-    This prevents repeated forcescan calls from producing more and more
-
-    candidates from the same candle after earlier signals were already sent.
-
-    """
-
-    refresh_portfolio()
-
-    signals = load_signals()
-
-    open_positions = set(portfolio["positions"].keys())
-
-    reserved_risk = 0.0
-
-    reserved_capital = 0.0
-
-    reserved_tickers: List[str] = []
-
-    for ticker, signal in signals.items():
-
-        if ticker in open_positions:
-
-            # If already bought, actual open-position risk handles it.
-
-            continue
-
-        if not isinstance(signal, dict):
-
-            continue
-
-        entry_data = signal.get("entry_data", {}) or {}
-
-        if expected_bar_date and entry_data.get("daily_bar_date") != expected_bar_date:
-
-            continue
-
-        try:
-
-            risk_amount = float(entry_data.get("risk_amount", 0) or 0)
-
-        except (TypeError, ValueError):
-
-            risk_amount = 0.0
-
-        try:
-
-            capital = float(entry_data.get("capital", 0) or 0)
-
-        except (TypeError, ValueError):
-
-            capital = 0.0
-
-        if risk_amount > 0:
-
-            reserved_risk += risk_amount
-
-            reserved_tickers.append(ticker)
-
-        if capital > 0:
-
-            reserved_capital += capital
-
-    return reserved_risk, reserved_capital, reserved_tickers
 
 # -----------------------------------------------------------------------------
 
@@ -4748,13 +3846,6 @@ def outstanding_signal_reservations(
 
 # -----------------------------------------------------------------------------
 
-def weekly_performance() -> float:
-
-    trades = load_trades()
-
-    week_ago = now_ts() - 7 * 86400
-
-    return round(sum(float(t.get("profit", 0)) for t in trades if float(t.get("exit_time", 0)) >= week_ago), 2)
 
 def win_rate() -> float:
 
@@ -4928,317 +4019,6 @@ def position_level_summary() -> Dict[str, Any]:
 
 # -----------------------------------------------------------------------------
 
-def make_trade_from_position(
-
-    ticker: str,
-
-    pos: Dict[str, Any],
-
-    shares: int,
-
-    exit_price: float,
-
-    exit_reason: str,
-
-) -> Dict[str, Any]:
-
-    entry = float(pos["price"])
-
-    profit = (exit_price - entry) * shares
-
-    risk_per_share = pos.get("risk_per_share")
-
-    r_multiple: Optional[float] = None
-
-    if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-
-        r_multiple = (exit_price - entry) / float(risk_per_share)
-
-    entry_time = float(pos.get("entry_time", now_ts()))
-
-    exit_time = now_ts()
-
-    return {
-
-        "id": uuid.uuid4().hex,
-
-        "position_id": pos.get("position_id"),
-
-        "strategy_version": pos.get("strategy_version", STRATEGY_VERSION),
-
-        "ticker": ticker,
-
-        "entry_price": entry,
-
-        "exit_price": exit_price,
-
-        "shares": shares,
-
-        "profit": round(profit, 2),
-
-        "entry_time": entry_time,
-
-        "exit_time": exit_time,
-
-        "duration_sec": int(exit_time - entry_time),
-
-        "exit_reason": exit_reason,
-
-        "entry_data": pos.get("entry_data", {}),
-
-        "risk_per_share": risk_per_share if isinstance(risk_per_share, (int, float)) and risk_per_share > 0 else None,
-
-        "r_multiple": None if r_multiple is None else round(r_multiple, 4),
-
-    }
-
-def record_buy(ticker: str, shares: int, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
-    return False, "Legacy bought/sold tactical ledger was removed in v4.8. Use swingbuy/swingsell for Swing Alpha or the correct monthly/crypto ledger command."
-
-def record_sell(ticker: str, shares: int, price: float, exit_reason: str = "manual", update_id: Optional[int] = None) -> Tuple[bool, str]:
-    return False, "Legacy bought/sold tactical ledger was removed in v4.8. Use swingbuy/swingsell for Swing Alpha or the correct monthly/crypto ledger command."
-
-def record_auto_exit_or_partial(
-
-    ticker: str,
-
-    shares: int,
-
-    price: float,
-
-    exit_reason: str,
-
-    updated_fields: Optional[Dict[str, Any]] = None,
-
-) -> Optional[Dict[str, Any]]:
-
-    """Transactional auto exit. Returns trade dict if executed, else None."""
-
-    ticker = normalize_ticker(ticker) or ""
-
-    if not ticker or shares <= 0 or not is_finite_positive(price):
-
-        return None
-
-    with db_tx() as conn:
-
-        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-        if row is None:
-
-            return None
-
-        pos = row_to_position(row)
-
-        current_shares = int(pos["shares"])
-
-        if shares > current_shares:
-
-            shares = current_shares
-
-        if updated_fields:
-
-            pos.update(updated_fields)
-
-        trade = make_trade_from_position(ticker, pos, shares, price, exit_reason)
-
-        insert_trade_tx(conn, trade)
-
-        cash = get_cash(conn)
-
-        set_cash_tx(conn, cash + shares * price)
-
-        remaining = current_shares - shares
-
-        if remaining <= 0:
-
-            delete_position_tx(conn, ticker)
-
-            set_cooldown_tx(conn, ticker, now_ts())
-
-        else:
-
-            pos["shares"] = remaining
-
-            if exit_reason == "partial":
-
-                pos["partial_taken"] = True
-
-            upsert_position_tx(conn, ticker, pos)
-
-    refresh_portfolio()
-
-    if trade:
-
-        audit(
-
-            exit_reason.upper(),
-
-            f"{ticker} shares={shares} "
-
-            f"price={price} "
-
-            f"profit={trade['profit']}"
-
-        )
-
-    return trade
-
-def set_cooldown_tx(conn: sqlite3.Connection, ticker: str, timestamp: float) -> None:
-
-    conn.execute(
-
-        "INSERT INTO cooldowns(ticker, time) VALUES (?, ?) "
-
-        "ON CONFLICT(ticker) DO UPDATE SET time = excluded.time",
-
-        (ticker, timestamp),
-
-    )
-
-def update_position_fields(ticker: str, fields: Dict[str, Any]) -> None:
-
-    ticker = normalize_ticker(ticker) or ""
-
-    if not ticker:
-
-        return
-
-    with db_tx() as conn:
-
-        row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-        if row is None:
-
-            return
-
-        pos = row_to_position(row)
-
-        pos.update(fields)
-
-        upsert_position_tx(conn, ticker, pos)
-
-    refresh_portfolio()
-
-def void_buy(
-
-    ticker: str,
-
-    update_id: Optional[int] = None
-
-) -> Tuple[bool, str]:
-
-    """
-
-    Undo a mistaken buy without creating a fake sell trade.
-
-    Use only for admin/paper correction when the buy itself was a mistake,
-
-    for example: bought UBST instead of UPST.
-
-    It refunds original entry cost and deletes the open position.
-
-    It refuses to run if the position already has trade history.
-
-    """
-
-    ticker = normalize_ticker(ticker) or ""
-
-    if not ticker:
-
-        return False, "Invalid ticker"
-
-    with db_tx() as conn:
-
-        row = conn.execute(
-
-            "SELECT * FROM positions WHERE ticker = ?",
-
-            (ticker,),
-
-        ).fetchone()
-
-        if row is None:
-
-            mark_update_processed_tx(conn, update_id, "rejected_voidbuy_no_position")
-
-            return False, f"No open position found for {ticker}"
-
-        pos = row_to_position(row)
-
-        position_id = pos.get("position_id")
-
-        existing_trade = conn.execute(
-
-            "SELECT 1 FROM trades WHERE position_id = ? LIMIT 1",
-
-            (position_id,),
-
-        ).fetchone()
-
-        if existing_trade is not None:
-
-            mark_update_processed_tx(conn, update_id, "rejected_voidbuy_has_trades")
-
-            return (
-
-                False,
-
-                f"Void rejected: {ticker} already has trade history. "
-
-                "Use normal sell/edit correction instead."
-
-            )
-
-        shares = int(pos["shares"])
-
-        entry_price = float(pos["price"])
-
-        refund = shares * entry_price
-
-        cash = get_cash(conn)
-
-        set_cash_tx(conn, cash + refund)
-
-        delete_position_tx(conn, ticker)
-
-        conn.execute(
-
-            "DELETE FROM cooldowns WHERE ticker = ?",
-
-            (ticker,),
-
-        )
-
-        mark_update_processed_tx(conn, update_id, "processed_voidbuy")
-
-    refresh_portfolio()
-
-    missing_price_counts.pop(ticker, None)
-
-    audit(
-
-        "VOID_BUY",
-
-        f"{ticker} shares={shares} entry_price={entry_price} refund={refund}"
-
-    )
-
-    return True, (
-
-        f"🧹 VOID BUY COMPLETE {ticker}\n\n"
-
-        f"📦 Removed shares: {shares}\n"
-
-        f"💵 Entry price: {round(entry_price, 2)}\n"
-
-        f"💰 Cash refunded: {format_money(refund)}\n"
-
-        f"💼 Cash now: {format_money(portfolio['cash'])}\n\n"
-
-        "No fake sell trade was created."
-
-    )
 
 # -----------------------------------------------------------------------------
 # CORE WEALTH LEDGER v3.6
@@ -5316,7 +4096,7 @@ def save_core_plan_signal(plan: Dict[str, Any]) -> str:
         )
     return plan_id
 
-def current_core_plan_for_validation() -> Dict[str, Any]:
+def _V44_OLD_CURRENT_CORE_PLAN_FOR_VALIDATION() -> Dict[str, Any]:
     # Recompute so buys/sells use the latest market/equity state. Also persists
     # it as the active plan so each confirmed core trade can reference a plan_id.
     plan = compute_wealth_core_plan()
@@ -5401,155 +4181,8 @@ def core_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[s
             return item
     return None
 
-def record_core_buy(
-    ticker: str,
-    shares: float,
-    price: float,
-    update_id: Optional[int] = None,
-) -> Tuple[bool, str]:
-    ticker = normalize_ticker(ticker) or ""
-    if not ticker:
-        return False, "Invalid ticker"
-    if not CORE_LEDGER_ENABLED:
-        return False, "Core ledger is disabled."
-    if shares <= 0 or not math.isfinite(shares):
-        return False, "Core shares must be positive and finite."
-    if (not CORE_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
-        return False, "Fractional core shares are disabled."
-    if not is_finite_positive(price):
-        return False, "Core price must be positive and finite."
-    if ticker not in WEALTH_CORE_UNIVERSE:
-        return False, f"{ticker} is not in the core wealth universe."
 
-    amount = shares * price
-    if amount < CORE_MIN_TRADE_DOLLARS:
-        return False, f"Core trade amount is below minimum {format_money(CORE_MIN_TRADE_DOLLARS)}."
-
-    plan = current_core_plan_for_validation()
-    target = core_target_for_ticker(plan, ticker)
-    action = latest_core_plan_action_map(plan).get(ticker)
-    if CORE_REQUIRE_ACTIVE_PLAN_FOR_BUY and not CORE_ALLOW_BUY_OUTSIDE_PLAN:
-        if target is None:
-            allowed = ", ".join(str(x.get("ticker")) for x in plan.get("top", [])[:WEALTH_CORE_TOP_N])
-            return False, (
-                f"Core buy rejected: {ticker} is not in the active core plan.\n"
-                f"Current ranked core candidates: {allowed or 'none'}"
-            )
-        if action and str(action.get("action", "")).upper() in {"TRIM", "SELL", "AVOID"}:
-            return False, f"Core buy rejected: current plan action for {ticker} is {action.get('action')}."
-
-    ok, msg, quote = validate_core_price_against_quote(ticker, price)
-    if not ok:
-        return False, msg
-
-    with db_tx() as conn:
-        cash = get_cash(conn)
-        if amount > cash:
-            mark_update_processed_tx(conn, update_id, "rejected_core_insufficient_cash")
-            return False, "Not enough cash for core buy."
-
-        row = conn.execute("SELECT * FROM core_positions WHERE ticker = ?", (ticker,)).fetchone()
-        now = now_ts()
-        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
-        plan_id = str(plan.get("plan_id"))
-
-        if row is None:
-            core_position_id = f"CORE_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
-            new_shares = shares
-            new_cost = amount
-            avg_price = price
-            entry_time = now
-            highest = price
-            conn.execute(
-                """
-                INSERT INTO core_positions(
-                    ticker, core_position_id, strategy_version, shares,
-                    avg_entry_price, cost_basis, entry_time, last_update_time,
-                    highest, sleeve, target_account_pct, last_plan_id, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CORE_WEALTH', ?, ?, '')
-                """,
-                (
-                    ticker,
-                    core_position_id,
-                    WEALTH_STRATEGY_VERSION,
-                    round(new_shares, 8),
-                    round(avg_price, 6),
-                    round(new_cost, 6),
-                    now,
-                    now,
-                    round(highest, 6),
-                    target_pct,
-                    plan_id,
-                ),
-            )
-        else:
-            pos = row_to_core_position(row)
-            core_position_id = pos["core_position_id"]
-            old_shares = float(pos["shares"])
-            old_cost = float(pos["cost_basis"])
-            new_shares = old_shares + shares
-            new_cost = old_cost + amount
-            avg_price = new_cost / new_shares
-            entry_time = float(pos["entry_time"])
-            highest = max(float(pos.get("highest") or price), price)
-            conn.execute(
-                """
-                UPDATE core_positions
-                SET shares = ?, avg_entry_price = ?, cost_basis = ?,
-                    last_update_time = ?, highest = ?, target_account_pct = ?,
-                    last_plan_id = ?, strategy_version = ?
-                WHERE ticker = ?
-                """,
-                (
-                    round(new_shares, 8),
-                    round(avg_price, 6),
-                    round(new_cost, 6),
-                    now,
-                    round(highest, 6),
-                    target_pct,
-                    plan_id,
-                    WEALTH_STRATEGY_VERSION,
-                    ticker,
-                ),
-            )
-
-        conn.execute(
-            """
-            INSERT INTO core_trades(
-                id, core_position_id, ticker, side, shares, price, amount,
-                realized_profit, time, strategy_version, plan_id, reason, created_at
-            ) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)
-            """,
-            (
-                uuid.uuid4().hex,
-                core_position_id,
-                ticker,
-                round(shares, 8),
-                round(price, 6),
-                round(amount, 6),
-                now,
-                WEALTH_STRATEGY_VERSION,
-                plan_id,
-                "core_plan_buy",
-                now,
-            ),
-        )
-        set_cash_tx(conn, cash - amount)
-        mark_update_processed_tx(conn, update_id, "processed_core_buy")
-
-    refresh_portfolio()
-    audit("CORE_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
-    return True, (
-        f"🏛️ CORE BUY RECORDED {ticker}\n\n"
-        f"📦 Shares: {format_core_shares(shares)}\n"
-        f"💵 Price: {round(price, 2)}\n"
-        f"💰 Amount: {format_money(amount)}\n"
-        f"🎯 Plan action: {None if action is None else action.get('action')}\n"
-        f"🏦 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
-        f"💵 Cash left: {format_money(portfolio['cash'])}"
-    )
-
-def record_core_sell(
+def _V44_OLD_RECORD_CORE_SELL(
     ticker: str,
     shares: float,
     price: float,
@@ -5711,306 +4344,6 @@ def write_json_file(path: str, data: Any) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(safe_convert(data), f, indent=2)
 
-def format_combined_portfolio_report() -> str:
-    refresh_portfolio()
-    cash = float(portfolio["cash"])
-    swing_positions = portfolio["positions"]
-    core_rows = core_position_market_value_details().get("rows", []) if CORE_LEDGER_ENABLED else []
-    snapshot = compute_equity_snapshot_data()
-
-    if not swing_positions and not core_rows:
-        return (
-            "📋 PORTFOLIO\n\n"
-            f"💵 Cash: {format_money(cash)}\n"
-            f"🏦 Total Equity: {format_money(snapshot['equity'])}\n"
-            "No open swing or core positions"
-        )
-
-    tickers = list(swing_positions.keys())
-    prices = get_prices_batch(tickers)
-    msg = (
-        "📋 PORTFOLIO\n\n"
-        f"💵 Cash: {format_money(cash)}\n"
-        f"⚡ Swing value: {format_money(snapshot.get('swing_positions_value', 0))}\n"
-        f"🏛️ Core value: {format_money(snapshot.get('core_positions_value', 0))}\n"
-        f"🏦 Total equity: {format_money(snapshot['equity'])}\n\n"
-    )
-
-    if swing_positions:
-        msg += "⚡ SWING / TACTICAL POSITIONS\n\n"
-        for ticker, pos in swing_positions.items():
-            current_price = prices.get(ticker, pos["price"])
-            entry = pos["price"]
-            shares = pos["shares"]
-            pnl = (current_price - entry) * shares
-            risk_per_share = pos.get("risk_per_share")
-            r_now = None
-            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-                r_now = (current_price - entry) / risk_per_share
-            msg += (
-                f"📦 {ticker}\n"
-                f"Shares: {shares}\n"
-                f"Entry: {round(entry, 2)}\n"
-                f"Now: {round(current_price, 2)}\n"
-                f"🛡️ Stop: {round(pos['stop'], 2)}\n"
-                f"📈 High: {round(pos['highest'], 2)}\n"
-                f"🎯 R now: {None if r_now is None else round(r_now, 2)}\n"
-                f"💰 P/L: {format_money(pnl)}\n\n"
-            )
-
-    if core_rows:
-        msg += "🏛️ CORE WEALTH POSITIONS\n\n"
-        for row in core_rows:
-            msg += (
-                f"📦 {row['ticker']}\n"
-                f"Shares: {format_core_shares(row['shares'])}\n"
-                f"Avg: {round(float(row['avg_entry_price']), 2)}\n"
-                f"Now: {round(float(row['mark_price']), 2)}\n"
-                f"Value: {format_money(float(row['market_value']))}\n"
-                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
-            )
-
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def table_rows(table: str) -> List[Dict[str, Any]]:
-
-    allowed = {
-
-        "positions",
-
-        "trades",
-
-        "signals",
-
-        "equity_snapshots",
-
-        "withdrawals",
-
-        "cooldowns",
-
-        "breakout_memory",
-
-        "core_positions",
-
-        "core_trades",
-
-        "core_signals",
-
-    }
-
-    if table not in allowed:
-
-        raise ValueError("Table export not allowed")
-
-    conn = db_connect()
-
-    try:
-
-        rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-
-        return [dict(row) for row in rows]
-
-    finally:
-
-        conn.close()
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
-
-    """
-
-    Exports portfolio, trades, signals, withdrawals, risk snapshot,
-
-    and key database tables into a zip file.
-
-    This is safe to forward for analysis because it does not include API keys,
-
-    Telegram token, or environment variables.
-
-    """
-
-    refresh_portfolio()
-
-    ts = ny_now().strftime("%Y%m%d_%H%M%S")
-
-    export_root = os.path.join(DATA_DIR, "exports")
-
-    export_dir = os.path.join(export_root, f"{prefix}_{ts}")
-
-    os.makedirs(export_dir, exist_ok=True)
-
-    risk = open_risk_details()
-
-    withdrawal_plan = compute_withdrawal_plan()
-
-    write_json_file(
-
-        os.path.join(export_dir, "portfolio.json"),
-
-        portfolio
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "trades.json"),
-
-        load_trades()
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "signals.json"),
-
-        load_signals()
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "withdrawals.json"),
-
-        load_withdrawals()
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "open_risk.json"),
-
-        risk
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "withdrawal_plan.json"),
-
-        withdrawal_plan
-
-    )
-
-    write_json_file(
-
-        os.path.join(export_dir, "meta_snapshot.json"),
-
-        {
-
-            "strategy_version": STRATEGY_VERSION,
-
-            "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
-
-            "last_scan_day": get_meta("last_scan_day"),
-
-            "last_scan_bar_date": get_meta("last_scan_bar_date"),
-
-            "last_equity_snapshot_date": get_meta("last_equity_snapshot_date"),
-
-            "withdrawal_high_water_mark": get_meta("withdrawal_high_water_mark"),
-
-            "withdrawal_hwm_initialized_at": get_meta("withdrawal_hwm_initialized_at"),
-
-            "positions_count": len(portfolio["positions"]),
-
-            "core_positions_count": len(load_core_positions()) if CORE_LEDGER_ENABLED else 0,
-
-            "cash": portfolio["cash"],
-
-            "panic_mode": PANIC_MODE,
-
-            "performance_base_capital": get_meta("performance_base_capital"),
-
-        }
-
-    )
-
-    for table in [
-
-        "positions",
-
-        "trades",
-
-        "signals",
-
-        "equity_snapshots",
-
-        "withdrawals",
-
-        "cooldowns",
-
-        "breakout_memory",
-
-        "core_positions",
-
-        "core_trades",
-
-        "core_signals",
-
-    ]:
-
-        write_json_file(
-
-            os.path.join(export_dir, f"{table}.table.json"),
-
-            table_rows(table)
-
-        )
-
-    # CSV versions are useful for analysis.
-
-    try:
-
-        trades = load_trades()
-
-        if trades:
-
-            pd.DataFrame(safe_convert(trades)).to_csv(
-
-                os.path.join(export_dir, "trades.csv"),
-
-                index=False
-
-            )
-
-        positions_rows = []
-
-        for ticker, pos in portfolio["positions"].items():
-
-            row = {"ticker": ticker}
-
-            row.update(safe_convert(pos))
-
-            positions_rows.append(row)
-
-        if positions_rows:
-
-            pd.DataFrame(positions_rows).to_csv(
-
-                os.path.join(export_dir, "positions.csv"),
-
-                index=False
-
-            )
-
-    except Exception as exc:
-
-        print(f"[CSV EXPORT WARNING] {exc}")
-
-    zip_path = f"{export_dir}.zip"
-
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-
-        for root, _, files in os.walk(export_dir):
-
-            for filename in files:
-
-                full_path = os.path.join(root, filename)
-
-                arcname = os.path.relpath(full_path, export_dir)
-
-                z.write(full_path, arcname)
-
-    return zip_path
 
 def send_json_export(data: Any, filename: str, caption: str = "") -> None:
 
@@ -6020,7 +4353,7 @@ def send_json_export(data: Any, filename: str, caption: str = "") -> None:
 
     send_document(path, caption=caption or filename)
 
-def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+def _V37_OLD_RESET_ALL_PAPER_STATE(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
 
     global last_signals, missing_price_counts
 
@@ -6120,7 +4453,7 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
         "Next live-start commands:\n"
 
-        "1) setcash YOUR_REAL_CASH\n"
+        "1) depositcash YOUR_REAL_CASH initial live deposit\n"
 
         "2) withdrawinit\n"
 
@@ -6138,1221 +4471,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
 
 # -----------------------------------------------------------------------------
 
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-
-    global portfolio, last_signals
-
-    global PANIC_MODE
-
-    text = (text or "").strip()
-
-    if not text:
-
-        return
-
-    text_lower = text.lower()
-
-    audit("COMMAND", text)
-
-    if text_lower == "panic":
-
-        PANIC_MODE = True
-
-        audit("PANIC_ON")
-
-        send(
-
-            "🚨 PANIC MODE ENABLED\n\n"
-
-            "🔒 Scanning disabled.\n"
-
-            "🛡️ Position management still active."
-
-        )
-
-        return
-
-    if text_lower == "resume":
-
-        PANIC_MODE = False
-
-        audit("PANIC_OFF")
-
-        send("✅ Bot resumed.\n\n🔎 Scanning enabled again.")
-
-        return
-
-    if text_lower in {"help", "/help"}:
-
-        send(
-
-            "Commands:\n"
-
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | allocationplan | riskstatus | sleevestatus\n"
-
-            "wealthplan | wealthstatus | corestatus | coreportfolio | corepnl | coreexposure\n"
-
-            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
-
-            "testchannel | postchannelterms\n"
-
-            "download_state | download_portfolio | download_signals | download_withdrawals\n"
-
-            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
-
-            "resetall  (then resetall CONFIRM-LIVE)\n"
-
-            "setcash AMOUNT\n"
-
-            "voidbuy TICKER  (undo mistaken swing buy without fake sell trade)\n"
-
-            "corebuy TICKER SHARES at PRICE\n"
-
-            "coresell TICKER SHARES at PRICE\n"
-
-            "editbuy TICKER PRICE\n"
-
-            "editsell TICKER PRICE  (edits latest trade for ticker; adjusts cash)\n"
-
-            "bought TICKER SHARES at PRICE\n"
-
-            "sold TICKER SHARES at PRICE"
-        )
-
-        return
-
-    if text_lower == "testchannel":
-
-        ok, info = send_public_signal(
-
-            "🧪 TEST SIGNAL CHANNEL\n\n"
-
-            "If you see this, public channel forwarding works."
-
-        )
-
-        if ok:
-
-            send("✅ Public signal channel test sent.")
-
-        else:
-
-            send(f"❌ Public signal channel test failed:\n\n{info}")
-
-        return
-
-    if text_lower == "postchannelterms":
-
-        ok, info = send_public_signal(public_channel_terms_text())
-
-        if ok:
-
-            send(
-
-                "✅ Channel disclaimer posted.\n\n"
-
-                "Now open the channel and pin that message manually."
-
-            )
-
-        else:
-
-            send(f"❌ Channel disclaimer failed:\n\n{info}")
-
-        return
-
-    if text_lower == "pnl":
-
-        perf = realized_performance_all_time()
-
-        send(
-
-            "📊 REALIZED P/L — ALL TIME\n\n"
-
-            f"💰 Realized P/L: {format_money(perf['profit'])} "
-
-            f"({format_pct(perf['pct'])})\n"
-
-            f"📏 Base capital: {format_money(perf['base_capital'])}\n"
-
-            f"🧾 Trade records: {perf['trade_records']}\n\n"
-
-            "Note: this is realized P/L only. Open unrealized P/L is not included."
-
-        )
-
-        return
-
-    if text_lower == "equity":
-
-        snapshot = compute_equity_snapshot_data()
-
-        send(
-            "💼 ACCOUNT EQUITY\n\n"
-            f"💵 Cash: {format_money(snapshot['cash'])}\n"
-            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
-            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
-            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
-            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
-        )
-
-        return
-
-    if text_lower == "openrisk":
-
-        details = open_risk_details()
-
-        send(
-
-            "🛡️ OPEN RISK\n\n"
-
-            f"💼 Equity: {format_money(details['equity'])}\n"
-
-            f"⚠️ Initial open risk: {format_money(details['initial_risk_dollars'])} "
-
-            f"({round(details['initial_risk_pct'] * 100, 2)}%)\n"
-
-            f"📉 Current stop risk: {format_money(details['current_stop_risk_dollars'])} "
-
-            f"({round(details['current_stop_risk_pct'] * 100, 2)}%)\n"
-
-            f"🚦 Max allowed: {round(MAX_TOTAL_RISK * 100, 2)}%"
-
-        )
-
-        return
-
-    if text_lower == "winrate":
-
-        send(f"🏆 Win Rate: {win_rate()}%")
-
-        return
-
-    if text_lower == "expectancy":
-
-        e = expectancy_summary()
-
-        p = position_level_summary()
-
-        send(
-
-            "📈 EXPECTANCY\n\n"
-
-            f"🧾 Trades: {e['trades']}\n"
-
-            f"🎯 R-trades: {e['r_trades']}\n"
-
-            f"📊 Avg R/trade: {e['avg_r']}\n"
-
-            f"📍 Median R: {e['median_r']}\n"
-
-            f"✅ Avg win R: {e['avg_win_r']}\n"
-
-            f"❌ Avg loss R: {e['avg_loss_r']}\n"
-
-            f"⚖️ Profit factor: {e['profit_factor']}\n\n"
-
-            f"📦 Position-level count: {p['positions_closed_or_partially_closed']}\n"
-
-            f"📊 Avg position R: {p['avg_position_r']}\n"
-
-            f"📍 Median position R: {p['median_position_r']}"
-
-        )
-
-        return
-
-    if text_lower == "stats":
-
-        best, worst = ticker_stats()
-
-        send(
-
-            f"📊 TICKER STATS\n\n"
-
-            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
-
-            f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
-
-        )
-
-        return
-
-    if text_lower == "duration":
-
-        send(f"⏱️ Avg Trade Duration: {avg_trade_duration()}")
-
-        return
-
-    if text_lower == "summary":
-
-        perf = realized_performance_all_time()
-
-        wr = win_rate()
-
-        best, worst = ticker_stats()
-
-        duration = avg_trade_duration()
-
-        e = expectancy_summary()
-
-        send(
-
-            "📋 SUMMARY\n\n"
-
-            f"📊 Realized P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
-
-            f"🏆 Win Rate: {wr}%\n"
-
-            f"⏱️ Avg Duration: {duration}\n"
-
-            f"🎯 Avg R: {e['avg_r']}\n"
-
-            f"⚖️ Profit Factor: {e['profit_factor']}\n\n"
-
-            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
-
-            f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
-
-        )
-
-        return
-
-    if text_lower == "scanstatus":
-
-        refresh_portfolio()
-
-        last_scan_day = get_meta("last_scan_day")
-
-        details = open_risk_details()
-
-        send(
-
-            "🧭 SCAN STATUS\n\n"
-
-            f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
-
-            f"📅 Last scan day: {last_scan_day}\n"
-
-            f"📦 Positions: {len(portfolio['positions'])}/{MAX_OPEN_POSITIONS}\n"
-
-            f"💵 Cash: {format_money(portfolio['cash'])}\n"
-
-            f"💼 Equity: {format_money(details['equity'])}\n"
-
-            f"⚠️ Initial risk: {round(details['initial_risk_pct'] * 100, 2)}%\n"
-
-            f"🛡️ Current stop risk: {round(details['current_stop_risk_pct'] * 100, 2)}%\n"
-
-            f"🕯️ Fresh candle required: {yes_no(REQUIRE_FRESH_DAILY_CANDLE)}\n"
-
-            f"🚨 Panic mode: {yes_no(PANIC_MODE)}"
-
-        )
-
-        return
-
-    if text_lower == "bearstatus":
-        details = bear_regime_details(market_details=market_regime_details())
-        open_bear = count_open_bear_positions()
-
-        send(
-            "🐻 BEAR SLEEVE STATUS\n\n"
-            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
-            f"Active now: {yes_no(bool(details.get('active')))}\n"
-            f"Bear score: {details.get('score')}/{details.get('max_score')}\n"
-            f"Entry threshold: {BEAR_ENTRY_SCORE}\n"
-            f"Exit/calm threshold: {BEAR_EXIT_SCORE}\n"
-            f"Open bear positions: {open_bear}/{BEAR_MAX_OPEN_POSITIONS}\n"
-            f"Universe: {', '.join(BEAR_WATCHLIST)}\n\n"
-            "Live candidate: robust 3x inverse VCP sleeve.\n"
-            "Aggressive 2x reclaim remains research-only, not live-integrated."
-        )
-
-        return
-
-    if text_lower == "resetscan":
-
-        with db_tx() as conn:
-
-            conn.execute(
-
-                "DELETE FROM meta WHERE key IN ('last_scan_day', 'last_scan_bar_date')"
-
-            )
-
-        send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
-
-        return
-
-    if text_lower == "forcescan":
-
-        send("🔎 Manual scan started.\n\nCheck Telegram/logs for signals and scan summary.")
-
-        current_ny = ny_now()
-
-        official_scan_window = (
-
-            (
-
-                is_market_weekday(current_ny)
-
-                and is_near_close_scan_window(current_ny)
-
-            )
-
-            or
-
-            (
-
-                not is_market_weekday(current_ny)
-
-                and current_ny.weekday() == 5
-
-                and is_morning_scan_window(current_ny)
-
-            )
-
-        )
-
-        scanned_ok = scan_market()
-
-        if scanned_ok and official_scan_window:
-
-            today = current_ny.date().isoformat()
-
-            expected_bar = expected_daily_bar_date()
-
-            set_meta("last_scan_day", today)
-
-            if expected_bar:
-
-                set_meta("last_scan_bar_date", expected_bar)
-
-            send("✅ Manual scan completed.\n\n📅 Marked done for today.")
-
-        elif scanned_ok:
-
-            send(
-
-                "✅ Manual scan completed.\n\n"
-
-                "ℹ️ Not marked done because this was outside the official scan window."
-
-            )
-
-        else:
-
-            send("⚠️ Manual scan completed, but historical data was not usable.")
-
-        return
-
-    if text_lower == "wealthplan":
-        plan = compute_wealth_core_plan()
-        save_core_plan_signal(plan)
-        send(format_wealth_core_plan(plan))
-        return
-
-    if text_lower == "wealthstatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        send(
-            "🏛️ WEALTH / CORE LEDGER STATUS v3.6\n\n"
-            f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
-            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
-            f"Dynamic allocation: {yes_no(WEALTH_DYNAMIC_ALLOCATION_ENABLED)}\n"
-            f"Vol weighting: {yes_no(WEALTH_VOL_WEIGHTING_ENABLED)}\n"
-            f"Cluster control: {yes_no(WEALTH_CLUSTER_CONTROL_ENABLED)}\n"
-            f"Top assets: {WEALTH_CORE_TOP_N}\n"
-            f"Current core target: {alloc.get('core_wealth_pct')}% of account\n"
-            f"Long VCP target: {alloc.get('long_vcp_tactical_pct')}% of account\n"
-            f"Bear tactical target: {alloc.get('bear_inverse_tactical_pct')}% of account\n"
-            f"Cash reserve target: {alloc.get('cash_reserve_pct')}% of account\n"
-            f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
-            f"Public channel: ❌ never used for this sleeve\n\n"
-            "Commands:\n"
-            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
-            "corebuy TICKER SHARES at PRICE — record core buy\n"
-            "coresell TICKER SHARES at PRICE — record core sell\n"
-            "coreportfolio | corepnl | coreexposure | corestatus\n"
-            "allocationplan | riskstatus | sleevestatus"
-        )
-        return
-
-    if text_lower in {"corestatus", "coreledger"}:
-        latest = load_latest_core_signal()
-        details = core_position_market_value_details()
-        alloc = dynamic_portfolio_allocation_targets()
-        send(
-            "🏛️ CORE LEDGER STATUS v3.6\n\n"
-            f"Enabled: {yes_no(CORE_LEDGER_ENABLED)}\n"
-            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
-            f"Core target now: {alloc.get('core_wealth_pct')}% of account\n"
-            f"Core value: {format_money(float(details.get('value', 0) or 0))}\n"
-            f"Core realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
-            f"Core unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
-            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
-            "Commands:\n"
-            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
-            "corebuy TICKER SHARES at PRICE — record broker core buy\n"
-            "coresell TICKER SHARES at PRICE — record broker core sell\n"
-            "coreportfolio | corepnl | coreexposure"
-        )
-        return
-
-    if text_lower == "coreportfolio":
-        send(format_core_portfolio_report())
-        return
-
-    if text_lower == "corepnl":
-        send(format_core_pnl_report())
-        return
-
-    if text_lower == "coreexposure":
-        send(format_core_exposure_report())
-        return
-
-    core_cmd = re.fullmatch(
-        r"(?i)\s*(corebuy|coresell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-        text,
-    )
-
-    if core_cmd:
-        action = core_cmd.group(1).lower()
-        ticker = normalize_ticker(core_cmd.group(2))
-        shares = float(core_cmd.group(3))
-        price = float(core_cmd.group(4))
-
-        if not ticker:
-            send("Invalid ticker")
-            return
-
-        if action == "corebuy":
-            ok, msg = record_core_buy(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-
-        if action == "coresell":
-            ok, msg = record_core_sell(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-
-    if text_lower in {"allocationplan", "allocplan"}:
-        send(format_portfolio_allocation_plan())
-        return
-
-    if text_lower == "riskstatus":
-        send(format_portfolio_risk_guard())
-        return
-
-    if text_lower == "sleevestatus":
-        send(format_sleeve_performance_report())
-        return
-
-    if text_lower == "withdrawinit":
-
-        snapshot = compute_equity_snapshot_data()
-
-        equity = float(snapshot["equity"])
-
-        set_withdrawal_hwm(equity)
-
-        send(
-
-            "🏔️ WITHDRAWAL HIGH-WATER MARK RESET\n\n"
-
-            f"💼 Current equity: {format_money(equity)}\n\n"
-
-            "Future withdrawal signals will only use profits above this level."
-
-        )
-
-        return
-
-    if text_lower == "withdrawplan":
-
-        plan = compute_withdrawal_plan()
-
-        if not plan["initialized"]:
-
-            send(
-
-                "🏦 WITHDRAWAL PLAN\n\n"
-
-                f"💼 Equity: {format_money(plan['equity'])}\n"
-
-                f"💵 Cash: {format_money(plan['cash'])}\n\n"
-
-                f"⚠️ {plan['reason']}"
-
-            )
-
-            return
-
-        send(
-
-            "🏦 WITHDRAWAL PLAN\n\n"
-
-            f"📊 Phase: {plan['phase']}\n"
-
-            f"💼 Equity: {format_money(plan['equity'])}\n"
-
-            f"💵 Cash: {format_money(plan['cash'])}\n"
-
-            f"🏔️ High-water mark: {format_money(plan['high_water_mark'])}\n"
-
-            f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
-
-            f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
-
-            f"🧮 Gross suggested: {format_money(plan['gross_suggested'])}\n"
-
-            f"💵 Cash cap: {format_money(plan['cash_cap'])}\n"
-
-            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
-
-            f"🗓️ Days since withdrawal/review start: {plan['days_since_clock']}\n"
-
-            f"🚦 Eligible: {yes_no(plan['eligible'])}\n"
-
-            f"ℹ️ Reason: {plan['reason']}"
-
-        )
-
-        return
-
-    if text_lower.startswith("withdrawdone"):
-
-        parts = text.split(maxsplit=2)
-
-        if len(parts) < 2:
-
-            send("Usage: withdrawdone 250")
-
-            return
-
-        try:
-
-            amount = float(parts[1])
-
-        except ValueError:
-
-            send("Invalid amount")
-
-            return
-
-        note = parts[2] if len(parts) >= 3 else ""
-
-        ok, msg = record_withdrawal(
-
-            amount,
-
-            note=note,
-
-            update_id=update_id
-
-        )
-
-        send(msg if ok else "❌ ERROR: " + msg)
-
-        return
-
-    if text_lower == "showwithdrawals":
-
-        withdrawals = load_withdrawals()
-
-        if not withdrawals:
-
-            send("🏦 WITHDRAWALS\n\nNo withdrawals recorded yet.")
-
-            return
-
-        total = sum(float(w["amount"]) for w in withdrawals)
-
-        msg = (
-
-            "🏦 WITHDRAWALS\n\n"
-
-            f"💸 Total withdrawn: {format_money(total)}\n"
-
-            f"🧾 Count: {len(withdrawals)}\n\n"
-
-        )
-
-        for item in withdrawals[-10:]:
-
-            dt = datetime.fromtimestamp(
-
-                item["time"],
-
-                NY_TZ
-
-            ).strftime("%Y-%m-%d")
-
-            msg += (
-
-                f"📅 {dt}\n"
-
-                f"Amount: {format_money(item['amount'])}\n"
-
-                f"Equity before: {format_money(item['equity_before'])}\n"
-
-                f"HWM after: {format_money(item['high_water_mark_after'])}\n\n"
-
-            )
-
-        send(msg[:MAX_TELEGRAM_MESSAGE])
-
-        return
-
-    if text_lower == "portfolio":
-        send(format_combined_portfolio_report())
-        return
-
-    if text_lower == "showportfolio_raw":
-
-        refresh_portfolio()
-
-        send_json_export(
-
-            portfolio,
-
-            "portfolio_raw.json",
-
-            "portfolio_raw.json"
-
-        )
-
-        return
-
-    if text_lower == "showtrades":
-
-        send_json_export(
-
-            load_trades(),
-
-            "trades_export.json",
-
-            "trades_export.json"
-
-        )
-
-        return
-
-    if text_lower == "showsignals":
-
-        last_signals = load_signals()
-
-        send_json_export(
-
-            last_signals,
-
-            "signals_export.json",
-
-            "signals_export.json"
-
-        )
-
-        return
-
-    if text_lower == "resetsignals":
-
-        clear_signals()
-
-        if update_id is not None:
-
-            mark_update_processed(update_id, "processed_resetsignals")
-
-        send("🔄 Signals reset.\n\nTrade history and portfolio are unchanged.")
-
-        return
-
-    if text_lower == "setupstats":
-
-        trades = load_trades()
-
-        breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
-
-        pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
-
-        def stats(trades_list: List[Dict[str, Any]]) -> str:
-
-            if not trades_list:
-
-                return "0 trades"
-
-            total = sum(float(t.get("profit", 0)) for t in trades_list)
-
-            win = sum(1 for t in trades_list if float(t.get("profit", 0)) > 0)
-
-            wr = (win / len(trades_list)) * 100
-
-            r_vals = [float(t["r_multiple"]) for t in trades_list if t.get("r_multiple") is not None]
-
-            avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
-
-            return f"{len(trades_list)} trades | P/L: {format_money(total)} | WR: {round(wr, 2)}% | Avg R: {avg_r}"
-
-        send(
-
-            f"⚙️ SETUP STATS\n\n"
-
-            f"🚀 Breakout: {stats(breakout)}\n"
-
-            f"🔁 Pullback: {stats(pullback)}"
-
-        )
-
-        return
-
-    if text_lower == "download_trades":
-
-        path = os.path.join(DATA_DIR, "trades_export.json")
-
-        with open(path, "w", encoding="utf-8") as f:
-
-            json.dump(safe_convert(load_trades()), f, indent=2)
-
-        send_document(path, caption="trades_export.json")
-
-        return
-
-    if text_lower == "download_state":
-
-        path = export_state_bundle(prefix="bot_state_export")
-
-        send_document(
-
-            path,
-
-            caption="bot_state_export.zip"
-
-        )
-
-        return
-
-    if text_lower == "download_portfolio":
-
-        refresh_portfolio()
-
-        send_json_export(
-
-            portfolio,
-
-            "portfolio_export.json",
-
-            "portfolio_export.json"
-
-        )
-
-        return
-
-    if text_lower == "download_signals":
-
-        send_json_export(
-
-            load_signals(),
-
-            "signals_export.json",
-
-            "signals_export.json"
-
-        )
-
-        return
-
-    if text_lower == "download_withdrawals":
-
-        send_json_export(
-
-            load_withdrawals(),
-
-            "withdrawals_export.json",
-
-            "withdrawals_export.json"
-
-        )
-
-        return
-
-    if text_lower == "resetall":
-
-        send(
-
-            "⚠️ DANGEROUS RESET COMMAND\n\n"
-
-            "This will export a backup, then clear:\n"
-
-            "positions, trades, signals, cooldowns, breakout memory, equity snapshots, withdrawals, and cash.\n\n"
-
-            "It will NOT delete Telegram update history, so old commands will not be reprocessed.\n\n"
-
-            "To confirm, send exactly:\n"
-
-            "resetall CONFIRM-LIVE"
-
-        )
-
-        return
-
-    if text_lower == "resetall confirm-live":
-
-        ok, msg, backup_path = reset_all_paper_state(update_id=update_id)
-
-        if backup_path:
-
-            send_document(
-
-                backup_path,
-
-                caption="pre_reset_backup.zip"
-
-            )
-
-        send(msg if ok else "❌ ERROR: " + msg)
-
-        return
-
-    if text_lower.startswith("voidbuy"):
-
-        parts = text.split()
-
-        if len(parts) != 2:
-
-            send("Usage: voidbuy TICKER")
-
-            return
-
-        ticker = normalize_ticker(parts[1])
-
-        if not ticker:
-
-            send("Invalid ticker")
-
-            return
-
-        ok, msg = void_buy(
-
-            ticker,
-
-            update_id=update_id
-
-        )
-
-        send(msg if ok else "❌ ERROR: " + msg)
-
-        return
-
-    if text_lower.startswith("setcash"):
-
-        parts = text.split()
-
-        if len(parts) != 2:
-
-            send("Usage: setcash 1670.15")
-
-            return
-
-        try:
-
-            amount = float(parts[1])
-
-        except ValueError:
-
-            send("Invalid number")
-
-            return
-
-        if not math.isfinite(amount) or amount < 0:
-
-            send("Cash must be finite and non-negative")
-
-            return
-
-        with db_tx() as conn:
-
-            set_cash_tx(conn, amount)
-
-            maybe_set_performance_base_from_cash_tx(conn, amount)
-
-            mark_update_processed_tx(conn, update_id, "processed_setcash")
-
-        refresh_portfolio()
-
-        send(f"💵 Cash updated to {format_money(amount)}")
-
-        return
-
-    if text_lower.startswith("editbuy"):
-
-        parts = text.split()
-
-        if len(parts) != 3:
-
-            send("Usage: editbuy TICKER PRICE")
-
-            return
-
-        ticker = normalize_ticker(parts[1])
-
-        if not ticker:
-
-            send("Invalid ticker")
-
-            return
-
-        try:
-
-            new_price = float(parts[2])
-
-        except ValueError:
-
-            send("Invalid price")
-
-            return
-
-        if not is_finite_positive(new_price):
-
-            send("Price must be positive and finite")
-
-            return
-
-        with db_tx() as conn:
-
-            row = conn.execute("SELECT * FROM positions WHERE ticker = ?", (ticker,)).fetchone()
-
-            if row is None:
-
-                mark_update_processed_tx(conn, update_id, "rejected_editbuy_no_position")
-
-                send("Position not found")
-
-                return
-
-            pos = row_to_position(row)
-
-            old_price = pos["price"]
-
-            shares = int(pos["shares"])
-
-            cash = get_cash(conn)
-
-            cash_adjustment = (old_price - new_price) * shares
-
-            new_cash = cash + cash_adjustment
-
-            if new_cash < 0:
-
-                mark_update_processed_tx(conn, update_id, "rejected_editbuy_negative_cash")
-
-                send("Edit would make cash negative")
-
-                return
-
-            risk_per_share = new_price - pos["initial_stop"]
-
-            if risk_per_share <= 0:
-
-                mark_update_processed_tx(conn, update_id, "rejected_editbuy_invalid_risk")
-
-                send("Edit rejected: new entry price must be above initial_stop. Use a manual correction instead.")
-
-                return
-
-            pos["price"] = new_price
-
-            pos["risk_per_share"] = risk_per_share
-
-            pos["highest"] = max(pos.get("highest", new_price), new_price)
-
-            set_cash_tx(conn, new_cash)
-
-            upsert_position_tx(conn, ticker, pos)
-
-            mark_update_processed_tx(conn, update_id, "processed_editbuy")
-
-        refresh_portfolio()
-
-        send(
-
-            f"BUY UPDATED {ticker}\n"
-
-            f"Old: {round(old_price, 2)}\n"
-
-            f"New: {round(new_price, 2)}\n"
-
-            f"Cash adjusted by: {format_money(cash_adjustment)}"
-
-        )
-
-        return
-
-    if text_lower.startswith("editsell"):
-
-        parts = text.split()
-
-        if len(parts) != 3:
-
-            send("Usage: editsell TICKER PRICE")
-
-            return
-
-        ticker = normalize_ticker(parts[1])
-
-        if not ticker:
-
-            send("Invalid ticker")
-
-            return
-
-        try:
-
-            new_price = float(parts[2])
-
-        except ValueError:
-
-            send("Invalid price")
-
-            return
-
-        if not is_finite_positive(new_price):
-
-            send("Price must be positive and finite")
-
-            return
-
-        with db_tx() as conn:
-
-            row = conn.execute(
-
-                "SELECT * FROM trades WHERE ticker = ? ORDER BY exit_time DESC, created_at DESC LIMIT 1",
-
-                (ticker,),
-
-            ).fetchone()
-
-            if row is None:
-
-                mark_update_processed_tx(conn, update_id, "rejected_editsell_no_trade")
-
-                send("Trade not found")
-
-                return
-
-            trade = row_to_trade(row)
-
-            old_price = trade["exit_price"]
-
-            shares = int(trade["shares"])
-
-            cash_adjustment = (new_price - old_price) * shares
-
-            cash = get_cash(conn)
-
-            new_cash = cash + cash_adjustment
-
-            if new_cash < 0:
-
-                mark_update_processed_tx(conn, update_id, "rejected_editsell_negative_cash")
-
-                send("Edit would make cash negative")
-
-                return
-
-            entry_price = float(trade["entry_price"])
-
-            profit = (new_price - entry_price) * shares
-
-            risk_per_share = trade.get("risk_per_share")
-
-            r_multiple = None
-
-            if risk_per_share is not None and float(risk_per_share) > 0:
-
-                r_multiple = (new_price - entry_price) / float(risk_per_share)
-
-            conn.execute(
-
-                "UPDATE trades SET exit_price = ?, profit = ?, r_multiple = ? WHERE id = ?",
-
-                (new_price, round(profit, 2), None if r_multiple is None else round(r_multiple, 4), trade["id"]),
-
-            )
-
-            set_cash_tx(conn, new_cash)
-
-            mark_update_processed_tx(conn, update_id, "processed_editsell")
-
-        refresh_portfolio()
-
-        send(
-
-            f"SELL UPDATED {ticker}\n"
-
-            f"Trade ID: {trade['id']}\n"
-
-            f"Old: {round(old_price, 2)}\n"
-
-            f"New: {round(new_price, 2)}\n"
-
-            f"Cash adjusted by: {format_money(cash_adjustment)}"
-
-        )
-
-        return
-
-    trade_cmd = re.fullmatch(
-
-        r"(?i)\s*(bought|sold)\s+([A-Z0-9.\-]{1,15})\s+(\d+)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-
-        text,
-
-    )
-
-    if not trade_cmd:
-
-        # Preserve original behavior: unknown short/invalid commands are ignored, but alert on likely trade commands.
-
-        if text_lower.startswith(("bought", "sold")):
-
-            send("Invalid command format. Use: bought TICKER SHARES at PRICE or sold TICKER SHARES at PRICE")
-
-        return
-
-    action = trade_cmd.group(1).lower()
-
-    ticker = normalize_ticker(trade_cmd.group(2))
-
-    shares = int(trade_cmd.group(3))
-
-    price = float(trade_cmd.group(4))
-
-    if not ticker:
-
-        send("Invalid ticker")
-
-        return
-
-    if shares <= 0 or not is_finite_positive(price):
-
-        send("Shares and price must be positive")
-
-        return
-
-    if action == "bought":
-
-        ok, msg = record_buy(ticker, shares, price, update_id=update_id)
-
-        send(msg if ok else "❌ ERROR: " + msg)
-
-        return
-
-    if action == "sold":
-
-        ok, msg = record_sell(ticker, shares, price, exit_reason="manual", update_id=update_id)
-
-        send(msg if ok else "❌ ERROR: " + msg)
-
-        return
 
 # -----------------------------------------------------------------------------
 
@@ -7360,107 +4478,12 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 
 # -----------------------------------------------------------------------------
 
-def analyze(*args: Any, **kwargs: Any) -> None:
-    # Legacy VCP/Bear analyzer removed in v4.8. Swing Alpha is the active tactical stock engine.
-    return None
 
 # -----------------------------------------------------------------------------
 # POSITION MANAGEMENT
 
 # -----------------------------------------------------------------------------
 
-def repair_position_if_needed(ticker: str, pos: Dict[str, Any]) -> Dict[str, Any]:
-
-    changed = False
-
-    entry = float(pos.get("price", 0) or 0)
-
-    if entry <= 0:
-
-        raise ValueError(f"Invalid entry price for {ticker}")
-
-    if not is_finite_positive(float(pos.get("stop", 0) or 0)):
-
-        pos["stop"] = entry * 0.95
-
-        changed = True
-
-    if not is_finite_positive(float(pos.get("highest", 0) or 0)):
-
-        pos["highest"] = entry
-
-        changed = True
-
-    if not is_finite_positive(float(pos.get("initial_stop", 0) or 0)):
-
-        pos["initial_stop"] = pos["stop"]
-
-        changed = True
-
-    if "partial_taken" not in pos:
-
-        pos["partial_taken"] = False
-
-        changed = True
-
-    risk_per_share = pos.get("risk_per_share")
-
-    if not isinstance(risk_per_share, (int, float)) or risk_per_share <= 0:
-
-        fallback_risk = entry - float(pos["initial_stop"])
-
-        if fallback_risk <= 0:
-
-            fallback_risk = entry * 0.05
-
-            pos["initial_stop"] = entry - fallback_risk
-
-            if pos["stop"] >= entry:
-
-                pos["stop"] = pos["initial_stop"]
-
-        pos["risk_per_share"] = fallback_risk
-
-        changed = True
-
-        print(f"[POSITION REPAIRED RISK] {ticker} risk_per_share={fallback_risk}")
-
-    if float(pos["highest"]) < entry:
-
-        pos["highest"] = entry
-
-        changed = True
-
-    if changed:
-
-        update_position_fields(ticker, pos)
-
-    return pos
-
-def position_exit_params(pos: Dict[str, Any]) -> Dict[str, Any]:
-    """Per-position exit settings.
-
-    Long VCP positions use v2.8 defaults. Bear inverse positions carry their own
-    exit settings inside entry_data so both sleeves can coexist in one bot.
-    """
-    entry_data = pos.get("entry_data", {}) or {}
-
-    return {
-        "breakeven_r_trigger": float(entry_data.get("breakeven_r_trigger", BREAKEVEN_R_TRIGGER)),
-        "partial_r": float(entry_data.get("partial_take_profit_r", PARTIAL_TAKE_PROFIT_R)),
-        "partial_pct": float(entry_data.get("partial_take_profit_pct", PARTIAL_TAKE_PROFIT_PCT)),
-        "partial_fraction": float(entry_data.get("partial_take_profit_fraction", PARTIAL_TAKE_PROFIT_FRACTION)),
-        "trail_mult_early": float(entry_data.get("trail_mult_early", TRAIL_MULT_EARLY)),
-        "trail_mult_late": float(entry_data.get("trail_mult_late", TRAIL_MULT_LATE)),
-        "trail_tighten_pct": float(entry_data.get("trail_tighten_pct", TRAIL_TIGHTEN_PCT)),
-        "time_stop_days": int(entry_data.get("time_stop_days", 0) or 0),
-        "time_stop_min_r": float(entry_data.get("time_stop_min_r", 0.25)),
-        "max_holding_days": int(entry_data.get("max_holding_days", 0) or 0),
-    }
-
-def manage_positions() -> None:
-    # Legacy VCP/Bear position manager removed in v4.8. Active Swing Alpha exits are handled by the v4.6+ wrapper.
-    return None
 
 # -----------------------------------------------------------------------------
 
@@ -7468,27 +4491,6 @@ def manage_positions() -> None:
 
 # -----------------------------------------------------------------------------
 
-def should_skip_for_existing_signal(ticker: str, signal_now: float) -> bool:
-    # Legacy signal cooldown helper removed from active VCP path. Active sleeves manage their own plans/signals.
-    return False
-
-def count_open_bear_positions() -> int:
-    return 0
-
-def analyze_bear_signal(*args: Any, **kwargs: Any) -> None:
-    # Bear/inverse strategy removed in v4.8.
-    return None
-
-def scan_market() -> bool:
-    # Legacy VCP/Bear scanner removed in v4.8. Final scan_market override routes to Swing Alpha.
-    try:
-        set_meta("last_scan_day", ny_date_str())
-        bar = expected_daily_bar_date()
-        if bar:
-            set_meta("last_scan_bar_date", bar)
-    except Exception:
-        pass
-    return True
 
 # -----------------------------------------------------------------------------
 
@@ -7726,8 +4728,6 @@ SPEC_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("SPEC_ALPHA_REQUIRE_LIVE_QUOTE", "1") 
 SPEC_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("SPEC_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
 SPEC_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("SPEC_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
 SPEC_ALPHA_PLAN_VALID_DAYS = int(os.getenv("SPEC_ALPHA_PLAN_VALID_DAYS", "10"))
-SPEC_ALPHA_ALERT_REPEAT_DAYS = int(os.getenv("SPEC_ALPHA_ALERT_REPEAT_DAYS", "7"))
-SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 10)))
 SPEC_ALPHA_SCORE_SLEEP_SEC = float(os.getenv("SPEC_ALPHA_SCORE_SLEEP_SEC", "0.02"))
 
 SPEC_ALPHA_UNIVERSE = [
@@ -10129,16 +7129,8 @@ SPEC_ALPHA_CRYPTO_TICKERS = set([
     "WULF"
 ])
 
-_old_init_db = init_db
-_old_compute_equity_snapshot_data = compute_equity_snapshot_data
-_old_dynamic_portfolio_allocation_targets = dynamic_portfolio_allocation_targets
-_old_format_combined_portfolio_report = format_combined_portfolio_report
-_old_sleeve_performance_summary = sleeve_performance_summary
-_old_realized_performance_all_time = realized_performance_all_time
-_old_maybe_send_wealth_core_signal = maybe_send_wealth_core_signal
-_old_handle_command = handle_command
 
-def init_db() -> None:
+def _V310_OLD_INIT_DB() -> None:
     _old_init_db()
     conn = db_connect()
     try:
@@ -10283,7 +7275,7 @@ def spec_alpha_market_filter_ok() -> bool:
         print(f"[SPEC MARKET FILTER ERROR] {exc}")
         return False
 
-def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
+def _V411_HOTFIX_OLD_SPEC_SCORE_TICKER(ticker: str) -> Optional[Dict[str, Any]]:
     try:
         df = get_historical(ticker, limit=280)
         if df is None or df.empty or len(df) < 210:
@@ -10403,7 +7395,7 @@ def spec_position_market_value_details(prices: Optional[Dict[str, float]] = None
     realized = sum(float(t.get("realized_profit") or 0.0) for t in load_spec_trades() if str(t.get("side")).upper() == "SELL")
     return {"positions": positions, "rows": rows, "value": round(total_value, 2), "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2), "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
 
-def compute_spec_alpha_plan() -> Dict[str, Any]:
+def _V411_HOTFIX_OLD_COMPUTE_SPEC_PLAN() -> Dict[str, Any]:
     refresh_portfolio()
     allocation = dynamic_portfolio_allocation_targets()
     current_regime = str(allocation.get("market", market_condition()))
@@ -10463,19 +7455,6 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:
     actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
     return {"plan_id": uuid.uuid4().hex, "strategy_version": "spec_alpha_v3_7_monthly_momentum", "private_only": False, "public_allowed": True, "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "market": current_regime, "market_ok": market_ok, "score_mode": SPEC_ALPHA_SCORE_MODE, "top_n": SPEC_ALPHA_TOP_N, "universe_size": len(SPEC_ALPHA_UNIVERSE), "scored_count": len(scored), "target_spec_account_pct": round(spec_account_pct * 100, 2), "target_spec_value": round(sleeve_value, 2), "current_spec_value": round(float(spec_details.get("value", 0.0) or 0.0), 2), "current_spec_cost_basis": round(float(spec_details.get("cost_basis", 0.0) or 0.0), 2), "current_spec_unrealized_profit": round(float(spec_details.get("unrealized_profit", 0.0) or 0.0), 2), "account_equity": round(account_equity, 2), "allocation": allocation, "risk_guard": risk, "top": top, "actions": actions, "actionable": actionable, "all_scored": scored[:100]}
 
-def current_spec_plan_for_validation() -> Dict[str, Any]:
-    latest = load_latest_spec_plan()
-    if latest is not None:
-        try:
-            age_days = (now_ts() - float(latest.get("time", 0))) / 86400
-            plan = latest.get("plan") or {}
-            if age_days <= SPEC_ALPHA_PLAN_VALID_DAYS and plan:
-                return plan
-        except Exception:
-            pass
-    plan = compute_spec_alpha_plan()
-    save_spec_plan_signal(plan)
-    return plan
 
 def latest_spec_plan_action_map(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return {str(item.get("ticker", "")).upper(): item for item in plan.get("actions", []) if item.get("ticker")}
@@ -10499,7 +7478,7 @@ def validate_spec_price_against_quote(ticker: str, price: float) -> Tuple[bool, 
         return False, f"SPEC_ALPHA trade rejected: price too far from live quote.\nLive quote: {round(quote, 2)}\nYour price: {round(price, 2)}\nMax deviation: {round(SPEC_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%", quote
     return True, "OK", quote
 
-def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V411_HOTFIX_OLD_RECORD_SPEC_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
         return False, "Invalid ticker"
@@ -10565,7 +7544,7 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
     audit("SPEC_BUY", f"{ticker} shares={shares} price={price} amount={amount}")
     return True, f"⚡ SPEC_ALPHA BUY RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if action is None else action.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(portfolio['cash'])}"
 
-def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V44_OLD_RECORD_SPEC_SELL(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
         return False, "Invalid ticker"
@@ -10615,73 +7594,8 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
     audit("SPEC_SELL", f"{ticker} shares={shares} price={price} proceeds={proceeds} profit={realized_profit}")
     return True, f"⚡ SPEC_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price, 2)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized SPEC_ALPHA P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}"
 
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
-    """
-    V3.7 aggressive 45/15/40 allocation map.
 
-    User-selected normal target mix:
-      - 45% core wealth rotation
-      - 15% tactical VCP/bear sleeve
-      - 40% SPEC_ALPHA medium/weak monthly momentum rotation
-
-    This is the final aggressive-growth allocation: SPEC_ALPHA is the main
-    return engine, core wealth remains the stabilizer, and VCP/bear remains
-    the tactical signal sleeve. Hard drawdown mode still pauses new
-    tactical/spec exposure and moves the difference to cash.
-    """
-    base = _old_dynamic_portfolio_allocation_targets()
-    risk = base.get("risk_guard", {}) or {}
-    market = str(base.get("market", "UNCERTAIN"))
-    bear_score = int(base.get("bear_score", 0) or 0)
-
-    core_pct = round(WEALTH_CORE_ACCOUNT_ALLOC_PCT * 100, 2)
-    spec_full_pct = round(SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100, 2) if SPEC_ALPHA_ENABLED else 0.0
-    tactical_total_pct = 15.0
-
-    if risk.get("hard_active"):
-        spec_pct = 0.0
-        long_vcp = 0.0
-        bear = 0.0
-        cash = max(0.0, 100.0 - core_pct)
-    elif market == "BEAR":
-        # SPEC_ALPHA uses a SPY/MA200 risk-on filter, so in bear regimes its
-        # target moves to cash while the tactical bucket becomes bear sleeve.
-        spec_pct = 0.0
-        long_vcp = 0.0
-        bear = tactical_total_pct if BEAR_SLEEVE_ENABLED else 0.0
-        cash = max(0.0, 100.0 - core_pct - bear)
-    elif market == "UNCERTAIN":
-        spec_pct = spec_full_pct
-        if BEAR_SLEEVE_ENABLED and bear_score >= BEAR_EXIT_SCORE:
-            long_vcp = 10.0
-            bear = 5.0
-        else:
-            long_vcp = 15.0
-            bear = 0.0
-        cash = max(0.0, 100.0 - core_pct - spec_pct - long_vcp - bear)
-    else:
-        spec_pct = spec_full_pct
-        long_vcp = tactical_total_pct
-        bear = 0.0
-        cash = max(0.0, 100.0 - core_pct - spec_pct - long_vcp - bear)
-
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        # Soft drawdown mode keeps core intact but halves aggressive sleeves.
-        reduced_spec = spec_pct * 0.5
-        reduced_long = long_vcp * 0.5
-        reduced_bear = bear * 0.75
-        cash += (spec_pct - reduced_spec) + (long_vcp - reduced_long) + (bear - reduced_bear)
-        spec_pct, long_vcp, bear = reduced_spec, reduced_long, reduced_bear
-
-    base["strategy_version"] = "v3_7_aggressive_45_15_40_dynamic_allocation"
-    base["core_wealth_pct"] = round(core_pct, 2)
-    base["spec_alpha_pct"] = round(spec_pct, 2)
-    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
-    base["bear_inverse_tactical_pct"] = round(bear, 2)
-    base["cash_reserve_pct"] = round(cash, 2)
-    return base
-
-def compute_equity_snapshot_data() -> Dict[str, float]:
+def _V310_OLD_COMPUTE_EQUITY() -> Dict[str, float]:
     refresh_portfolio()
     swing_positions = portfolio["positions"]
     core_positions = load_core_positions() if CORE_LEDGER_ENABLED else {}
@@ -10706,7 +7620,7 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     equity = float(portfolio["cash"]) + positions_value
     return {"cash": round(float(portfolio["cash"]), 2), "positions_value": round(positions_value, 2), "swing_positions_value": round(swing_value, 2), "core_positions_value": round(core_value, 2), "core_cost_basis": round(core_cost, 2), "core_unrealized_profit": round(core_value - core_cost, 2), "spec_positions_value": round(spec_value, 2), "spec_cost_basis": round(spec_cost, 2), "spec_unrealized_profit": round(spec_value - spec_cost, 2), "equity": round(equity, 2)}
 
-def realized_performance_all_time() -> Dict[str, Any]:
+def _V310_OLD_REALIZED() -> Dict[str, Any]:
     trades = load_trades()
     swing_profit = round(sum(float(t.get("profit", 0)) for t in trades), 2)
     core_trades = load_core_trades() if CORE_LEDGER_ENABLED else []
@@ -10732,68 +7646,6 @@ def sleeve_performance_summary() -> Dict[str, Any]:
     summary["trade_records"] = int(summary.get("trade_records", 0) or 0) + len(spec_trades)
     return summary
 
-def format_portfolio_allocation_plan() -> str:
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.7 AGGRESSIVE 45/15/40\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core wealth rotation: {plan.get('core_wealth_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🐻 Bear inverse tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core sleeve is long-term allocation.\n"
-        "• SPEC_ALPHA is monthly medium/weak momentum rotation.\n"
-        "• VCP/bear sleeves remain signal-driven tactical systems.\n"
-        "• In hard drawdown mode, new entries pause and exits/management continue."
-    )
-
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
-    actions = plan.get("actions", []) or []
-    risk = plan.get("risk_guard", {}) or {}
-    msg = (
-        "⚡ SPEC_ALPHA MONTHLY ROTATION PLAN v3.7 AGGRESSIVE 45/15/40\n\n"
-        "Private execution plan. Medium/weak momentum rotation. Execute in broker first, then record with specbuy/specsell.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} | Market filter OK: {yes_no(bool(plan.get('market_ok')))}\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
-        f"⚡ Target SPEC_ALPHA sleeve: {plan.get('target_spec_account_pct')}% = {format_money(float(plan.get('target_spec_value', 0) or 0))}\n"
-        f"📦 Current SPEC value: {format_money(float(plan.get('current_spec_value', 0) or 0))}\n"
-        f"📈 SPEC unrealized P/L: {format_money(float(plan.get('current_spec_unrealized_profit', 0) or 0))}\n"
-        f"🧪 Universe/scored: {plan.get('universe_size')} / {plan.get('scored_count')}\n"
-        f"🎚️ Mode: {plan.get('score_mode')} | Top N: {plan.get('top_n')}\n\n"
-    )
-    ranked = [a for a in actions if a.get("rank") is not None]
-    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
-    if ranked:
-        msg += "🎯 Ranked SPEC_ALPHA candidates — best to least attractive\n"
-        for item in ranked[:SPEC_ALPHA_TOP_N]:
-            action = str(item.get("action", "HOLD")).upper()
-            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
-            msg += (
-                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('sector', 'Unknown')})\n"
-                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
-                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
-                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
-                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')} | Bucket: {item.get('bucket')}\n"
-            )
-        msg += "\n"
-    if exits:
-        msg += "🔴 SPEC_ALPHA exit / rotation candidates\n"
-        for item in exits:
-            msg += f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'No longer selected')}\n"
-        msg += "\n"
-    msg += "How to execute after broker fill:\n• specbuy TICKER SHARES at PRICE\n• specsell TICKER SHARES at PRICE\n"
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 def format_public_core_plan(plan: Dict[str, Any]) -> str:
     actions = plan.get("actions", []) or []
@@ -10813,58 +7665,6 @@ def format_public_core_plan(plan: Dict[str, Any]) -> str:
     msg += public_signal_footer()
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-def format_public_spec_plan(plan: Dict[str, Any]) -> str:
-    actions = plan.get("actions", []) or []
-    ranked = [a for a in actions if a.get("rank") is not None]
-    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
-    msg = "⚡ SPEC_ALPHA ROTATION PLAN\n\nMedium/weak monthly momentum sleeve. No share counts. Use your own account size.\n\n"
-    msg += f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} | Market filter: {yes_no(bool(plan.get('market_ok')))}\n🎯 Target SPEC sleeve: {plan.get('target_spec_account_pct')}% of account\n🎚️ Mode: {plan.get('score_mode')} | Top {plan.get('top_n')}\n\n"
-    for item in ranked[:SPEC_ALPHA_TOP_N]:
-        action = str(item.get("action", "HOLD")).upper()
-        verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
-        msg += f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('sector', 'Unknown')})\nTarget: {item.get('target_account_pct')}% of account | Price: {item.get('price')}\n1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\nScore: {item.get('score')}\n\n"
-    if exits:
-        msg += "🔴 Rotation exits:\n"
-        for item in exits[:10]:
-            msg += f"SELL/REMOVE {item['ticker']} — {item.get('reason', 'No longer selected')}\n"
-        msg += "\n"
-    msg += public_signal_footer()
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def maybe_send_spec_alpha_signal() -> None:
-    if not SPEC_ALPHA_ENABLED:
-        return
-    current_ny = ny_now()
-    minutes = current_ny.hour * 60 + current_ny.minute
-    if is_market_weekday(current_ny) and minutes < SPEC_ALPHA_REVIEW_AFTER_CLOSE_MINUTE:
-        return
-    month_key = current_ny.strftime("%Y-%m")
-    if get_meta("last_spec_alpha_month") == month_key:
-        return
-    last_raw = get_meta("last_spec_alpha_alert_ts")
-    if last_raw:
-        try:
-            days_since = (now_ts() - float(last_raw)) / 86400
-            if days_since < SPEC_ALPHA_ALERT_REPEAT_DAYS:
-                return
-        except ValueError:
-            pass
-    try:
-        plan = compute_spec_alpha_plan()
-        save_spec_plan_signal(plan)
-        set_meta("last_spec_alpha_month", month_key)
-        set_meta("last_spec_alpha_alert_ts", str(now_ts()))
-        send(format_spec_alpha_plan(plan))
-        if PUBLIC_SIGNAL_ENABLED and SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED:
-            send_public_signal(format_public_spec_plan(plan))
-        audit("SPEC_ALPHA_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
-    except Exception as exc:
-        logger.exception(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
-        print(f"[SPEC ALPHA SIGNAL ERROR] {exc}")
-
-def maybe_send_wealth_core_signal() -> None:
-    _old_maybe_send_wealth_core_signal()
-    maybe_send_spec_alpha_signal()
 
 def format_spec_portfolio_report() -> str:
     details = spec_position_market_value_details()
@@ -10893,117 +7693,6 @@ def format_spec_exposure_report() -> str:
     target_pct = float(plan.get("target_spec_account_pct", 0) or 0)
     return f"⚡ SPEC_ALPHA EXPOSURE\n\n💼 Total equity: {format_money(equity)}\n⚡ SPEC value: {format_money(float(details.get('value', 0) or 0))}\n🎯 Target SPEC: {round(target_pct, 2)}% of account\n📊 Actual SPEC: {round(actual_pct, 2)}% of account\n📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\nUse specplan for ranked BUY/ADD/HOLD/TRIM/SELL actions."
 
-def format_combined_portfolio_report() -> str:
-    refresh_portfolio()
-    cash = float(portfolio["cash"])
-    swing_positions = portfolio["positions"]
-    core_rows = core_position_market_value_details().get("rows", []) if CORE_LEDGER_ENABLED else []
-    spec_rows = spec_position_market_value_details().get("rows", []) if SPEC_ALPHA_LEDGER_ENABLED else []
-    snapshot = compute_equity_snapshot_data()
-    if not swing_positions and not core_rows and not spec_rows:
-        return f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\n🏦 Total Equity: {format_money(snapshot['equity'])}\nNo open swing, core, or SPEC positions"
-    prices = get_prices_batch(list(swing_positions.keys()))
-    msg = f"📋 PORTFOLIO\n\n💵 Cash: {format_money(cash)}\n⚡ Swing value: {format_money(snapshot.get('swing_positions_value', 0))}\n🏛️ Core value: {format_money(snapshot.get('core_positions_value', 0))}\n⚡ SPEC value: {format_money(snapshot.get('spec_positions_value', 0))}\n🏦 Total equity: {format_money(snapshot['equity'])}\n\n"
-    if swing_positions:
-        msg += "⚡ SWING / TACTICAL POSITIONS\n\n"
-        for ticker, pos in swing_positions.items():
-            current_price = prices.get(ticker, pos["price"])
-            entry = pos["price"]; shares = pos["shares"]
-            pnl = (current_price - entry) * shares
-            risk_per_share = pos.get("risk_per_share")
-            r_now = None
-            if isinstance(risk_per_share, (int, float)) and risk_per_share > 0:
-                r_now = (current_price - entry) / risk_per_share
-            msg += f"📦 {ticker}\nShares: {shares}\nEntry: {round(entry, 2)}\nNow: {round(current_price, 2)}\n🛡️ Stop: {round(pos['stop'], 2)}\n📈 High: {round(pos['highest'], 2)}\n🎯 R now: {None if r_now is None else round(r_now, 2)}\n💰 P/L: {format_money(pnl)}\n\n"
-    if core_rows:
-        msg += "🏛️ CORE WEALTH POSITIONS\n\n"
-        for row in core_rows:
-            msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)}\nNow: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
-    if spec_rows:
-        msg += "⚡ SPEC_ALPHA POSITIONS\n\n"
-        for row in spec_rows:
-            msg += f"📦 {row['ticker']}\nShares: {format_core_shares(row['shares'])}\nAvg: {round(float(row['avg_entry_price']), 2)}\nNow: {round(float(row['mark_price']), 2)}\nValue: {format_money(float(row['market_value']))}\nP/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n"
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"help", "/help"}:
-        send(
-            "Commands:\n"
-            "pnl | equity | openrisk | winrate | expectancy | stats | duration | summary | portfolio | scanstatus | bearstatus | allocationplan | riskstatus | sleevestatus\n"
-            "wealthplan | wealthstatus | corestatus | coreportfolio | corepnl | coreexposure\n"
-            "specplan | specstatus | specportfolio | specpnl | specexposure\n"
-            "setupstats | showtrades | showsignals | resetsignals | resetscan | forcescan | download_trades\n"
-            "testchannel | postchannelterms\n"
-            "download_state | download_portfolio | download_signals | download_withdrawals\n"
-            "withdrawinit | withdrawplan | withdrawdone AMOUNT | showwithdrawals\n"
-            "resetall  (then resetall CONFIRM-LIVE)\n"
-            "setcash AMOUNT\n"
-            "voidbuy TICKER\n"
-            "corebuy TICKER SHARES at PRICE | coresell TICKER SHARES at PRICE\n"
-            "specbuy TICKER SHARES at PRICE | specsell TICKER SHARES at PRICE\n"
-            "editbuy TICKER PRICE | editsell TICKER PRICE\n"
-            "bought TICKER SHARES at PRICE | sold TICKER SHARES at PRICE"
-        )
-        return
-    if text_lower == "equity":
-        snapshot = compute_equity_snapshot_data()
-        send(f"💼 ACCOUNT EQUITY\n\n💵 Cash: {format_money(snapshot['cash'])}\n⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n📦 Total positions: {format_money(snapshot['positions_value'])}\n🏦 Total Equity: {format_money(snapshot['equity'])}")
-        return
-    if text_lower == "allocationplan":
-        send(format_portfolio_allocation_plan())
-        return
-    if text_lower == "wealthplan":
-        plan = compute_wealth_core_plan()
-        save_core_plan_signal(plan)
-        send(format_wealth_core_plan(plan))
-        if PUBLIC_SIGNAL_ENABLED and CORE_PUBLIC_SIGNAL_ENABLED:
-            ok, info = send_public_signal(format_public_core_plan(plan))
-            if not ok:
-                send(f"⚠️ Core public plan failed:\n{info}")
-        return
-    if text_lower == "specplan":
-        send("⚡ SPEC_ALPHA plan started. This can take several minutes because it scores the broad medium/weak universe.")
-        plan = compute_spec_alpha_plan()
-        save_spec_plan_signal(plan)
-        send(format_spec_alpha_plan(plan))
-        if PUBLIC_SIGNAL_ENABLED and SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED:
-            ok, info = send_public_signal(format_public_spec_plan(plan))
-            if not ok:
-                send(f"⚠️ SPEC_ALPHA public plan failed:\n{info}")
-        return
-    if text_lower in {"specstatus", "specledger"}:
-        latest = load_latest_spec_plan()
-        send(f"⚡ SPEC_ALPHA STATUS v3.7\n\nEnabled: {yes_no(SPEC_ALPHA_ENABLED)}\nLedger enabled: {yes_no(SPEC_ALPHA_LEDGER_ENABLED)}\nPublic enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\nTarget allocation: {round(SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100, 2)}%\nMode: {SPEC_ALPHA_SCORE_MODE} | Top N: {SPEC_ALPHA_TOP_N}\nUniverse size: {len(SPEC_ALPHA_UNIVERSE)}\nOpen SPEC positions: {len(load_spec_positions()) if SPEC_ALPHA_LEDGER_ENABLED else 0}\nLatest active plan: {None if latest is None else latest.get('plan_date')}\n\nCommands:\nspecplan\nspecbuy TICKER SHARES at PRICE\nspecsell TICKER SHARES at PRICE\nspecportfolio | specpnl | specexposure")
-        return
-    if text_lower == "specportfolio":
-        send(format_spec_portfolio_report())
-        return
-    if text_lower == "specpnl":
-        send(format_spec_pnl_report())
-        return
-    if text_lower == "specexposure":
-        send(format_spec_exposure_report())
-        return
-    spec_trade_cmd = re.fullmatch(r"(?i)\s*(specbuy|specsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*", text_clean)
-    if spec_trade_cmd:
-        action = spec_trade_cmd.group(1).lower()
-        ticker = normalize_ticker(spec_trade_cmd.group(2))
-        shares = float(spec_trade_cmd.group(3))
-        price = float(spec_trade_cmd.group(4))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        if action == "specbuy":
-            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-        if action == "specsell":
-            ok, msg = record_spec_sell(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-    return _old_handle_command(text, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V3.7 EXPORT / RESET HARDENING
@@ -11042,7 +7731,7 @@ def table_rows(table: str) -> List[Dict[str, Any]]:
     finally:
         conn.close()
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
+def _V38_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:
     """
     V3.7 state export.
 
@@ -11180,9 +7869,8 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
 
     return zip_path
 
-_V37_OLD_RESET_ALL_PAPER_STATE = reset_all_paper_state
 
-def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+def _V310_OLD_RESET_ALL(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
     """V3.7 reset: includes SPEC_ALPHA ledger cleanup after backup export."""
     ok, msg, backup_path = _V37_OLD_RESET_ALL_PAPER_STATE(update_id=update_id)
 
@@ -11235,162 +7923,6 @@ def _v38_float(value: Any, default: float = 0.0) -> float:
 def _v38_pct(part: float, whole: float) -> float:
     return 0.0 if whole <= 0 else (part / whole) * 100.0
 
-def _v38_cluster_for_ticker(ticker: str) -> str:
-    t = str(ticker).upper()
-
-    clusters = {
-        "cash_like": {"BIL", "SGOV", "SHY", "IEF", "TLT"},
-        "broad_equity": {"SPY", "VOO", "VTI", "DIA", "IWM"},
-        "growth_tech": {"QQQ", "XLK", "IGV", "XLC", "MSFT", "AAPL", "META", "GOOGL", "AMZN", "NFLX", "CRM", "ADBE", "INTU", "SHOP"},
-        "semis_ai": {"SMH", "SOXX", "NVDA", "AVGO", "AMD", "MU", "LRCX", "ASML", "QCOM", "KLAC", "AMAT", "TSM", "TXN", "ADI", "MRVL", "MPWR", "ON", "NXPI", "ARM", "ANET", "CDNS", "SNPS"},
-        "cyber_cloud": {"PANW", "CRWD", "ZS", "NET", "NOW", "PLTR", "DDOG", "MDB", "TEAM", "WDAY", "FTNT", "HUBS", "APP", "TTD"},
-        "financials": {"XLF", "KRE", "JPM", "GS", "MS", "BAC", "WFC", "SCHW", "BLK", "SPGI", "MCO", "CME", "ICE", "NDAQ", "V", "MA", "AXP", "BX", "KKR", "APO", "PGR", "CB"},
-        "industrials": {"XLI", "IYT", "CAT", "DE", "GE", "ETN", "HON", "RTX", "URI", "PH", "CMI", "EMR", "ITW", "ROK", "TT", "PWR", "FAST", "PCAR", "LMT", "NOC", "GD", "TDG", "GWW", "UNP", "CSX", "LUNR", "PL", "RKLB"},
-        "healthcare": {"XLV", "IBB", "LLY", "UNH", "ABBV", "ISRG", "TMO", "ABT", "MRK", "JNJ", "AMGN", "REGN", "VRTX", "SYK", "BSX", "MDT", "DHR", "GILD", "HCA", "MCK", "COR", "IQV", "LQDA", "SYRE"},
-        "consumer": {"XLP", "XLY", "COST", "WMT", "MCD", "HD", "LOW", "BKNG", "NKE", "SBUX", "CMG", "TJX", "ROST", "AZO", "ORLY", "YUM", "DPZ", "MAR", "HLT", "RCL", "MELI", "UBER"},
-        "energy_materials": {"XLE", "XOP", "XLB", "XOM", "CVX", "SLB", "FCX", "LIN", "COP", "EOG", "MPC", "PSX", "VLO", "NUE", "STLD", "SCCO", "NEM", "APD", "SHW", "ECL", "MLM", "VMC", "DBC", "DBB", "CPER"},
-        "metals": {"GLD", "IAU", "SLV", "GDX", "GDXJ", "SIL", "SILJ", "AEM", "GOLD", "KGC", "WPM", "FNV"},
-        "real_estate_utilities": {"XLU", "XLRE", "NEE", "CEG", "VST", "DLR", "EQIX", "PLD", "AMT", "HOUS"},
-        "crypto_beta": {"COIN", "HOOD", "MSTR", "MARA", "RIOT", "CLSK", "IREN", "WULF", "HUT", "BITF"},
-        "bear_inverse": {"SQQQ", "SPXU", "SDOW", "TZA"},
-    }
-
-    for name, members in clusters.items():
-        if t in members:
-            return name
-    return "other"
-
-def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
-    entry_data = pos.get("entry_data", {}) if isinstance(pos, dict) else {}
-    sleeve = str(entry_data.get("strategy_sleeve") or entry_data.get("sleeve") or "").upper()
-    if sleeve:
-        return sleeve
-    if str(ticker).upper() in {"SQQQ", "SPXU", "SDOW", "TZA"}:
-        return "BEAR_INVERSE"
-    return "LONG_VCP_OR_TACTICAL"
-
-def _v38_collect_holdings(prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
-    refresh_portfolio()
-    swing_positions = portfolio.get("positions", {}) or {}
-    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
-    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
-
-    tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys())))
-    if prices is None:
-        prices = get_prices_batch(tickers) if tickers else {}
-
-    holdings: List[Dict[str, Any]] = []
-
-    for ticker, pos in swing_positions.items():
-        shares = _v38_float(pos.get("shares"), 0.0)
-        entry = _v38_float(pos.get("price"), 0.0)
-        price = _v38_float(prices.get(ticker, entry), entry)
-        value = shares * price
-        holdings.append({
-            "ticker": ticker,
-            "ledger": "swing",
-            "sleeve": _v38_entry_sleeve_from_pos(ticker, pos),
-            "cluster": _v38_cluster_for_ticker(ticker),
-            "shares": shares,
-            "entry_price": entry,
-            "mark_price": price,
-            "market_value": round(value, 2),
-            "cost_basis": round(entry * shares, 2),
-            "unrealized_profit": round((price - entry) * shares, 2),
-            "stop": pos.get("stop"),
-            "highest": pos.get("highest"),
-        })
-
-    for ticker, pos in core_positions.items():
-        shares = _v38_float(pos.get("shares"), 0.0)
-        entry = _v38_float(pos.get("avg_entry_price"), 0.0)
-        cost_basis = _v38_float(pos.get("cost_basis"), entry * shares)
-        price = _v38_float(prices.get(ticker, entry), entry)
-        value = shares * price
-        holdings.append({
-            "ticker": ticker,
-            "ledger": "core",
-            "sleeve": "CORE_WEALTH",
-            "cluster": _v38_cluster_for_ticker(ticker),
-            "shares": shares,
-            "entry_price": entry,
-            "mark_price": price,
-            "market_value": round(value, 2),
-            "cost_basis": round(cost_basis, 2),
-            "unrealized_profit": round(value - cost_basis, 2),
-            "target_account_pct": pos.get("target_account_pct"),
-        })
-
-    for ticker, pos in spec_positions.items():
-        shares = _v38_float(pos.get("shares"), 0.0)
-        entry = _v38_float(pos.get("avg_entry_price"), 0.0)
-        cost_basis = _v38_float(pos.get("cost_basis"), entry * shares)
-        price = _v38_float(prices.get(ticker, entry), entry)
-        value = shares * price
-        holdings.append({
-            "ticker": ticker,
-            "ledger": "spec",
-            "sleeve": "SPEC_ALPHA",
-            "cluster": _v38_cluster_for_ticker(ticker),
-            "shares": shares,
-            "entry_price": entry,
-            "mark_price": price,
-            "market_value": round(value, 2),
-            "cost_basis": round(cost_basis, 2),
-            "unrealized_profit": round(value - cost_basis, 2),
-            "target_account_pct": pos.get("target_account_pct"),
-        })
-
-    return holdings
-
-def institutional_datahealth_snapshot() -> Dict[str, Any]:
-    refresh_portfolio()
-    swing_positions = portfolio.get("positions", {}) or {}
-    core_positions = load_core_positions() if globals().get("CORE_LEDGER_ENABLED", False) else {}
-    spec_positions = load_spec_positions() if globals().get("SPEC_ALPHA_LEDGER_ENABLED", False) else {}
-    tickers = list(dict.fromkeys(list(swing_positions.keys()) + list(core_positions.keys()) + list(spec_positions.keys())))
-    prices = get_prices_batch(tickers) if tickers else {}
-    holdings = _v38_collect_holdings(prices)
-
-    missing_quotes = [t for t in tickers if t not in prices]
-    bad_values = []
-    stop_warnings = []
-
-    for h in holdings:
-        if h["shares"] <= 0 or h["entry_price"] <= 0 or h["mark_price"] <= 0:
-            bad_values.append(h["ticker"])
-        if h["ledger"] == "swing":
-            stop = _v38_float(h.get("stop"), 0.0)
-            if stop <= 0:
-                stop_warnings.append({"ticker": h["ticker"], "issue": "missing_or_invalid_stop"})
-            elif h["sleeve"] != "BEAR_INVERSE" and stop > h["mark_price"] * 1.25:
-                stop_warnings.append({"ticker": h["ticker"], "issue": "stop_far_above_price_check_manually"})
-
-    status = "OK"
-    if missing_quotes or bad_values or len(stop_warnings) >= 3:
-        status = "WARNING"
-    if _v38_float(portfolio.get("cash"), 0.0) < 0:
-        status = "CRITICAL"
-
-    return {
-        "status": status,
-        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "expected_daily_bar_date": expected_daily_bar_date(),
-        "last_scan_day": get_meta("last_scan_day"),
-        "last_scan_bar_date": get_meta("last_scan_bar_date"),
-        "panic_mode": PANIC_MODE,
-        "cash_negative": _v38_float(portfolio.get("cash"), 0.0) < 0,
-        "holdings_count": len(holdings),
-        "quote_tickers_requested": len(tickers),
-        "quote_tickers_received": len(prices),
-        "missing_quotes": missing_quotes,
-        "bad_value_tickers": bad_values,
-        "stop_warnings": stop_warnings,
-        "notes": [
-            "On-demand diagnostic only; does not block trades.",
-            "Missing quotes may be temporary provider/API issues or market-closed behavior.",
-        ],
-    }
 
 def institutional_riskmatrix_snapshot() -> Dict[str, Any]:
     snapshot = compute_equity_snapshot_data()
@@ -11443,68 +7975,6 @@ def institutional_riskmatrix_snapshot() -> Dict[str, Any]:
         "status": "WARNING" if warnings else "OK",
     }
 
-def institutional_stress_snapshot() -> Dict[str, Any]:
-    risk = institutional_riskmatrix_snapshot()
-    holdings = _v38_collect_holdings()
-    equity = _v38_float(risk.get("equity"), 0.0)
-
-    scenarios = {
-        "broad_risk_off": {
-            "description": "Broad risk-off: core -8%, long swing -10%, SPEC -18%, bear inverse +10%.",
-            "default": -0.08,
-            "CORE_WEALTH": -0.08,
-            "SPEC_ALPHA": -0.18,
-            "LONG_VCP_OR_TACTICAL": -0.10,
-            "BEAR_INVERSE": 0.10,
-        },
-        "spec_momentum_unwind": {
-            "description": "SPEC momentum unwind: SPEC -25%, growth/semis -10%, other core -4%.",
-            "default": -0.04,
-            "SPEC_ALPHA": -0.25,
-            "LONG_VCP_OR_TACTICAL": -0.08,
-            "BEAR_INVERSE": 0.05,
-        },
-        "growth_semis_shock": {
-            "description": "Growth/semis shock: semis/growth clusters -15%, SPEC -12%, other assets -5%.",
-            "default": -0.05,
-            "SPEC_ALPHA": -0.12,
-            "LONG_VCP_OR_TACTICAL": -0.10,
-            "BEAR_INVERSE": 0.05,
-            "cluster_overrides": {"semis_ai": -0.15, "growth_tech": -0.15, "cyber_cloud": -0.15},
-        },
-        "bear_inverse_whipsaw": {
-            "description": "Bear sleeve whipsaw: bear inverse -15%, other risk assets +2%.",
-            "default": 0.02,
-            "BEAR_INVERSE": -0.15,
-        },
-    }
-
-    results = []
-    for name, cfg in scenarios.items():
-        pnl = 0.0
-        for h in holdings:
-            value = _v38_float(h.get("market_value"), 0.0)
-            sleeve = h.get("sleeve")
-            shock = cfg.get(sleeve, cfg.get("default", 0.0))
-            cluster_overrides = cfg.get("cluster_overrides", {}) or {}
-            if h.get("cluster") in cluster_overrides:
-                shock = cluster_overrides[h.get("cluster")]
-            pnl += value * float(shock)
-        results.append({
-            "scenario": name,
-            "description": cfg.get("description"),
-            "estimated_pnl": round(pnl, 2),
-            "estimated_pct_of_equity": round(_v38_pct(pnl, equity), 2),
-        })
-
-    worst = min(results, key=lambda x: x["estimated_pnl"], default=None)
-    return {
-        "equity": round(equity, 2),
-        "scenarios": results,
-        "worst_scenario": worst,
-        "status": "WARNING" if worst and worst.get("estimated_pct_of_equity", 0) <= -10 else "OK",
-        "note": "Scenario model is approximate and for monitoring only; it does not block trades.",
-    }
 
 def institutional_execution_snapshot() -> Dict[str, Any]:
     trades = load_trades()
@@ -11586,32 +8056,8 @@ def institutional_drift_snapshot() -> Dict[str, Any]:
         "notes": notes,
     }
 
-def institutional_validation_snapshot() -> Dict[str, Any]:
-    return {
-        "strategy_version": STRATEGY_VERSION,
-        "allocation": "45% core / 15% VCP-bear tactical / 40% SPEC_ALPHA in supportive regimes",
-        "research_reference": {
-            "base_case_50bps": {"modeled_return_pct": 104.10, "modeled_final_equity_on_4000": 8164.00},
-            "optimistic_spec_25bps": {"modeled_return_pct": 120.94, "modeled_final_equity_on_4000": 8837.60},
-            "spec_100bps_stress": {"modeled_return_pct": 76.40, "modeled_final_equity_on_4000": 7056.16},
-            "spec_best10_removed": {"modeled_return_pct": 61.92, "modeled_final_equity_on_4000": 6476.96},
-            "spec_crypto_adjusted": {"modeled_return_pct": 94.77, "modeled_final_equity_on_4000": 7790.72},
-        },
-        "known_limitations": [
-            "Integrated result is a modeled sleeve allocation, not a perfect shared-cash tick-by-tick execution simulation.",
-            "SPEC_ALPHA is aggressive and had meaningful historical sleeve drawdown.",
-            "Forward fills, slippage, and monthly rotation behavior must be monitored.",
-            "Research cache quality and survivorship limitations still matter.",
-        ],
-        "live_validation_rules": [
-            "Do not judge SPEC_ALPHA until several monthly rotations exist.",
-            "Compare execution slippage to 50 bps model assumption.",
-            "Watch concentration in semis/growth/spec momentum clusters.",
-            "Export download_state regularly for review.",
-        ],
-    }
 
-def institutional_snapshot() -> Dict[str, Any]:
+def _V443_OLD_INSTITUTIONAL_SNAPSHOT() -> Dict[str, Any]:
     data = {}
     sections = [
         ("datahealth", institutional_datahealth_snapshot),
@@ -11641,7 +8087,7 @@ def _v38_status_emoji(status: Any) -> str:
         return "🔴"
     return "⚪"
 
-def format_institutional_status() -> str:
+def _V443_OLD_FORMAT_INSTITUTIONAL_STATUS() -> str:
     snap = institutional_snapshot()
     dh = snap.get("datahealth", {})
     rm = snap.get("riskmatrix", {})
@@ -11674,7 +8120,7 @@ def format_institutional_status() -> str:
         "download_institutional | download_state"
     )
 
-def format_datahealth_status() -> str:
+def _V443_OLD_FORMAT_DATAHEALTH_STATUS() -> str:
     d = institutional_datahealth_snapshot()
     missing = d.get("missing_quotes") or []
     stops = d.get("stop_warnings") or []
@@ -11692,39 +8138,8 @@ def format_datahealth_status() -> str:
         "This is diagnostic-only and does not block trades."
     )
 
-def format_riskmatrix_status() -> str:
-    r = institutional_riskmatrix_snapshot()
-    ledgers = "\n".join(f"• {x['ledger']}: {format_money(x['value'])} ({x['account_pct']}%)" for x in r.get("ledger_exposure", []))
-    clusters = "\n".join(f"• {x['cluster']}: {format_money(x['value'])} ({x['account_pct']}%)" for x in (r.get("cluster_exposure") or [])[:10])
-    tops = "\n".join(f"• {x['ticker']}: {format_money(x['market_value'])} ({x.get('account_pct')}%)" for x in (r.get("top_positions") or [])[:8])
-    warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
-    return (
-        "🧮 RISK MATRIX v3.8\n\n"
-        f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
-        f"Total equity: {format_money(r.get('equity', 0))}\n\n"
-        "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
-        "Top clusters:\n" + (clusters or "No holdings.") + "\n\n"
-        "Top positions:\n" + (tops or "No holdings.") + "\n\n"
-        f"{warnings}"
-    )
 
-def format_stress_status() -> str:
-    s = institutional_stress_snapshot()
-    rows = "\n".join(
-        f"• {x['scenario']}: {format_money(x['estimated_pnl'])} ({x['estimated_pct_of_equity']}%)"
-        for x in s.get("scenarios", [])
-    )
-    worst = s.get("worst_scenario") or {}
-    return (
-        "🔥 STRESS STATUS v3.8\n\n"
-        f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
-        f"Equity: {format_money(s.get('equity', 0))}\n"
-        f"Worst scenario: {worst.get('scenario')} {format_money(worst.get('estimated_pnl', 0))} ({worst.get('estimated_pct_of_equity')}%)\n\n"
-        f"{rows}\n\n"
-        "Approximate monitoring only. It does not block trades."
-    )
-
-def format_execution_status() -> str:
+def _V443_OLD_FORMAT_EXECUTION_STATUS() -> str:
     e = institutional_execution_snapshot()
     recent = "\n".join(
         f"• {r['ticker']}: {r['entry_slippage_bps']} bps | {r.get('exit_reason')} | P/L {format_money(r.get('profit', 0))}"
@@ -11741,7 +8156,7 @@ def format_execution_status() -> str:
         "Recent rows:\n" + recent
     )
 
-def format_drift_status() -> str:
+def _V443_OLD_FORMAT_DRIFT_STATUS() -> str:
     d = institutional_drift_snapshot()
     perf = d.get("realized_performance", {})
     counts = d.get("sample_counts", {})
@@ -11755,24 +8170,6 @@ def format_drift_status() -> str:
         f"{notes}"
     )
 
-def format_validation_status() -> str:
-    v = institutional_validation_snapshot()
-    rr = v.get("research_reference", {})
-    base = rr.get("base_case_50bps", {})
-    stress = rr.get("spec_100bps_stress", {})
-    best_removed = rr.get("spec_best10_removed", {})
-    limitations = "\n".join(f"• {x}" for x in v.get("known_limitations", []))
-    rules = "\n".join(f"• {x}" for x in v.get("live_validation_rules", []))
-    return (
-        "🧪 VALIDATION STATUS v3.8\n\n"
-        f"Strategy: {v.get('strategy_version')}\n"
-        f"Allocation: {v.get('allocation')}\n\n"
-        f"Base 50 bps model: +{base.get('modeled_return_pct')}% | final ${base.get('modeled_final_equity_on_4000')} on $4,000\n"
-        f"100 bps SPEC stress model: +{stress.get('modeled_return_pct')}% | final ${stress.get('modeled_final_equity_on_4000')}\n"
-        f"Best-10 removed model: +{best_removed.get('modeled_return_pct')}% | final ${best_removed.get('modeled_final_equity_on_4000')}\n\n"
-        "Known limitations:\n" + limitations + "\n\n"
-        "Live validation rules:\n" + rules
-    )
 
 def download_institutional_report() -> str:
     ts = ny_now().strftime("%Y%m%d_%H%M%S")
@@ -11780,9 +8177,8 @@ def download_institutional_report() -> str:
     write_json_file(path, institutional_snapshot())
     return path
 
-_V38_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
+def _V310_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:
     zip_path = _V38_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     if not INSTITUTIONAL_MONITOR_ENABLED:
         return zip_path
@@ -11799,48 +8195,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
             pass
     return zip_path
 
-_V38_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower in {"institutionalstatus", "institutional_status"}:
-        send(format_institutional_status())
-        return
-    if text_lower == "datahealth":
-        send(format_datahealth_status())
-        return
-    if text_lower == "riskmatrix":
-        send(format_riskmatrix_status())
-        return
-    if text_lower == "stressstatus":
-        send(format_stress_status())
-        return
-    if text_lower == "executionstatus":
-        send(format_execution_status())
-        return
-    if text_lower == "driftstatus":
-        send(format_drift_status())
-        return
-    if text_lower == "validationstatus":
-        send(format_validation_status())
-        return
-    if text_lower == "download_institutional":
-        path = download_institutional_report()
-        send_document(path, caption="institutional_snapshot.json")
-        return
-    if text_lower in {"help", "/help"}:
-        _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
-        send(
-            "V3.8 institutional diagnostics:\n"
-            "institutionalstatus | datahealth | riskmatrix | stressstatus | executionstatus | driftstatus | validationstatus\n"
-            "download_institutional\n\n"
-            "These are diagnostic-only and do not change trading logic."
-        )
-        return
-
-    return _V38_OLD_HANDLE_COMMAND(text, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V3.9 EU-RETAIL DEPLOYMENT CANDIDATE
@@ -11858,10 +8212,6 @@ STRATEGY_VERSION = os.getenv(
 WEALTH_STRATEGY_VERSION = os.getenv(
     "WEALTH_STRATEGY_VERSION",
     "wealth_core_ucits_usd_clean_v3_9_core_ledger"
-)
-BEAR_STRATEGY_VERSION = os.getenv(
-    "BEAR_STRATEGY_VERSION",
-    "bear_stock_rs_health_defense_v3_9"
 )
 
 # USD-priced UCITS/ETP core universe selected from the offline UCITS cache.
@@ -11901,61 +8251,11 @@ BEAR_STOCK_BUCKETS: Dict[str, str] = {
     "HWM": "defense_aerospace", "HEI": "defense_aerospace", "SPR": "defense_aerospace",
 }
 BEAR_WATCHLIST = list(dict.fromkeys(BEAR_STOCK_BUCKETS.keys()))
-ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # v3.9 bear-stock defaults. The sleeve is top-1, cash-first, and USD only.
-BEAR_MAX_SIGNALS_PER_SCAN = int(os.getenv("BEAR_MAX_SIGNALS_PER_SCAN", "1"))
-BEAR_MAX_OPEN_POSITIONS = int(os.getenv("BEAR_MAX_OPEN_POSITIONS", "1"))
-BEAR_MIN_PRICE = float(os.getenv("BEAR_MIN_PRICE", "10"))
-BEAR_STOCK_MAX_PRICE = float(os.getenv("BEAR_STOCK_MAX_PRICE", "500"))
-BEAR_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("BEAR_MIN_AVG_DOLLAR_VOLUME", "50000000"))
-BEAR_MIN_ATR_PCT = float(os.getenv("BEAR_MIN_ATR_PCT", "0.010"))
-BEAR_MAX_ATR_PCT = float(os.getenv("BEAR_MAX_ATR_PCT", "0.085"))
-BEAR_STOCK_MIN_REL_21_SPY = float(os.getenv("BEAR_STOCK_MIN_REL_21_SPY", "0.04"))
-BEAR_STOCK_MIN_REL_63_SPY = float(os.getenv("BEAR_STOCK_MIN_REL_63_SPY", "0.08"))
-BEAR_STOCK_MIN_REL_21_QQQ = float(os.getenv("BEAR_STOCK_MIN_REL_21_QQQ", "0.00"))
-BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT = float(os.getenv("BEAR_STOCK_MAX_ACCOUNT_EXPOSURE_PCT", "0.15"))
-BEAR_STOCK_CATASTROPHE_STOP_PCT = float(os.getenv("BEAR_STOCK_CATASTROPHE_STOP_PCT", "0.20"))
 
 # Match research behavior: exit on bear-score cooldown; no partial/trailing/time churn by default.
-BEAR_RISK_PCT = float(os.getenv("BEAR_RISK_PCT", "0.03"))
-BEAR_BREAKEVEN_R_TRIGGER = float(os.getenv("BEAR_BREAKEVEN_R_TRIGGER", "999"))
-BEAR_PARTIAL_TAKE_PROFIT_R = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_R", "999"))
-BEAR_PARTIAL_TAKE_PROFIT_PCT = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_PCT", "999"))
-BEAR_PARTIAL_TAKE_PROFIT_FRACTION = float(os.getenv("BEAR_PARTIAL_TAKE_PROFIT_FRACTION", "0.00"))
-BEAR_TRAIL_MULT_EARLY = float(os.getenv("BEAR_TRAIL_MULT_EARLY", "999"))
-BEAR_TRAIL_MULT_LATE = float(os.getenv("BEAR_TRAIL_MULT_LATE", "999"))
-BEAR_TIME_STOP_DAYS = int(os.getenv("BEAR_TIME_STOP_DAYS", "0"))
-BEAR_MAX_HOLDING_DAYS = int(os.getenv("BEAR_MAX_HOLDING_DAYS", "0"))
 
-_V39_OLD_SETUP_LABEL = setup_label
-
-def setup_label(setup_type: str) -> str:
-    setup = str(setup_type).lower()
-    if setup == "bear_stock_rs":
-        return "🐻 Bear Stock Relative Strength"
-    return _V39_OLD_SETUP_LABEL(setup_type)
-
-_V39_OLD_SLEEVE_LABEL = sleeve_label
-
-def sleeve_label(entry_data: Dict[str, Any]) -> str:
-    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
-    if sleeve == "BEAR_STOCK":
-        return "🐻 BEAR STOCK RS SLEEVE"
-    return _V39_OLD_SLEEVE_LABEL(entry_data)
-
-_V39_OLD_SLEEVE_SHORT_LABEL = sleeve_short_label
-
-def sleeve_short_label(entry_data: Dict[str, Any]) -> str:
-    sleeve = str(entry_data.get("strategy_sleeve", "LONG_VCP")).upper()
-    if sleeve == "BEAR_STOCK":
-        return "BEAR STOCK RS"
-    return _V39_OLD_SLEEVE_SHORT_LABEL(entry_data)
-
-def count_open_bear_positions() -> int:
-    return 0
-
-_V39_OLD_SLEEVE_FROM_TRADE = sleeve_from_trade
 
 def sleeve_from_trade(trade: Dict[str, Any]) -> str:
     entry_data = trade.get("entry_data", {}) or {}
@@ -11968,47 +8268,6 @@ def sleeve_from_trade(trade: Dict[str, Any]) -> str:
         return "BEAR_STOCK"
     return _V39_OLD_SLEEVE_FROM_TRADE(trade)
 
-def _v39_ret(series: pd.Series, bars: int) -> Optional[float]:
-    try:
-        clean = series.dropna()
-        if len(clean) <= bars:
-            return None
-        old = float(clean.iloc[-bars - 1])
-        new = float(clean.iloc[-1])
-        if old <= 0:
-            return None
-        return (new / old) - 1.0
-    except Exception:
-        return None
-
-def analyze_bear_signal(*args: Any, **kwargs: Any) -> None:
-    # Bear/inverse strategy removed in v4.8.
-    return None
-
-def format_portfolio_allocation_plan() -> str:
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v3.9 UCITS CORE / BEAR STOCK\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} "
-        f"({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct', SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100)}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core sleeve now uses the researched USD-priced UCITS/ETP universe.\n"
-        "• Bear sleeve now uses long-only USD healthcare/defense relative strength, not inverse ETFs.\n"
-        "• SPEC_ALPHA and Long VCP are unchanged.\n"
-        "• In hard drawdown mode, new entries pause and exits/management continue."
-    )
 
 def _v38_cluster_for_ticker(ticker: str) -> str:
     t = str(ticker).upper()
@@ -12027,70 +8286,6 @@ def _v38_entry_sleeve_from_pos(ticker: str, pos: Dict[str, Any]) -> str:
         return "BEAR_STOCK"
     return "LONG_VCP_OR_TACTICAL"
 
-_V39_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower == "bearstatus":
-        details = bear_regime_details(market_details=market_regime_details())
-        open_bear = count_open_bear_positions()
-        buckets = sorted(set(BEAR_STOCK_BUCKETS.values()))
-        send(
-            "🐻 BEAR STOCK SLEEVE STATUS v3.9\n\n"
-            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
-            f"Strategy: {BEAR_STRATEGY_VERSION}\n"
-            f"Active now: {yes_no(bool(details.get('active')))}\n"
-            f"Bear score: {details.get('score')}/{details.get('max_score')}\n"
-            f"Entry threshold: {BEAR_ENTRY_SCORE}\n"
-            f"Exit/calm threshold: {BEAR_EXIT_SCORE}\n"
-            f"Open bear-stock positions: {open_bear}/{BEAR_MAX_OPEN_POSITIONS}\n"
-            f"Universe size: {len(BEAR_WATCHLIST)} USD stocks\n"
-            f"Buckets: {', '.join(buckets)}\n\n"
-            "Live candidate: health/defense top-1 relative strength.\n"
-            "No inverse ETFs, no options, no EUR instruments.\n"
-            "Trades still use bought/sold after broker fill."
-        )
-        return
-
-    if text_lower == "wealthstatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        send(
-            "🏛️ WEALTH / CORE LEDGER STATUS v3.9\n\n"
-            f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
-            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
-            f"Universe: USD-priced UCITS/ETP core candidates\n"
-            f"Dynamic allocation: {yes_no(WEALTH_DYNAMIC_ALLOCATION_ENABLED)}\n"
-            f"Vol weighting: {yes_no(WEALTH_VOL_WEIGHTING_ENABLED)}\n"
-            f"Cluster control: {yes_no(WEALTH_CLUSTER_CONTROL_ENABLED)}\n"
-            f"Top assets: {WEALTH_CORE_TOP_N}\n"
-            f"Current core target: {alloc.get('core_wealth_pct')}% of account\n"
-            f"Long VCP target: {alloc.get('long_vcp_tactical_pct')}% of account\n"
-            f"Bear stock target: {alloc.get('bear_inverse_tactical_pct')}% of account\n"
-            f"Cash reserve target: {alloc.get('cash_reserve_pct')}% of account\n"
-            f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
-            f"Public channel: ❌ never used for this sleeve\n\n"
-            "Commands:\n"
-            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
-            "corebuy TICKER SHARES at PRICE — record core buy\n"
-            "coresell TICKER SHARES at PRICE — record core sell\n"
-            "coreportfolio | corepnl | coreexposure | corestatus\n"
-            "allocationplan | riskstatus | sleevestatus"
-        )
-        return
-
-    if text_lower in {"help", "/help"}:
-        _V39_OLD_HANDLE_COMMAND(text, update_id=update_id)
-        send(
-            "V3.9 deployment candidate notes:\n"
-            "• Core universe is USD-priced UCITS/ETP. Use corebuy/coresell only after broker fill.\n"
-            "• Bear sleeve is long-only health/defense stock RS, not inverse ETFs. Use bought/sold after signal/fill.\n"
-            "• SPEC_ALPHA and Long VCP remain unchanged."
-        )
-        return
-
-    return _V39_OLD_HANDLE_COMMAND(text, update_id=update_id)
 
 # =============================================================================
 # V4 EXPANDED FUTURE-GROWTH ALPHA EXTENSION
@@ -12117,16 +8312,6 @@ STRATEGY_VERSION = os.getenv(
 # Override v3.9/v3.8 allocation defaults.
 WEALTH_CORE_ACCOUNT_ALLOC_PCT = float(os.getenv("WEALTH_CORE_ACCOUNT_ALLOC_PCT", "0.20"))
 SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.20"))
-WEALTH_CORE_ALLOC_BULL = float(os.getenv("WEALTH_CORE_ALLOC_BULL", "0.20"))
-WEALTH_CORE_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_CORE_ALLOC_UNCERTAIN", "0.20"))
-WEALTH_CORE_ALLOC_BEAR = float(os.getenv("WEALTH_CORE_ALLOC_BEAR", "0.20"))
-WEALTH_CORE_ALLOC_RISK_OFF = float(os.getenv("WEALTH_CORE_ALLOC_RISK_OFF", "0.20"))
-WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.10"))
-WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.05"))
-WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
-WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
-WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.05"))
-WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.10"))
 
 GROWTH_ALPHA_ENABLED = os.getenv("GROWTH_ALPHA_ENABLED", "1") != "0"
 GROWTH_ALPHA_LEDGER_ENABLED = os.getenv("GROWTH_ALPHA_LEDGER_ENABLED", "1") != "0"
@@ -12148,9 +8333,6 @@ GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("GROWTH_ALPHA_QUOTE_DEVIATI
 GROWTH_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("GROWTH_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
 GROWTH_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("GROWTH_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
 GROWTH_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("GROWTH_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
-GROWTH_ALPHA_PLAN_VALID_DAYS = int(os.getenv("GROWTH_ALPHA_PLAN_VALID_DAYS", "10"))
-GROWTH_ALPHA_ALERT_REPEAT_DAYS = int(os.getenv("GROWTH_ALPHA_ALERT_REPEAT_DAYS", "7"))
-GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE = int(os.getenv("GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE", str(16 * 60 + 12)))
 GROWTH_ALPHA_SCORE_SLEEP_SEC = float(os.getenv("GROWTH_ALPHA_SCORE_SLEEP_SEC", "0.01"))
 
 GROWTH_ALPHA_CLUSTER_MAP = {
@@ -12301,9 +8483,8 @@ GROWTH_ALPHA_CLUSTER_MAP = {
 }
 GROWTH_ALPHA_UNIVERSE = list(dict.fromkeys(GROWTH_ALPHA_CLUSTER_MAP.keys()))
 
-_V310_OLD_INIT_DB = init_db
 
-def init_db() -> None:
+def _V41_OLD_INIT_DB() -> None:
     _V310_OLD_INIT_DB()
     conn = db_connect()
     try:
@@ -12416,21 +8597,6 @@ def save_growth_plan_signal(plan: Dict[str, Any]) -> str:
         )
     return plan_id
 
-def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
-    try:
-        details = market_details or market_regime_details()
-        if int(details.get("score", 0) or 0) < GROWTH_ALPHA_REQUIRE_MARKET_SCORE:
-            return False, "market score below threshold"
-        if GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200:
-            frames = details.get("frames", {}) if isinstance(details.get("frames"), dict) else {}
-            for symbol in ["SPY", "QQQ"]:
-                df = frames.get(symbol) or get_signal_dataframe(symbol, limit=260)
-                last, ma = frame_last_close_ma(df, 200)
-                if last is None or ma is None or last <= ma:
-                    return False, f"{symbol} below MA200"
-        return True, "OK"
-    except Exception as exc:
-        return False, f"market filter error: {exc}"
 
 def growth_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
     try:
@@ -12540,7 +8706,7 @@ def growth_position_market_value_details(prices: Optional[Dict[str, float]] = No
             "cost_basis": round(total_cost, 2), "unrealized_profit": round(total_unrealized, 2),
             "realized_profit": round(realized, 2), "total_profit": round(realized + total_unrealized, 2)}
 
-def compute_growth_alpha_plan() -> Dict[str, Any]:
+def _V43_OLD_COMPUTE_GROWTH_PLAN() -> Dict[str, Any]:
     refresh_portfolio()
     allocation = dynamic_portfolio_allocation_targets()
     risk = allocation.get("risk_guard", {}) or {}
@@ -12622,10 +8788,6 @@ def growth_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict
             return item
     return None
 
-def current_growth_plan_for_validation() -> Dict[str, Any]:
-    plan = compute_growth_alpha_plan()
-    save_growth_plan_signal(plan)
-    return plan
 
 def validate_growth_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not GROWTH_ALPHA_REQUIRE_LIVE_QUOTE:
@@ -12640,7 +8802,7 @@ def validate_growth_price_against_quote(ticker: str, price: float) -> Tuple[bool
                        f"Max deviation: {round(GROWTH_ALPHA_QUOTE_DEVIATION_LIMIT * 100, 2)}%"), quote
     return True, "OK", quote
 
-def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V43_OLD_RECORD_GROWTH_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
         return False, "Invalid ticker"
@@ -12724,7 +8886,7 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
                   f"📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n"
                   f"💵 Cash left: {format_money(portfolio['cash'])}")
 
-def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V44_OLD_RECORD_GROWTH_SELL(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker = normalize_ticker(ticker) or ""
     if not ticker:
         return False, "Invalid ticker"
@@ -12782,45 +8944,8 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
                   f"({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
                   f"🎯 Plan action: {None if action is None else action.get('action')}\n💵 Cash now: {format_money(portfolio['cash'])}")
 
-_V310_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
 
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
-    base = _V310_OLD_DYNAMIC()
-    market = str(base.get("market", "UNCERTAIN"))
-    risk = base.get("risk_guard", {}) or {}
-    bear_score = int(base.get("bear_score", 0) or 0)
-    if risk.get("hard_active"):
-        core, growth, spec, long_vcp, bear = 25.0, 0.0, 0.0, 0.0, 0.0
-    elif market == "BULL":
-        core, growth, spec, long_vcp, bear = 25.0, 45.0, 20.0, 10.0, 0.0
-    elif market == "BEAR":
-        core, growth, spec, long_vcp, bear = 25.0, 0.0, 0.0, 0.0, 10.0 if BEAR_SLEEVE_ENABLED else 0.0
-    else:
-        core, growth, spec, long_vcp = 25.0, 20.0, 10.0, 5.0
-        bear = 5.0 if BEAR_SLEEVE_ENABLED and bear_score >= BEAR_EXIT_SCORE else 0.0
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        reduced_growth = growth * 0.50
-        reduced_spec = spec * 0.50
-        reduced_long = long_vcp * 0.50
-        reduced_bear = bear * 0.75
-        growth, spec, long_vcp, bear = reduced_growth, reduced_spec, reduced_long, reduced_bear
-    if not GROWTH_ALPHA_ENABLED:
-        growth = 0.0
-    if not SPEC_ALPHA_ENABLED:
-        spec = 0.0
-    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear)
-    base["strategy_version"] = "v4_expanded_growth_25_45_20_10_dynamic_allocation"
-    base["core_wealth_pct"] = round(core, 2)
-    base["growth_alpha_pct"] = round(growth, 2)
-    base["spec_alpha_pct"] = round(spec, 2)
-    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
-    base["bear_inverse_tactical_pct"] = round(bear, 2)
-    base["cash_reserve_pct"] = round(cash, 2)
-    return base
-
-_V310_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
-
-def compute_equity_snapshot_data() -> Dict[str, float]:
+def _V41_OLD_COMPUTE_EQUITY() -> Dict[str, float]:
     snapshot = _V310_OLD_COMPUTE_EQUITY()
     growth_positions = load_growth_positions() if GROWTH_ALPHA_LEDGER_ENABLED else {}
     prices = get_prices_batch(list(growth_positions.keys()))
@@ -12837,9 +8962,8 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + growth_value, 2)
     return snapshot
 
-_V310_OLD_REALIZED = realized_performance_all_time
 
-def realized_performance_all_time() -> Dict[str, Any]:
+def _V41_OLD_REALIZED() -> Dict[str, Any]:
     perf = _V310_OLD_REALIZED()
     growth_trades = load_growth_trades() if GROWTH_ALPHA_LEDGER_ENABLED else []
     growth_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in growth_trades if str(t.get("side")).upper() == "SELL"), 2)
@@ -12851,50 +8975,6 @@ def realized_performance_all_time() -> Dict[str, Any]:
     perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(growth_trades)
     return perf
 
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
-    msg = (
-        "🚀 EXPANDED GROWTH_ALPHA MONTHLY LEADER ROTATION PLAN v4\n\n"
-        "Private execution plan. Execute in broker first, then record with growthbuy/growthsell.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🚦 Market filter OK: {yes_no(bool(plan.get('market_ok')))} — {plan.get('market_reason')}\n"
-        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
-        f"🚀 Target Growth sleeve: {plan.get('target_growth_account_pct')}% = {format_money(float(plan.get('target_growth_value', 0) or 0))}\n"
-        f"📦 Current Growth value: {format_money(float(plan.get('current_growth_value', 0) or 0))}\n"
-        f"📈 Growth unrealized P/L: {format_money(float(plan.get('current_growth_unrealized_profit', 0) or 0))}\n"
-        f"🧪 Universe/scored: {plan.get('universe_size')} / {plan.get('scored_count')}\n"
-        f"🎚️ Top N: {plan.get('top_n')} | Max per cluster: {GROWTH_ALPHA_MAX_PER_CLUSTER}\n\n"
-    )
-    ranked = [a for a in plan.get("actions", []) or [] if a.get("rank") is not None]
-    exits = [a for a in plan.get("actions", []) or [] if str(a.get("action")).upper() == "SELL"]
-    if ranked:
-        msg += "🎯 Ranked Growth Alpha candidates — best to least attractive\n"
-        for item in ranked[:GROWTH_ALPHA_TOP_N]:
-            action = str(item.get("action", "HOLD")).upper()
-            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
-            msg += (
-                f"{item.get('rank')}) {verb} {item['ticker']} ({item.get('cluster', 'other')})\n"
-                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
-                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
-                f"   Price: {item.get('price')} | 1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))}\n"
-                f"   Vol: {item.get('vol_3m_pct')}% | Score: {item.get('score')}\n"
-            )
-        msg += "\n"
-    if exits:
-        msg += "🔴 Growth Alpha exit / rotation candidates\n"
-        for item in exits:
-            msg += f"SELL {item['ticker']} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'No longer selected')}\n"
-        msg += "\n"
-    msg += (
-        "How to execute after broker fill:\n"
-        "• growthbuy TICKER SHARES at PRICE\n"
-        "• growthsell TICKER SHARES at PRICE\n\n"
-        "Growth rules:\n"
-        "• Monthly high-growth leader rotation, not a swing stop system.\n"
-        "• Separate Growth ledger; do not use bought/sold, corebuy, or specbuy.\n"
-        "• Cluster caps are active to reduce one-sector dependence."
-    )
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 def format_growth_portfolio_report() -> str:
     details = growth_position_market_value_details()
@@ -12946,86 +9026,8 @@ def format_growth_exposure_report() -> str:
             f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
             "Use growthplan for ranked BUY/ADD/HOLD/TRIM/SELL actions.")
 
-_V310_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
 
-def format_combined_portfolio_report() -> str:
-    base_msg = _V310_OLD_PORTFOLIO_REPORT()
-    rows = growth_position_market_value_details().get("rows", []) if GROWTH_ALPHA_LEDGER_ENABLED else []
-    if not rows:
-        return base_msg.replace("No open swing, core, or SPEC positions", "No open swing, core, SPEC, or Growth Alpha positions")
-    msg = base_msg + "\n\n🚀 GROWTH_ALPHA POSITIONS\n\n"
-    for row in rows:
-        msg += (f"📦 {row['ticker']}\n"
-                f"Shares: {format_core_shares(row['shares'])}\n"
-                f"Avg: {round(float(row['avg_entry_price']), 2)} | Now: {round(float(row['mark_price']), 2)}\n"
-                f"Value: {format_money(float(row['market_value']))}\n"
-                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def format_portfolio_allocation_plan() -> str:
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4 EXPANDED GROWTH 25/45/20/10\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core uses researched USD-priced UCITS/ETP universe.\n"
-        "• Growth Alpha is monthly high-growth leader rotation with cluster caps.\n"
-        "• SPEC_ALPHA remains monthly medium/weak momentum.\n"
-        "• VCP/Bear-stock remains signal-driven tactical.\n"
-        "• Options remain research-only and are not live-integrated."
-    )
-
-def maybe_send_growth_alpha_signal() -> None:
-    if not GROWTH_ALPHA_ENABLED:
-        return
-    current_ny = ny_now()
-    minutes = current_ny.hour * 60 + current_ny.minute
-    if is_market_weekday(current_ny) and minutes < GROWTH_ALPHA_REVIEW_AFTER_CLOSE_MINUTE:
-        return
-    month_key = current_ny.strftime("%Y-%m")
-    if get_meta("last_growth_alpha_month") == month_key:
-        return
-    last_raw = get_meta("last_growth_alpha_alert_ts")
-    if last_raw:
-        try:
-            days_since = (now_ts() - float(last_raw)) / 86400
-            if days_since < GROWTH_ALPHA_ALERT_REPEAT_DAYS:
-                return
-        except ValueError:
-            pass
-    try:
-        plan = compute_growth_alpha_plan()
-        save_growth_plan_signal(plan)
-        set_meta("last_growth_alpha_month", month_key)
-        set_meta("last_growth_alpha_alert_ts", str(now_ts()))
-        send(format_growth_alpha_plan(plan))
-        audit("GROWTH_ALPHA_SIGNAL", f"month={month_key} top={[x.get('ticker') for x in plan.get('top', [])]}")
-    except Exception as exc:
-        logger.exception(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
-        print(f"[GROWTH ALPHA SIGNAL ERROR] {exc}")
-
-_V310_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
-
-def maybe_send_wealth_core_signal() -> None:
-    _V310_OLD_MAYBE_SEND_MONTHLY()
-    maybe_send_growth_alpha_signal()
-
-_V310_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
+def _V41_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:
     zip_path = _V310_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -13037,9 +9039,8 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         print(f"[GROWTH EXPORT WARNING] {exc}")
     return zip_path
 
-_V310_OLD_RESET_ALL = reset_all_paper_state
 
-def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+def _V41_OLD_RESET_ALL(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
     ok, msg, backup_path = _V310_OLD_RESET_ALL(update_id=update_id)
     with db_tx() as conn:
         conn.execute("DELETE FROM growth_positions")
@@ -13048,94 +9049,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM meta WHERE key IN ('last_growth_alpha_month', 'last_growth_alpha_alert_ts')")
     return ok, msg + "\n✅ Growth Alpha positions/trades/signals cleared", backup_path
 
-_V310_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower == "growthplan":
-        send("🚀 Growth Alpha plan started. This can take a minute because it scores the high-growth universe.")
-        plan = compute_growth_alpha_plan()
-        save_growth_plan_signal(plan)
-        send(format_growth_alpha_plan(plan))
-        return
-    if text_lower == "growthstatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        latest = load_latest_growth_plan()
-        details = growth_position_market_value_details()
-        send(
-            "🚀 EXPANDED GROWTH_ALPHA STATUS v4\n\n"
-            f"Enabled: {yes_no(GROWTH_ALPHA_ENABLED)}\n"
-            f"Ledger enabled: {yes_no(GROWTH_ALPHA_LEDGER_ENABLED)}\n"
-            f"Target now: {alloc.get('growth_alpha_pct')}% of account\n"
-            f"Universe size: {len(GROWTH_ALPHA_UNIVERSE)}\n"
-            f"Top N: {GROWTH_ALPHA_TOP_N} | Max per cluster: {GROWTH_ALPHA_MAX_PER_CLUSTER}\n"
-            f"Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
-            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
-            "Commands:\n"
-            "growthplan\n"
-            "growthbuy TICKER SHARES at PRICE\n"
-            "growthsell TICKER SHARES at PRICE\n"
-            "growthportfolio | growthpnl | growthexposure"
-        )
-        return
-    if text_lower == "growthportfolio":
-        send(format_growth_portfolio_report())
-        return
-    if text_lower == "growthpnl":
-        send(format_growth_pnl_report())
-        return
-    if text_lower == "growthexposure":
-        send(format_growth_exposure_report())
-        return
-    if text_lower == "equity":
-        snapshot = compute_equity_snapshot_data()
-        send(
-            "💼 ACCOUNT EQUITY\n\n"
-            f"💵 Cash: {format_money(snapshot['cash'])}\n"
-            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
-            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
-            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
-            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
-            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
-            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
-        )
-        return
-
-    growth_cmd = re.fullmatch(
-        r"(?i)\s*(growthbuy|growthsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-        text_clean,
-    )
-    if growth_cmd:
-        action = growth_cmd.group(1).lower()
-        ticker = normalize_ticker(growth_cmd.group(2))
-        shares = float(growth_cmd.group(3))
-        price = float(growth_cmd.group(4))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        if action == "growthbuy":
-            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-        if action == "growthsell":
-            ok, msg = record_growth_sell(ticker, shares, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-
-    if text_lower in {"help", "/help"}:
-        _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-        send(
-            "V4 Expanded Growth Alpha notes:\n"
-            "• Allocation target in final v4.1.1 override: Core 20% / Growth 45% / SPEC 20% / Long VCP 5% / Crypto 10%.\n"
-            "• Expanded Growth Alpha is a separate monthly ledger. Use growthbuy/growthsell only.\n"
-            "• Do not record Growth Alpha with bought/sold, corebuy, or specbuy.\n"
-            "• Options remain research-only."
-        )
-        return
-
-    return _V310_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.1.1 FREEZE: AGGRESSIVE GROWTH + ALT-CRYPTO TACTICAL SWING EXTENSION
@@ -13171,12 +9084,6 @@ STRATEGY_VERSION = os.getenv(
 # Bear-stock / inverse bear sleeve is intentionally disabled in v4.1.1; crypto tactical replaces it.
 GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("GROWTH_ALPHA_ACCOUNT_ALLOC_PCT", "0.45"))
 SPEC_ALPHA_ACCOUNT_ALLOC_PCT = float(os.getenv("SPEC_ALPHA_ACCOUNT_ALLOC_PCT", "0.20"))
-WEALTH_TACTICAL_LONG_ALLOC_BULL = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BULL", "0.05"))
-WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN", "0.03"))
-WEALTH_TACTICAL_LONG_ALLOC_BEAR = float(os.getenv("WEALTH_TACTICAL_LONG_ALLOC_BEAR", "0.00"))
-WEALTH_BEAR_ALLOC_BULL = float(os.getenv("WEALTH_BEAR_ALLOC_BULL", "0.00"))
-WEALTH_BEAR_ALLOC_UNCERTAIN = float(os.getenv("WEALTH_BEAR_ALLOC_UNCERTAIN", "0.00"))
-WEALTH_BEAR_ALLOC_BEAR = float(os.getenv("WEALTH_BEAR_ALLOC_BEAR", "0.00"))
 
 CRYPTO_ALPHA_ENABLED = os.getenv("CRYPTO_ALPHA_ENABLED", "1") != "0"
 CRYPTO_ALPHA_LEDGER_ENABLED = os.getenv("CRYPTO_ALPHA_LEDGER_ENABLED", "1") != "0"
@@ -13186,9 +9093,6 @@ CRYPTO_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("CRYPTO_ALPHA_MIN_TRADE_DOLLARS
 CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("CRYPTO_ALPHA_QUOTE_DEVIATION_LIMIT", "0.08"))
 CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
 CRYPTO_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("CRYPTO_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
-CRYPTO_ALPHA_PLAN_VALID_DAYS = int(os.getenv("CRYPTO_ALPHA_PLAN_VALID_DAYS", "3"))
-CRYPTO_ALPHA_REVIEW_MINUTE = int(os.getenv("CRYPTO_ALPHA_REVIEW_MINUTE", str(21 * 60 + 30)))
-CRYPTO_ALPHA_SIGNAL_COOLDOWN_HOURS = int(os.getenv("CRYPTO_ALPHA_SIGNAL_COOLDOWN_HOURS", "20"))
 
 CRYPTO_ALPHA_INDICATORS = ["BTCUSD", "ETHUSD", "SOLUSD"]
 CRYPTO_ALPHA_UNIVERSE = [
@@ -13200,16 +9104,6 @@ CRYPTO_ALPHA_UNIVERSE = list(dict.fromkeys(CRYPTO_ALPHA_UNIVERSE))
 CRYPTO_ALPHA_ALL_SYMBOLS = list(dict.fromkeys(CRYPTO_ALPHA_INDICATORS + CRYPTO_ALPHA_UNIVERSE))
 
 CRYPTO_ALPHA_BREAKOUT_DAYS = int(os.getenv("CRYPTO_ALPHA_BREAKOUT_DAYS", "20"))
-CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200 = int(os.getenv("CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200", "2"))
-CRYPTO_ALPHA_MIN_PRICE = float(os.getenv("CRYPTO_ALPHA_MIN_PRICE", "0.01"))
-CRYPTO_ALPHA_MAX_PRICE = float(os.getenv("CRYPTO_ALPHA_MAX_PRICE", "500"))
-CRYPTO_ALPHA_MIN_ATR_PCT = float(os.getenv("CRYPTO_ALPHA_MIN_ATR_PCT", "0.02"))
-CRYPTO_ALPHA_MAX_ATR_PCT = float(os.getenv("CRYPTO_ALPHA_MAX_ATR_PCT", "0.35"))
-CRYPTO_ALPHA_MAX_RSI = float(os.getenv("CRYPTO_ALPHA_MAX_RSI", "88"))
-CRYPTO_ALPHA_MAX_EXTENSION_MA20 = float(os.getenv("CRYPTO_ALPHA_MAX_EXTENSION_MA20", "0.50"))
-CRYPTO_ALPHA_ATR_STOP_MULT = float(os.getenv("CRYPTO_ALPHA_ATR_STOP_MULT", "2.5"))
-CRYPTO_ALPHA_TRAIL_ATR_MULT = float(os.getenv("CRYPTO_ALPHA_TRAIL_ATR_MULT", "3.5"))
-CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT = float(os.getenv("CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT", "1.00"))
 CRYPTO_ALPHA_STRATEGY_VERSION = "crypto_swing_alt_majors_v4_1_1_breakout20"
 
 def get_crypto_quote(ticker: str) -> Optional[float]:
@@ -13242,9 +9136,8 @@ def get_crypto_prices_batch(tickers: List[str]) -> Dict[str, float]:
             out[nticker] = float(price)
     return out
 
-_V41_OLD_INIT_DB = init_db
 
-def init_db() -> None:
+def _V42_OLD_INIT_DB() -> None:
     _V41_OLD_INIT_DB()
     conn = db_connect()
     try:
@@ -13401,248 +9294,6 @@ def crypto_position_market_value_details(prices: Optional[Dict[str, float]] = No
         "total_profit": round(realized + (total_value - total_cost), 2),
     }
 
-def crypto_indicator_gate() -> Dict[str, Any]:
-    rows = []
-    ok_count = 0
-    for sym in CRYPTO_ALPHA_INDICATORS:
-        df = get_historical(sym, limit=260)
-        if df is None or len(df) < 220:
-            rows.append({"ticker": sym, "ok": False, "reason": "no_data"})
-            continue
-        close = df["Close"]
-        price = float(close.iloc[-1])
-        ma200 = float(close.rolling(200).mean().iloc[-1])
-        ma50 = float(close.rolling(50).mean().iloc[-1])
-        ok = price > ma200
-        ok_count += 1 if ok else 0
-        rows.append({"ticker": sym, "price": round(price, 6), "ma50": round(ma50, 6), "ma200": round(ma200, 6), "ok": ok})
-    gate_ok = ok_count >= CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200
-    return {"ok": gate_ok, "ok_count": ok_count, "required": CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200, "rows": rows}
-
-def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:
-    try:
-        df = get_historical(ticker, limit=280)
-        if df is None or len(df) < 220:
-            return None
-        close = df["Close"]
-        price = float(close.iloc[-1])
-        high = df["High"]
-        low = df["Low"]
-        ma20 = float(close.rolling(20).mean().iloc[-1])
-        ma50 = float(close.rolling(50).mean().iloc[-1])
-        ma200 = float(close.rolling(200).mean().iloc[-1])
-        roc21 = pct_change_last(df, 21)
-        roc63 = pct_change_last(df, 63)
-        roc126 = pct_change_last(df, 126) or 0.0
-        atr_series = atr(df, 14)
-        atr_val = float(atr_series.iloc[-1])
-        atr_pct = atr_val / price if price > 0 else 0.0
-        rsi_val = float(rsi(close, 14).iloc[-1])
-        prior_high = float(close.shift(1).rolling(CRYPTO_ALPHA_BREAKOUT_DAYS).max().iloc[-1])
-        if price < CRYPTO_ALPHA_MIN_PRICE or price > CRYPTO_ALPHA_MAX_PRICE:
-            return None
-        if not (price > ma50 and price > ma200):
-            return None
-        if roc21 is None or roc63 is None or roc21 <= 0 or roc63 <= 0:
-            return None
-        if not (CRYPTO_ALPHA_MIN_ATR_PCT <= atr_pct <= CRYPTO_ALPHA_MAX_ATR_PCT):
-            return None
-        if rsi_val > CRYPTO_ALPHA_MAX_RSI:
-            return None
-        if price > ma20 * (1 + CRYPTO_ALPHA_MAX_EXTENSION_MA20):
-            return None
-        if price <= prior_high:
-            return None
-        rel = roc63 - float(gate_ref_ret or 0.0)
-        score = (0.35 * roc126) + (0.35 * roc63) + (0.20 * roc21) + (0.10 * rel) - (0.10 * atr_pct)
-        stop = max(0.000001, price - (CRYPTO_ALPHA_ATR_STOP_MULT * atr_val))
-        trail = max(0.000001, price - (CRYPTO_ALPHA_TRAIL_ATR_MULT * atr_val))
-        return {
-            "ticker": ticker,
-            "price": round(price, 8),
-            "ma20": round(ma20, 8),
-            "ma50": round(ma50, 8),
-            "ma200": round(ma200, 8),
-            "prior_high": round(prior_high, 8),
-            "roc_1m_pct": round(roc21 * 100, 2),
-            "roc_3m_pct": round(roc63 * 100, 2),
-            "roc_6m_pct": round(roc126 * 100, 2),
-            "atr": round(atr_val, 8),
-            "atr_pct": round(atr_pct * 100, 2),
-            "rsi": round(rsi_val, 2),
-            "score": round(score, 6),
-            "stop": round(stop, 8),
-            "trail_reference": round(trail, 8),
-            "max_valid_entry": round(price * (1 + MAX_ENTRY_EXTENSION_PCT), 8),
-        }
-    except Exception as exc:
-        print(f"[CRYPTO SCORE ERROR] {ticker}: {exc}")
-        return None
-
-def compute_crypto_alpha_plan() -> Dict[str, Any]:
-    refresh_portfolio()
-    snapshot = compute_equity_snapshot_data()
-    equity = float(snapshot.get("equity", 0.0) or 0.0)
-    allocation = dynamic_portfolio_allocation_targets()
-    risk = allocation.get("risk_guard", {}) or {}
-    target_pct = float(allocation.get("crypto_alpha_pct", CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT * 100) or 0.0) / 100.0
-    target_value = equity * target_pct
-    gate = crypto_indicator_gate()
-    gate_ref_rets = []
-    for row in gate.get("rows", []):
-        sym = row.get("ticker")
-        df = get_historical(str(sym), limit=100)
-        ret = pct_change_last(df, 63) if df is not None else None
-        if ret is not None:
-            gate_ref_rets.append(ret)
-    gate_ref_ret = sum(gate_ref_rets) / len(gate_ref_rets) if gate_ref_rets else 0.0
-
-    positions = load_crypto_positions() if CRYPTO_ALPHA_LEDGER_ENABLED else {}
-    details = crypto_position_market_value_details() if CRYPTO_ALPHA_LEDGER_ENABLED else {"rows": [], "value": 0.0}
-    current_rows = {str(row.get("ticker", "")).upper(): row for row in details.get("rows", [])}
-    actions: List[Dict[str, Any]] = []
-    scored: List[Dict[str, Any]] = []
-
-    if CRYPTO_ALPHA_ENABLED and target_pct > 0 and not risk.get("hard_active") and gate.get("ok"):
-        for ticker in CRYPTO_ALPHA_UNIVERSE:
-            item = crypto_score_ticker(ticker, gate_ref_ret=gate_ref_ret)
-            if item is not None:
-                scored.append(item)
-    scored = sorted(scored, key=lambda x: float(x.get("score", -999)), reverse=True)
-    selected = scored[:CRYPTO_ALPHA_MAX_OPEN_POSITIONS]
-    selected_tickers = {str(x.get("ticker", "")).upper() for x in selected}
-
-    for item in selected:
-        ticker = str(item["ticker"]).upper()
-        current_value = float(current_rows.get(ticker, {}).get("market_value", 0.0) or 0.0)
-        target_dollars = target_value * min(CRYPTO_ALPHA_MAX_SINGLE_ASSET_PCT, 1.0)
-        drift = target_dollars - current_value
-        action = "HOLD"
-        if current_value <= 0 and target_dollars >= CRYPTO_ALPHA_MIN_TRADE_DOLLARS:
-            action = "BUY"
-        elif drift > max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
-            action = "ADD"
-        elif drift < -max(CRYPTO_ALPHA_MIN_TRADE_DOLLARS, equity * 0.015):
-            action = "TRIM"
-        actions.append({
-            **item,
-            "action": action,
-            "target_account_pct": round(target_pct * 100, 2),
-            "target_value": round(target_dollars, 2),
-            "current_value": round(current_value, 2),
-            "suggested_dollars": round(abs(drift), 2),
-            "drift_dollars": round(drift, 2),
-        })
-
-    # Exit/rotation candidates for current crypto holdings.
-    for ticker, row in current_rows.items():
-        if ticker in selected_tickers:
-            # Still selected; also check live exit conditions.
-            continue
-        exit_reason = "Crypto regime gate is off or ticker is no longer selected."
-        df = get_historical(ticker, limit=80)
-        mark = float(row.get("mark_price", row.get("avg_entry_price", 0)) or 0)
-        if df is not None and len(df) >= 30:
-            ma20 = float(df["Close"].rolling(20).mean().iloc[-1])
-            atr_val = float(atr(df, 14).iloc[-1])
-            highest = max(float(row.get("highest") or mark), mark)
-            trail = highest - (CRYPTO_ALPHA_TRAIL_ATR_MULT * atr_val)
-            stop = float(row.get("stop") or 0.0)
-            if mark < ma20:
-                exit_reason = "Close/mark is below MA20."
-            elif stop > 0 and mark <= stop:
-                exit_reason = "Initial stop hit."
-            elif mark <= trail:
-                exit_reason = "ATR trailing stop hit."
-        actions.append({
-            "ticker": ticker,
-            "action": "SELL",
-            "price": mark,
-            "target_account_pct": 0.0,
-            "target_value": 0.0,
-            "current_value": round(float(row.get("market_value", 0) or 0), 2),
-            "suggested_dollars": round(float(row.get("market_value", 0) or 0), 2),
-            "reason": exit_reason,
-        })
-
-    actionable = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "TRIM", "SELL"}]
-    return {
-        "plan_id": uuid.uuid4().hex,
-        "strategy_version": CRYPTO_ALPHA_STRATEGY_VERSION,
-        "ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"),
-        "account_equity": round(equity, 2),
-        "target_crypto_account_pct": round(target_pct * 100, 2),
-        "target_crypto_value": round(target_value, 2),
-        "current_crypto_value": round(float(details.get("value", 0.0) or 0.0), 2),
-        "current_crypto_unrealized_profit": round(float(details.get("unrealized_profit", 0.0) or 0.0), 2),
-        "allocation": allocation,
-        "risk_guard": risk,
-        "gate": gate,
-        "universe": CRYPTO_ALPHA_UNIVERSE,
-        "indicator_symbols": CRYPTO_ALPHA_INDICATORS,
-        "top": selected,
-        "actions": actions,
-        "actionable": actionable,
-        "all_scored": scored,
-    }
-
-def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:
-    gate = plan.get("gate", {}) or {}
-    risk = plan.get("risk_guard", {}) or {}
-    msg = (
-        "🪙 CRYPTO TACTICAL SWING PLAN v4.1.1\n\n"
-        "Private bot only. Execute in broker/exchange first, then record with cryptobuy/cryptosell.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"💼 Equity estimate: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
-        f"🪙 Target crypto sleeve: {plan.get('target_crypto_account_pct')}% = {format_money(float(plan.get('target_crypto_value', 0) or 0))}\n"
-        f"📦 Current crypto value: {format_money(float(plan.get('current_crypto_value', 0) or 0))}\n"
-        f"📈 Crypto unrealized P/L: {format_money(float(plan.get('current_crypto_unrealized_profit', 0) or 0))}\n\n"
-        f"🚦 Regime gate: {yes_no(bool(gate.get('ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} indicators above MA200; required {gate.get('required')})\n"
-    )
-    for row in gate.get("rows", []):
-        msg += f"• {row.get('ticker')}: price {row.get('price')} | MA200 {row.get('ma200')} | OK {yes_no(bool(row.get('ok')))}\n"
-    msg += "\n"
-    actions = plan.get("actions", []) or []
-    ranked = [a for a in actions if str(a.get("action")).upper() in {"BUY", "ADD", "HOLD", "TRIM"}]
-    exits = [a for a in actions if str(a.get("action")).upper() == "SELL"]
-    if not actions:
-        msg += "No crypto action. If the gate is off, crypto sleeve stays cash.\n"
-    if ranked:
-        msg += "🎯 Crypto candidates\n"
-        for i, item in enumerate(ranked, start=1):
-            action = str(item.get("action", "HOLD")).upper()
-            verb = {"BUY": "🟢 BUY", "ADD": "🟢 ADD", "HOLD": "🟡 HOLD", "TRIM": "🟠 TRIM"}.get(action, action)
-            msg += (
-                f"{i}) {verb} {item.get('ticker')}\n"
-                f"   Price: {item.get('price')} | Max entry: {item.get('max_valid_entry')} | Stop: {item.get('stop')}\n"
-                f"   Target: {item.get('target_account_pct')}% acct / {format_money(float(item.get('target_value', 0) or 0))}\n"
-                f"   Current: {format_money(float(item.get('current_value', 0) or 0))} | Action size: ~{format_money(float(item.get('suggested_dollars', 0) or 0))}\n"
-                f"   1m {format_pct(item.get('roc_1m_pct'))} | 3m {format_pct(item.get('roc_3m_pct'))} | 6m {format_pct(item.get('roc_6m_pct'))} | ATR {item.get('atr_pct')}% | Score {item.get('score')}\n"
-            )
-        msg += "\n"
-    if exits:
-        msg += "🔴 Crypto exit / rotation candidates\n"
-        for item in exits:
-            msg += f"SELL {item.get('ticker')} — current {format_money(float(item.get('current_value', 0) or 0))}\nReason: {item.get('reason', 'Exit condition')}\n"
-        msg += "\n"
-    msg += (
-        "How to execute after broker/exchange fill:\n"
-        "• cryptobuy TICKER UNITS at PRICE\n"
-        "• cryptosell TICKER UNITS at PRICE\n\n"
-        "Crypto rules:\n"
-        "• BTC/ETH/SOL are indicators; default buys use cheaper major crypto names.\n"
-        "• Crypto has its own ledger and shares account cash.\n"
-        "• Do not use bought/sold, corebuy, growthbuy, or specbuy for crypto."
-    )
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict[str, Any]]:
-    ticker = ticker.upper()
-    for item in plan.get("top", []) or []:
-        if str(item.get("ticker", "")).upper() == ticker:
-            return item
-    return None
 
 def validate_crypto_price_against_quote(ticker: str, price: float) -> Tuple[bool, str, Optional[float]]:
     if not CRYPTO_ALPHA_REQUIRE_LIVE_QUOTE:
@@ -13802,45 +9453,8 @@ def record_crypto_sell(ticker: str, units: float, price: float, update_id: Optio
                   f"📊 Realized crypto P/L: {format_money(realized_profit)} ({format_pct((price - avg) / avg * 100 if avg > 0 else None)})\n"
                   f"💵 Cash now: {format_money(portfolio['cash'])}")
 
-_V41_OLD_DYNAMIC = dynamic_portfolio_allocation_targets
 
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:
-    base = _V41_OLD_DYNAMIC()
-    market = str(base.get("market", "UNCERTAIN"))
-    risk = base.get("risk_guard", {}) or {}
-    if risk.get("hard_active"):
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    elif market == "BULL":
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 45.0, 20.0, 5.0, 0.0, 10.0
-    elif market == "BEAR":
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    else:
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 20.0, 10.0, 3.0, 0.0, 5.0
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        growth *= 0.50
-        spec *= 0.50
-        long_vcp *= 0.50
-        crypto *= 0.50
-    if not GROWTH_ALPHA_ENABLED:
-        growth = 0.0
-    if not SPEC_ALPHA_ENABLED:
-        spec = 0.0
-    if not CRYPTO_ALPHA_ENABLED:
-        crypto = 0.0
-    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear - crypto)
-    base["strategy_version"] = "v4_1_1_freeze_growth_crypto_swing_20_45_20_5_10_dynamic_allocation"
-    base["core_wealth_pct"] = round(core, 2)
-    base["growth_alpha_pct"] = round(growth, 2)
-    base["spec_alpha_pct"] = round(spec, 2)
-    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
-    base["bear_inverse_tactical_pct"] = round(bear, 2)
-    base["crypto_alpha_pct"] = round(crypto, 2)
-    base["cash_reserve_pct"] = round(cash, 2)
-    return base
-
-_V41_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
-
-def compute_equity_snapshot_data() -> Dict[str, float]:
+def _V46_OLD_COMPUTE_EQUITY() -> Dict[str, float]:
     snapshot = _V41_OLD_COMPUTE_EQUITY()
     crypto_positions = load_crypto_positions() if CRYPTO_ALPHA_LEDGER_ENABLED else {}
     prices = get_crypto_prices_batch(list(crypto_positions.keys()))
@@ -13857,9 +9471,8 @@ def compute_equity_snapshot_data() -> Dict[str, float]:
     snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + crypto_value, 2)
     return snapshot
 
-_V41_OLD_REALIZED = realized_performance_all_time
 
-def realized_performance_all_time() -> Dict[str, Any]:
+def _V46_OLD_REALIZED_PERF() -> Dict[str, Any]:
     perf = _V41_OLD_REALIZED()
     crypto_trades = load_crypto_trades() if CRYPTO_ALPHA_LEDGER_ENABLED else []
     crypto_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in crypto_trades if str(t.get("side")).upper() == "SELL"), 2)
@@ -13871,102 +9484,8 @@ def realized_performance_all_time() -> Dict[str, Any]:
     perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(crypto_trades)
     return perf
 
-_V41_OLD_PORTFOLIO_REPORT = format_combined_portfolio_report
 
-def format_combined_portfolio_report() -> str:
-    base_msg = _V41_OLD_PORTFOLIO_REPORT()
-    rows = crypto_position_market_value_details().get("rows", []) if CRYPTO_ALPHA_LEDGER_ENABLED else []
-    if not rows:
-        return base_msg.replace("No open swing, core, SPEC, or Growth Alpha positions", "No open swing, core, SPEC, Growth Alpha, or Crypto positions")
-    msg = base_msg + "\n\n🪙 CRYPTO_ALPHA POSITIONS\n\n"
-    for row in rows:
-        msg += (f"📦 {row['ticker']}\n"
-                f"Units: {format_core_shares(row['units'])}\n"
-                f"Avg: {round(float(row['avg_entry_price']), 8)} | Now: {round(float(row['mark_price']), 8)}\n"
-                f"Value: {format_money(float(row['market_value']))}\n"
-                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def format_crypto_portfolio_report() -> str:
-    details = crypto_position_market_value_details()
-    rows = details.get("rows", []) or []
-    snapshot = compute_equity_snapshot_data()
-    msg = (f"🪙 CRYPTO_ALPHA PORTFOLIO\n\n"
-           f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
-           f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
-           f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
-           f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
-           f"✅ Realized Crypto P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
-           f"💼 Total equity: {format_money(snapshot['equity'])}\n\n")
-    if not rows:
-        return msg + "No crypto positions recorded yet. Use cryptoplan, then cryptobuy after broker/exchange execution."
-    for row in rows:
-        msg += (f"📦 {row['ticker']}\n"
-                f"Units: {format_core_shares(row['units'])}\n"
-                f"Avg: {round(float(row['avg_entry_price']), 8)} | Now: {round(float(row['mark_price']), 8)}\n"
-                f"Value: {format_money(float(row['market_value']))}\n"
-                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
-                f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def format_crypto_pnl_report() -> str:
-    details = crypto_position_market_value_details()
-    trades = load_crypto_trades()
-    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
-    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
-    return (f"🪙 CRYPTO_ALPHA P/L\n\n"
-            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
-            f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
-            f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
-            f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
-            f"💰 Total Crypto P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
-            f"Buy records: {len(buys)}\nSell records: {len(sells)}")
-
-def format_crypto_exposure_report() -> str:
-    snapshot = compute_equity_snapshot_data()
-    details = crypto_position_market_value_details()
-    equity = float(snapshot.get("equity", 0) or 0)
-    alloc = dynamic_portfolio_allocation_targets()
-    target_pct = float(alloc.get("crypto_alpha_pct", 0) or 0)
-    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
-    return (f"🪙 CRYPTO EXPOSURE\n\n"
-            f"💼 Total equity: {format_money(equity)}\n"
-            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
-            f"🎯 Target Crypto: {round(target_pct, 2)}% of account\n"
-            f"📊 Actual Crypto: {round(actual_pct, 2)}% of account\n"
-            f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
-            "Use cryptoplan for BUY/HOLD/SELL actions.")
-
-def format_portfolio_allocation_plan() -> str:
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.3 COST-AWARE 20/45/20/5/10\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🪙 Crypto tactical swing: {plan.get('crypto_alpha_pct')}%\n"
-        f"🐻 Bear stock tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
-        "• Long VCP and Crypto are tactical/swing-style sleeves.\n"
-        "• Crypto uses BTC/ETH/SOL as indicators and buys cheaper major crypto candidates.\n"
-        "• Bear-stock tactical is disabled in this candidate.\n"
-        "• Options remain research-only."
-    )
-
-_V41_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
+def _V42_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:
     zip_path = _V41_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -13978,9 +9497,8 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
         print(f"[CRYPTO EXPORT WARNING] {exc}")
     return zip_path
 
-_V41_OLD_RESET_ALL = reset_all_paper_state
 
-def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
+def _V46_OLD_RESET_ALL(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:
     ok, msg, backup_path = _V41_OLD_RESET_ALL(update_id=update_id)
     with db_tx() as conn:
         conn.execute("DELETE FROM crypto_positions")
@@ -13988,92 +9506,6 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM crypto_signals")
     return ok, msg + "\n✅ Crypto Alpha positions/trades/signals cleared", backup_path
 
-_V41_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower == "cryptoplan":
-        send("🪙 Crypto tactical plan started. This scores BTC/ETH/SOL indicators and cheaper major crypto candidates.")
-        plan = compute_crypto_alpha_plan()
-        save_crypto_plan_signal(plan)
-        send(format_crypto_alpha_plan(plan))
-        return
-    if text_lower == "cryptostatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        latest = load_latest_crypto_signal()
-        details = crypto_position_market_value_details()
-        gate = crypto_indicator_gate()
-        send(
-            "🪙 CRYPTO_ALPHA STATUS v4.1.1\n\n"
-            f"Enabled: {yes_no(CRYPTO_ALPHA_ENABLED)}\n"
-            f"Ledger enabled: {yes_no(CRYPTO_ALPHA_LEDGER_ENABLED)}\n"
-            f"Target now: {alloc.get('crypto_alpha_pct')}% of account\n"
-            f"Indicators: {', '.join(CRYPTO_ALPHA_INDICATORS)}\n"
-            f"Universe: {', '.join(CRYPTO_ALPHA_UNIVERSE)}\n"
-            f"Regime gate: {yes_no(bool(gate.get('ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200)\n"
-            f"Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
-            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
-            "Commands:\ncryptoplan\ncryptobuy TICKER UNITS at PRICE\ncryptosell TICKER UNITS at PRICE\ncryptoportfolio | cryptopnl | cryptoexposure"
-        )
-        return
-    if text_lower == "cryptoportfolio":
-        send(format_crypto_portfolio_report())
-        return
-    if text_lower == "cryptopnl":
-        send(format_crypto_pnl_report())
-        return
-    if text_lower == "cryptoexposure":
-        send(format_crypto_exposure_report())
-        return
-    if text_lower == "equity":
-        snapshot = compute_equity_snapshot_data()
-        send(
-            "💼 ACCOUNT EQUITY\n\n"
-            f"💵 Cash: {format_money(snapshot['cash'])}\n"
-            f"⚡ Swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
-            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
-            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
-            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
-            f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}\n"
-            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
-            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
-        )
-        return
-
-    crypto_cmd = re.fullmatch(
-        r"(?i)\s*(cryptobuy|cryptosell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-        text_clean,
-    )
-    if crypto_cmd:
-        action = crypto_cmd.group(1).lower()
-        ticker = normalize_ticker(crypto_cmd.group(2))
-        units = float(crypto_cmd.group(3))
-        price = float(crypto_cmd.group(4))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        if action == "cryptobuy":
-            ok, msg = record_crypto_buy(ticker, units, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-        if action == "cryptosell":
-            ok, msg = record_crypto_sell(ticker, units, price, update_id=update_id)
-            send(msg if ok else "❌ ERROR: " + msg)
-            return
-
-    if text_lower in {"help", "/help"}:
-        _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-        send(
-            "V4.1.1 Freeze notes:\n"
-            "• Allocation target: Core 20% / Growth 45% / SPEC 20% / Long VCP 5% / Crypto 10%.\n"
-            "• Crypto uses BTC/ETH/SOL as regime indicators and buys cheaper major crypto candidates.\n"
-            "• Use cryptobuy/cryptosell only. Do not mix crypto with bought/sold, corebuy, growthbuy, or specbuy."
-        )
-        return
-
-    return _V41_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.1.1 LIVE HOTFIX 2026-05-27
@@ -14095,7 +9527,6 @@ STRATEGY_VERSION = os.getenv(
 BEAR_SLEEVE_ENABLED = os.getenv("BEAR_SLEEVE_ENABLED", "0") != "0"
 if not BEAR_SLEEVE_ENABLED:
     BEAR_WATCHLIST = []
-ALLOWED_BUY_TICKERS = set(WATCHLIST)
 
 # Public plan posting should be explicitly enabled after outputs are verified.
 CORE_PUBLIC_SIGNAL_ENABLED = os.getenv("CORE_PUBLIC_SIGNAL_ENABLED", "0") == "1"
@@ -14113,30 +9544,6 @@ SPEC_ALPHA_UNIVERSE = [
     if str(t).upper() not in SPEC_ALPHA_EXCLUDED_TICKERS
 ]
 
-_V411_HOTFIX_OLD_GROWTH_MARKET_FILTER_OK = growth_alpha_market_filter_ok
-
-def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
-    """v4.1.1 hotfix: avoid evaluating pandas DataFrames as booleans."""
-    try:
-        details = market_details if isinstance(market_details, dict) else market_regime_details()
-        if int(details.get("score", 0) or 0) < GROWTH_ALPHA_REQUIRE_MARKET_SCORE:
-            return False, "market score below threshold"
-        if GROWTH_ALPHA_REQUIRE_SPY_QQQ_ABOVE_MA200:
-            frames = details.get("frames", {}) if isinstance(details.get("frames"), dict) else {}
-            for symbol in ["SPY", "QQQ"]:
-                df = frames.get(symbol)
-                if not isinstance(df, pd.DataFrame) or df.empty:
-                    df = get_signal_dataframe(symbol, limit=260)
-                last, ma = frame_last_close_ma(df, 200)
-                if last is None or ma is None:
-                    return False, f"{symbol} MA200 data unavailable"
-                if last <= ma:
-                    return False, f"{symbol} below MA200"
-        return True, "OK"
-    except Exception as exc:
-        return False, f"market filter error: {exc}"
-
-_V411_HOTFIX_OLD_SPEC_SCORE_TICKER = spec_alpha_score_ticker
 
 def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
     nticker = normalize_ticker(str(ticker)) or ""
@@ -14144,9 +9551,8 @@ def spec_alpha_score_ticker(ticker: str) -> Optional[Dict[str, Any]]:
         return None
     return _V411_HOTFIX_OLD_SPEC_SCORE_TICKER(nticker)
 
-_V411_HOTFIX_OLD_RECORD_SPEC_BUY = record_spec_buy
 
-def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V411_OLD_RECORD_SPEC_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     nticker = normalize_ticker(str(ticker)) or ""
     if nticker in SPEC_ALPHA_EXCLUDED_TICKERS:
         return False, (
@@ -14155,9 +9561,8 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
         )
     return _V411_HOTFIX_OLD_RECORD_SPEC_BUY(nticker, shares, price, update_id=update_id)
 
-_V411_HOTFIX_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
 
-def compute_spec_alpha_plan() -> Dict[str, Any]:
+def _V43_OLD_COMPUTE_SPEC_PLAN() -> Dict[str, Any]:
     plan = _V411_HOTFIX_OLD_COMPUTE_SPEC_PLAN()
     plan["excluded_tickers"] = sorted(SPEC_ALPHA_EXCLUDED_TICKERS)
     plan["universe_size"] = len(SPEC_ALPHA_UNIVERSE)
@@ -14168,82 +9573,6 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:
             plan[key] = [r for r in rows if str(r.get("ticker", "")).upper() not in SPEC_ALPHA_EXCLUDED_TICKERS]
     return plan
 
-_V411_HOTFIX_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
-
-def _v411_hotfix_plan_contains_excluded(plan: Dict[str, Any]) -> bool:
-    for key in ["top", "actions", "actionable", "all_scored"]:
-        rows = plan.get(key)
-        if isinstance(rows, list):
-            for row in rows:
-                if str(row.get("ticker", "")).upper() in SPEC_ALPHA_EXCLUDED_TICKERS:
-                    return True
-    return False
-
-def current_spec_plan_for_validation() -> Dict[str, Any]:
-    latest = load_latest_spec_plan()
-    if latest is not None:
-        try:
-            age_days = (now_ts() - float(latest.get("time", 0))) / 86400
-            plan = latest.get("plan") or {}
-            if age_days <= SPEC_ALPHA_PLAN_VALID_DAYS and plan and not _v411_hotfix_plan_contains_excluded(plan):
-                return plan
-        except Exception:
-            pass
-    plan = compute_spec_alpha_plan()
-    save_spec_plan_signal(plan)
-    return plan
-
-_V411_HOTFIX_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
-
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:
-    msg = _V411_HOTFIX_OLD_FORMAT_SPEC_PLAN(plan)
-    excluded = plan.get("excluded_tickers") or []
-    if excluded:
-        note = (
-            "\n\n🧹 v4.1.1 hotfix cleanup:\n"
-            f"Blocked stale SPEC tickers: {', '.join(excluded)}.\n"
-            "No replacement ticker is used automatically."
-        )
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V411_HOTFIX_OLD_FORMAT_PUBLIC_SPEC_PLAN = format_public_spec_plan
-
-def format_public_spec_plan(plan: Dict[str, Any]) -> str:
-    msg = _V411_HOTFIX_OLD_FORMAT_PUBLIC_SPEC_PLAN(plan)
-    excluded = plan.get("excluded_tickers") or []
-    if excluded:
-        note = f"\n\nOperational cleanup: excluded stale tickers {', '.join(excluded)}."
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V411_HOTFIX_OLD_GROWTH_STATUS_REPORT = format_growth_alpha_plan
-
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:
-    msg = _V411_HOTFIX_OLD_GROWTH_STATUS_REPORT(plan)
-    if plan.get("market_ok") and int(plan.get("scored_count", 0) or 0) == 0 and float(plan.get("target_growth_account_pct", 0) or 0) > 0:
-        note = "\n\n⚠️ Growth market filter passed but no tickers scored. Check FMP data/quotes before trading."
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V411_HOTFIX_OLD_BEAR_STATUS_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower == "bearstatus":
-        send(
-            "🐻 BEAR SLEEVE STATUS v4.1.1\n\n"
-            f"Enabled: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
-            "Bear-stock / inverse bear tactical is disabled in v4.1.1.\n"
-            "Crypto tactical swing is the researched replacement sleeve.\n\n"
-            "Use cryptostatus / cryptoplan for the active crypto tactical sleeve."
-        )
-        return
-    return _V411_HOTFIX_OLD_BEAR_STATUS_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.1.1 HOTFIX 2026-05-27
@@ -14311,7 +9640,7 @@ def growth_alpha_market_filter_ok(market_details: Optional[Dict[str, Any]] = Non
         return False, f"market filter error: {exc}"
 
 # Ignore old active SPEC plans if they contain blocked corporate-action tickers.
-def current_spec_plan_for_validation() -> Dict[str, Any]:
+def _V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION() -> Dict[str, Any]:
     latest = load_latest_spec_plan()
     if latest is not None:
         try:
@@ -14325,9 +9654,8 @@ def current_spec_plan_for_validation() -> Dict[str, Any]:
     save_spec_plan_signal(plan)
     return plan
 
-_V411_OLD_RECORD_SPEC_BUY = record_spec_buy
 
-def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def _V43_OLD_RECORD_SPEC_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
     ticker_norm = normalize_ticker(ticker) or ""
     if ticker_norm in SPEC_ALPHA_BLOCKLIST:
         return False, (
@@ -14574,69 +9902,9 @@ def institutional_stress_snapshot() -> Dict[str, Any]:
         "notes": ["Approximate monitoring only; does not block trades.", "v4.1.1 hotfix scenarios include Growth and Crypto sleeves."],
     }
 
-def format_riskmatrix_status() -> str:
-    r = institutional_riskmatrix_snapshot()
-    equity = float(r.get("equity", 0) or 0)
-    ledgers = "\n".join(
-        f"• {x['ledger']}: {format_money(float(x['value']))} ({x['account_pct']}%)"
-        for x in r.get("ledger_exposure", [])
-    )
-    clusters = "\n".join(
-        f"• {x['cluster']}: {format_money(float(x['value']))} ({x['account_pct']}%)"
-        for x in r.get("cluster_exposure", [])[:10]
-    )
-    positions = "\n".join(
-        f"• {x['ticker']} [{x.get('ledger')}]: {format_money(float(x['market_value']))} ({x.get('account_pct')}%)"
-        for x in r.get("top_positions", [])[:10]
-    )
-    warnings = "\n".join(f"⚠️ {w}" for w in r.get("warnings", [])) or "✅ No concentration warnings."
-    return (
-        "🧮 RISK MATRIX v4.3 RECON\n\n"
-        f"Status: {_v38_status_emoji(r.get('status'))} {r.get('status')}\n"
-        f"Total equity: {format_money(equity)}\n\n"
-        "Ledger exposure:\n" + (ledgers or "No holdings.") + "\n\n"
-        "Top clusters:\n" + (clusters or "No holdings.") + "\n\n"
-        "Top positions:\n" + (positions or "No holdings.") + "\n\n"
-        f"{warnings}"
-    )
-
-def format_stress_status() -> str:
-    s = institutional_stress_snapshot()
-    worst = s.get("worst_scenario", {}) or {}
-    rows = "\n".join(
-        f"• {x['scenario']}: {format_money(float(x['pnl']))} ({x['pct_equity']}%)"
-        for x in s.get("scenarios", [])
-    )
-    return (
-        "🔥 STRESS STATUS v4.3 RECON\n\n"
-        f"Status: {_v38_status_emoji(s.get('status'))} {s.get('status')}\n"
-        f"Equity: {format_money(float(s.get('equity', 0) or 0))}\n"
-        f"Worst scenario: {worst.get('scenario')} {format_money(float(worst.get('pnl', 0) or 0))} "
-        f"({worst.get('pct_equity')}%)\n\n"
-        f"{rows}\n\n"
-        "Approximate monitoring only. It does not block trades."
-    )
 
 # Add a small hotfix status command without replacing existing command handling.
-_V411_HOTFIX_OLD_HANDLE_COMMAND = handle_command
 
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"hotfixstatus", "v411hotfix"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        send(
-            "🛠️ V4.1.1 HOTFIX STATUS\n\n"
-            f"Version: {V411_HOTFIX_VERSION}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
-            f"SPEC universe size: {len(SPEC_ALPHA_UNIVERSE)}\n"
-            f"Core public enabled: {yes_no(CORE_PUBLIC_SIGNAL_ENABLED)}\n"
-            f"SPEC public enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
-            "Diagnostics now include Growth and Crypto holdings."
-        )
-        return
-    return _V411_HOTFIX_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.2 IBKR READ-ONLY RECONCILIATION LAYER
@@ -14666,7 +9934,6 @@ IBKR_BRIDGE_TOKEN = os.getenv("IBKR_BRIDGE_TOKEN", "").strip()
 IBKR_SNAPSHOT_FILE = os.getenv("IBKR_SNAPSHOT_FILE", "").strip()
 IBKR_RECON_CASH_TOLERANCE = float(os.getenv("IBKR_RECON_CASH_TOLERANCE", "5.0"))
 IBKR_RECON_QTY_TOLERANCE = float(os.getenv("IBKR_RECON_QTY_TOLERANCE", "0.0005"))
-IBKR_RECON_VALUE_TOLERANCE = float(os.getenv("IBKR_RECON_VALUE_TOLERANCE", "2.0"))
 IBKR_SYNC_ALLOW_CASH = os.getenv("IBKR_SYNC_ALLOW_CASH", "1") != "0"
 IBKR_SYNC_ALLOW_AVG_COST = os.getenv("IBKR_SYNC_ALLOW_AVG_COST", "1") != "0"
 IBKR_SYNC_ALLOW_QTY = os.getenv("IBKR_SYNC_ALLOW_QTY", "1") != "0"
@@ -14682,8 +9949,6 @@ def _v42_float(value: Any, default: float = 0.0) -> float:
         pass
     return default
 
-def _v42_round(value: Any, digits: int = 2) -> float:
-    return round(_v42_float(value), digits)
 
 def _v42_account_map(snapshot: Dict[str, Any]) -> Dict[str, str]:
     out: Dict[str, str] = {}
@@ -14732,34 +9997,6 @@ def _v42_normalize_broker_symbol(raw: Any) -> str:
     sym = normalize_ticker(str(raw or ""))
     return sym or str(raw or "").strip().upper()
 
-def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    positions: Dict[str, Dict[str, Any]] = {}
-    for p in snapshot.get("portfolio", []) or []:
-        try:
-            contract = p.get("contract") or {}
-            symbol = _v42_normalize_broker_symbol(contract.get("symbol") or contract.get("localSymbol"))
-            if not symbol:
-                continue
-            qty = _v42_float(p.get("position"))
-            if abs(qty) <= 1e-12:
-                continue
-            positions[symbol] = {
-                "ticker": symbol,
-                "qty": qty,
-                "market_price": _v42_float(p.get("marketPrice")),
-                "market_value": _v42_float(p.get("marketValue")),
-                "avg_cost": _v42_float(p.get("averageCost")),
-                "unrealized_pnl": _v42_float(p.get("unrealizedPNL")),
-                "realized_pnl": _v42_float(p.get("realizedPNL")),
-                "sec_type": str(contract.get("secType") or ""),
-                "currency": str(contract.get("currency") or ""),
-                "exchange": str(contract.get("primaryExchange") or contract.get("exchange") or ""),
-                "con_id": contract.get("conId"),
-                "local_symbol": str(contract.get("localSymbol") or symbol),
-            }
-        except Exception:
-            continue
-    return positions
 
 def _v42_bot_managed_positions() -> Dict[str, List[Dict[str, Any]]]:
     refresh_portfolio()
@@ -14806,9 +10043,8 @@ def _v42_bot_cash() -> float:
     return float(portfolio.get("cash", 0.0) or 0.0)
 
 # --- DB extension ---
-_V42_OLD_INIT_DB = init_db
 
-def init_db() -> None:
+def _V46_OLD_INIT_DB() -> None:
     _V42_OLD_INIT_DB()
     conn = db_connect()
     try:
@@ -15071,7 +10307,7 @@ def _v42_format_money_signed(x: Any) -> str:
     val = _v42_float(x)
     return ("+" if val >= 0 else "") + format_money(val)
 
-def format_brokerstatus() -> str:
+def _V443_OLD_FORMAT_BROKERSTATUS() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return "🏦 IBKR BROKER STATUS v4.3\n\n❌ " + info
@@ -15097,7 +10333,7 @@ def format_brokerstatus() -> str:
         "Read-only reconciliation only. No orders placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerpositions() -> str:
+def _V443_OLD_FORMAT_BROKERPOSITIONS() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return "📦 IBKR POSITIONS v4.3\n\n❌ " + info
@@ -15121,7 +10357,7 @@ def format_brokerpositions() -> str:
         "Use brokersyncpreview to see supervised sync proposals."
     )[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerexternal() -> str:
+def _V443_OLD_FORMAT_BROKEREXTERNAL() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return "🧳 EXTERNAL LEGACY POSITIONS v4.3\n\n❌ " + info
@@ -15142,7 +10378,7 @@ def format_brokerexternal() -> str:
         f"{rows}"
     )[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerreconcile() -> str:
+def _V443_OLD_FORMAT_BROKERRECONCILE() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return "🧮 IBKR RECONCILIATION v4.3\n\n❌ " + info
@@ -15173,7 +10409,7 @@ def format_brokerreconcile() -> str:
         "No ledger changes were made."
     )[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokersyncpreview() -> str:
+def _V443_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return "🧾 BROKER SYNC PREVIEW v4.3\n\n❌ " + info
@@ -15216,7 +10452,7 @@ def _v42_update_ledger_position_from_broker(conn: sqlite3.Connection, ledger: st
         # Tactical positions are share/stop based; only sync quantity and entry price, leave stop/risk unchanged.
         conn.execute("UPDATE positions SET shares=?, entry_price=? WHERE ticker=?", (int(round(qty)), round(avg,6), ticker))
 
-def broker_sync_apply_confirmed() -> Tuple[bool, str]:
+def _V443_OLD_BROKER_SYNC_APPLY_CONFIRMED() -> Tuple[bool, str]:
     ok, info, rec, sid = _v42_fetch_store_reconcile()
     if not ok or rec is None:
         return False, info
@@ -15275,15 +10511,9 @@ def maybe_send_ibkr_reconcile_after_close() -> None:
         send(f"⚠️ IBKR auto reconcile failed: {exc}")
 
 # Wrap monthly/after-close loop hook. This is called each main loop iteration.
-_V42_OLD_MAYBE_SEND_MONTHLY = maybe_send_wealth_core_signal
 
-def maybe_send_wealth_core_signal() -> None:
-    _V42_OLD_MAYBE_SEND_MONTHLY()
-    maybe_send_ibkr_reconcile_after_close()
 
-_V42_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:
+def _V46_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:
     zip_path = _V42_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         conn = db_connect()
@@ -15302,41 +10532,7 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:
     return zip_path
 
 # Extend help and commands.
-_V42_OLD_HANDLE_COMMAND = handle_command
 
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"brokerhelp", "ibkrhelp"}:
-        send(
-            "🏦 IBKR RECONCILIATION COMMANDS v4.3\n\n"
-            "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
-            "brokerpositions — show bot-managed positions as seen by IBKR\n"
-            "brokerexternal — show external legacy broker positions outside bot scope\n"
-            "brokerreconcile — compare IBKR vs bot ledgers\n"
-            "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
-            "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
-            "No broker orders are placed in v4.3."
-        )
-        return
-    if text_lower in {"brokerstatus", "ibkrstatus"}:
-        send(format_brokerstatus()); return
-    if text_lower in {"brokerpositions", "ibkrpositions"}:
-        send(format_brokerpositions()); return
-    if text_lower in {"brokerexternal", "ibkrexternal"}:
-        send(format_brokerexternal()); return
-    if text_lower in {"brokerreconcile", "ibkrreconcile"}:
-        send(format_brokerreconcile()); return
-    if text_lower in {"brokersyncpreview", "ibkrsyncpreview"}:
-        send(format_brokersyncpreview()); return
-    if text_lower == "brokersyncapply confirm":
-        ok, msg = broker_sync_apply_confirmed()
-        send(msg if ok else f"❌ BROKER SYNC REJECTED\n\n{msg}")
-        return
-    if text_lower.startswith("brokersyncapply"):
-        send("⚠️ Dangerous sync command. To apply the preview, send exactly:\n\nbrokersyncapply CONFIRM")
-        return
-    return _V42_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.3 DISPLAY / OPERATIONAL STATUS WRAPPER
@@ -15346,45 +10542,6 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:
 # the currently deployed candidate, while keeping the older v4.1.1 hotfix
 # information available.
 
-_V421_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        send(
-            "🛠️ V4.3 IBKR RECON / HOTFIX STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"V4.2 layer: {V42_VERSION}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
-            f"SPEC universe size: {len(SPEC_ALPHA_UNIVERSE)}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"IBKR auto reconcile: {yes_no(IBKR_RECON_AUTO_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            f"Bridge timeout/retries: {IBKR_BRIDGE_TIMEOUT}s / {IBKR_BRIDGE_RETRIES} retries\n"
-            f"Core public enabled: {yes_no(CORE_PUBLIC_SIGNAL_ENABLED)}\n"
-            f"SPEC public enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n\n"
-            "Read-only reconciliation only. No broker orders are placed."
-        )
-        return
-    if text_lower in {"brokerping", "bridgeping"}:
-        ok, info, snap = _v42_fetch_snapshot()
-        if ok and isinstance(snap, dict):
-            conn = snap.get("connection") or {}
-            send(
-                "🏓 IBKR BRIDGE PING v4.3\n\n"
-                f"Status: ✅ OK\n"
-                f"Source: {info}\n"
-                f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
-                f"Created UTC: {snap.get('created_utc', 'n/a')}\n"
-                "No broker orders are placed."
-            )
-        else:
-            send(f"🏓 IBKR BRIDGE PING v4.3\n\n❌ {info}")
-        return
-    return _V421_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.3 CORE COMMISSION / IBKR SYMBOL-MAPPING HOTFIX
@@ -15470,7 +10627,7 @@ def _v42_broker_positions(snapshot: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
             continue
     return positions
 
-def record_core_buy(  # type: ignore[override]
+def _V43_OLD_RECORD_CORE_BUY(  # type: ignore[override]
     ticker: str,
     shares: float,
     price: float,
@@ -15636,49 +10793,6 @@ def record_core_buy(  # type: ignore[override]
         f"💵 Cash left: {format_money(portfolio['cash'])}"
     )
 
-_V422_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    # New optional-fee Core command:
-    # corebuy CMOD.L 2.18 at 33.4225 fee 4
-    # corebuyfee CMOD.L 2.18 at 33.4225 fee 4
-    core_fee_cmd = re.fullmatch(
-        r"(?i)\s*(corebuy|corebuyfee)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+(?:fee|fees|commission|comm)\s+([0-9]+(?:\.[0-9]+)?)\s*",
-        text_clean,
-    )
-    if core_fee_cmd:
-        ticker = normalize_ticker(core_fee_cmd.group(2))
-        shares = float(core_fee_cmd.group(3))
-        price = float(core_fee_cmd.group(4))
-        fee = float(core_fee_cmd.group(5))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee)
-        send(msg if ok else "❌ ERROR: " + msg)
-        return
-
-    if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        send(
-            "🛠️ V4.3 COST-AWARE / IBKR RECON STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"V4.2 layer: {V42_VERSION}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            "Core fee syntax enabled:\n"
-            "corebuy TICKER SHARES at FILL_PRICE fee COMMISSION\n"
-            "IBKR core symbol aliases enabled for LSE UCITS.\n"
-            "Read-only reconciliation only. No broker orders are placed."
-        )
-        return
-
-    return _V422_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.3 COST-AWARE SMALL-ACCOUNT EXECUTION OVERLAY
@@ -15759,9 +10873,8 @@ def _v43_has_position(loader_name: str, ticker: str) -> bool:
     return str(ticker).upper() in _v43_position_tickers(loader_name)
 
 # ---- Core cost-aware plan/action overlay ----
-_V43_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
 
-def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
+def _V44_OLD_COMPUTE_CORE_PLAN() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V43_OLD_COMPUTE_CORE_PLAN()
     if not V43_COST_AWARE_ENABLED:
         return plan
@@ -15805,27 +10918,8 @@ def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-_V43_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
 
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V43_OLD_FORMAT_CORE_PLAN(plan)
-    ca = plan.get("v43_cost_aware") or {}
-    if ca.get("enabled"):
-        note = (
-            "\n\n🧾 v4.3 cost-aware Core execution:\n"
-            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))} under {format_money(float(ca.get('small_account_equity_threshold', 0) or 0))}.\n"
-            f"• Minimum Core order: {format_money(float(ca.get('core_min_order_dollars', 0) or 0))}.\n"
-            f"• Max new Core buys in small-account mode: {ca.get('core_max_new_buys_small')}.\n"
-            "• Top-ranked assets may show SKIP/HOLD when order size is too small; skipped Core allocation stays cash.\n"
-            "• For LSE/UCITS fills with commission, record: corebuy TICKER SHARES at FILL_PRICE fee COMMISSION."
-        )
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V43_OLD_RECORD_CORE_BUY = record_core_buy
-
-def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0) -> Tuple[bool, str]:  # type: ignore[override]
+def _V442_OLD_RECORD_CORE_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0) -> Tuple[bool, str]:  # type: ignore[override]
     if V43_COST_AWARE_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         try:
@@ -15847,9 +10941,8 @@ def record_core_buy(ticker: str, shares: float, price: float, update_id: Optiona
     return _V43_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
 
 # ---- Growth cost-aware plan/action overlay ----
-_V43_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
 
-def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+def _V44_OLD_COMPUTE_GROWTH_PLAN() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V43_OLD_COMPUTE_GROWTH_PLAN()
     if not V43_COST_AWARE_ENABLED:
         return plan
@@ -15895,27 +10988,8 @@ def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-_V43_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V43_OLD_FORMAT_GROWTH_PLAN(plan)
-    ca = plan.get("v43_cost_aware") or {}
-    if ca.get("enabled"):
-        note = (
-            "\n\n🧾 v4.3 cost-aware Growth execution:\n"
-            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))}.\n"
-            f"• Open/add priority: top {ca.get('growth_execute_top_n_small')} ranks first.\n"
-            f"• Minimum Growth order: {format_money(float(ca.get('growth_min_order_dollars', 0) or 0))}.\n"
-            "• Avoids buying a ticker in Growth if it is already held in SPEC.\n"
-            "• Top 5 remains the selection/hold list; not every ranked name must be bought immediately."
-        )
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V43_OLD_RECORD_GROWTH_BUY = record_growth_buy
-
-def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+def _V442_OLD_RECORD_GROWTH_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V43_COST_AWARE_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         amount = float(shares) * float(price)
@@ -15935,9 +11009,8 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
     return _V43_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
 
 # ---- SPEC cost-aware plan/action overlay ----
-_V43_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
 
-def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+def _V44_OLD_COMPUTE_SPEC_PLAN() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V43_OLD_COMPUTE_SPEC_PLAN()
     if not V43_COST_AWARE_ENABLED:
         return plan
@@ -15989,28 +11062,8 @@ def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
 
     return _v43_refresh_actionable(plan)
 
-_V43_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V43_OLD_FORMAT_SPEC_PLAN(plan)
-    ca = plan.get("v43_cost_aware") or {}
-    if ca.get("enabled"):
-        note = (
-            "\n\n🧾 v4.3 cost-aware SPEC execution:\n"
-            f"• Small-account mode: {yes_no(bool(ca.get('small_account_mode')))}.\n"
-            f"• Top 10 = hold/eligibility list; buys/adds limited to ranks 1-{ca.get('spec_buy_rank_limit_small')}.\n"
-            f"• Max SPEC holdings before new buys: {ca.get('spec_max_holdings_small')}.\n"
-            f"• Minimum SPEC order: {format_money(float(ca.get('spec_min_order_dollars', 0) or 0))}.\n"
-            "• Avoids buying a SPEC ticker already held in Growth.\n"
-            "• Existing holdings may be held while still in top 10; dropped names remain sell candidates."
-        )
-        if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-            msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V43_OLD_RECORD_SPEC_BUY = record_spec_buy
-
-def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+def _V442_OLD_RECORD_SPEC_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V43_COST_AWARE_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         amount = float(shares) * float(price)
@@ -16034,46 +11087,7 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
     return _V43_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
 
 # ---- v4.3 status / allocation / diagnostics labels ----
-_V43_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
 
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    msg = _V43_OLD_FORMAT_ALLOCATION_PLAN()
-    msg = msg.replace("v4.1.1 FREEZE", "v4.3 COST-AWARE")
-    note = (
-        "\n\n🧾 v4.3 cost-aware execution overlay:\n"
-        "• Core: avoid tiny UCITS/LSE orders; execute only sizeable top-ranked Core actions.\n"
-        "• Growth: top 5 remains the hold list, but small-account buys prioritize top 3 and avoid SPEC overlap.\n"
-        "• SPEC: top 10 remains the hold list, but small-account buys/adds focus on ranks 1-5 and max 6 holdings.\n"
-        "• Crypto: unchanged; top-1 tactical crypto only when the BTC/ETH/SOL gate is ON.\n"
-        "• VCP tactical: unchanged."
-    )
-    if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-        msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V43_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v43status", "coststatus", "hotfixstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        send(
-            "🛠️ V4.3 COST-AWARE EXECUTION STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n\n"
-            "Execution policy:\n"
-            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
-            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
-            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-            "• Crypto/VCP logic unchanged.\n"
-            "• Read-only IBKR reconciliation only; no broker orders are placed."
-        )
-        return
-    return _V43_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.4 MONTHLY ROTATION LOCK OVERLAY
@@ -16263,82 +11277,28 @@ def original_action_label(action: str) -> str:
     action = str(action).upper()
     return {"SELL": "sell", "TRIM": "trim"}.get(action, action.lower())
 
-def _v44_locked_items(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return [x for x in plan.get("actions", []) or [] if bool(x.get("v44_monthly_lock"))]
-
-def _v44_monthly_lock_note(plan: Dict[str, Any], sleeve_label_text: str) -> str:
-    info = plan.get("v44_monthly_lock") or {}
-    if not info.get("enabled"):
-        return ""
-    locked = _v44_locked_items(plan)
-    note = (
-        f"\n\n🔒 v4.4 monthly-lock policy for {sleeve_label_text}:\n"
-        f"• Rebalance window: {yes_no(bool(info.get('rebalance_window_open')))} — {info.get('rebalance_window_reason')}\n"
-        f"• Minimum hold before rotation sell/trim: {info.get('min_hold_days')} days.\n"
-        f"• Daily/redeploy plans are monitoring only for exits unless a hard risk/allocation exit appears.\n"
-        f"• Locked exits/trims: {info.get('locked_count', 0)}.\n"
-    )
-    if locked:
-        note += "\n🟡 Monthly-lock watchlist — do NOT execute today:\n"
-        for item in locked[:10]:
-            note += (
-                f"• HOLD {item.get('ticker')} — was {item.get('v44_original_action')} | "
-                f"{item.get('v44_lock_reason')}\n"
-            )
-    return note
 
 # ---- Core monthly-lock overlay ----
-_V44_OLD_COMPUTE_CORE_PLAN = compute_wealth_core_plan
 
 def compute_wealth_core_plan() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_CORE_PLAN(), "CORE")
 
-_V44_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
-
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V44_OLD_FORMAT_CORE_PLAN(plan)
-    msg = msg.replace("v4.3", "v4.4")
-    note = _v44_monthly_lock_note(plan, "Core")
-    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-        msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 # ---- Growth monthly-lock overlay ----
-_V44_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
 
-def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
+def _V442_OLD_COMPUTE_GROWTH_PLAN() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_GROWTH_PLAN(), "GROWTH")
 
-_V44_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
-
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V44_OLD_FORMAT_GROWTH_PLAN(plan)
-    msg = msg.replace("v4.3", "v4.4")
-    note = _v44_monthly_lock_note(plan, "Growth Alpha")
-    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-        msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 # ---- SPEC monthly-lock overlay ----
-_V44_OLD_COMPUTE_SPEC_PLAN = compute_spec_alpha_plan
 
 def compute_spec_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     return _v44_apply_monthly_lock(_V44_OLD_COMPUTE_SPEC_PLAN(), "SPEC")
 
-_V44_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
-
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    msg = _V44_OLD_FORMAT_SPEC_PLAN(plan)
-    msg = msg.replace("v4.3", "v4.4")
-    note = _v44_monthly_lock_note(plan, "SPEC_ALPHA")
-    if note and len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-        msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 # ---- Validation-plan freshness guard ----
 # Existing databases may contain a still-valid v4.3 plan without v4.4 lock metadata.
 # For sell validation, force recomputation once so locked exits cannot slip through.
-_V44_OLD_CURRENT_CORE_PLAN_FOR_VALIDATION = current_core_plan_for_validation
 
 def current_core_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V44_OLD_CURRENT_CORE_PLAN_FOR_VALIDATION()
@@ -16347,16 +11307,6 @@ def current_core_plan_for_validation() -> Dict[str, Any]:  # type: ignore[overri
         save_core_plan_signal(plan)
     return plan
 
-_V44_OLD_CURRENT_GROWTH_PLAN_FOR_VALIDATION = current_growth_plan_for_validation
-
-def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
-    plan = _V44_OLD_CURRENT_GROWTH_PLAN_FOR_VALIDATION()
-    if V44_MONTHLY_LOCK_ENABLED and not (plan.get("v44_monthly_lock") or {}).get("enabled"):
-        plan = compute_growth_alpha_plan()
-        save_growth_plan_signal(plan)
-    return plan
-
-_V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION = current_spec_plan_for_validation
 
 def current_spec_plan_for_validation() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V44_OLD_CURRENT_SPEC_PLAN_FOR_VALIDATION()
@@ -16384,9 +11334,8 @@ def _v44_locked_sell_message(sleeve: str, ticker: str, plan: Dict[str, Any]) -> 
         )
     return None
 
-_V44_OLD_RECORD_CORE_SELL = record_core_sell
 
-def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+def _V441_OLD_RECORD_CORE_SELL(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V44_MONTHLY_LOCK_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         try:
@@ -16398,9 +11347,8 @@ def record_core_sell(ticker: str, shares: float, price: float, update_id: Option
             pass
     return _V44_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
 
-_V44_OLD_RECORD_GROWTH_SELL = record_growth_sell
 
-def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+def _V441_OLD_RECORD_GROWTH_SELL(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V44_MONTHLY_LOCK_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         try:
@@ -16412,9 +11360,8 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
             pass
     return _V44_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
 
-_V44_OLD_RECORD_SPEC_SELL = record_spec_sell
 
-def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
+def _V441_OLD_RECORD_SPEC_SELL(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V44_MONTHLY_LOCK_ENABLED:
         ticker_norm = normalize_ticker(str(ticker)) or ""
         try:
@@ -16427,52 +11374,7 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
     return _V44_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
 
 # ---- Labels/status ----
-_V44_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
 
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    msg = _V44_OLD_FORMAT_ALLOCATION_PLAN()
-    msg = msg.replace("v4.3 COST-AWARE", "v4.4 MONTHLY-LOCK")
-    note = (
-        "\n\n🔒 v4.4 monthly-lock overlay:\n"
-        "• Core/Growth/SPEC are monthly rotation sleeves; daily checks are monitoring only for exits.\n"
-        "• Rotation sells/trims require the monthly rebalance window and minimum hold period.\n"
-        "• Hard risk/allocation exits can still bypass the lock.\n"
-        "• VCP and Crypto tactical logic are unchanged."
-    )
-    if len(msg) + len(note) < MAX_TELEGRAM_MESSAGE:
-        msg += note
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-_V44_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        win = _v44_monthly_rebalance_window_info()
-        send(
-            "🛠️ V4.4 MONTHLY-LOCK + COST-AWARE STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-            "Monthly exit/trim policy:\n"
-            f"• Core min hold: {V44_CORE_MIN_HOLD_DAYS} days | hold buffer rank {V44_CORE_HOLD_RANK_BUFFER}\n"
-            f"• Growth min hold: {V44_GROWTH_MIN_HOLD_DAYS} days | hold buffer rank {V44_GROWTH_HOLD_RANK_BUFFER}\n"
-            f"• SPEC min hold: {V44_SPEC_MIN_HOLD_DAYS} days | hold buffer rank {V44_SPEC_HOLD_RANK_BUFFER}\n"
-            "• Daily/redeploy SELL/TRIM is blocked unless monthly window + min hold are satisfied, or a hard risk/allocation exit applies.\n\n"
-            "Execution policy still active:\n"
-            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
-            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
-            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-            "• Read-only IBKR reconciliation only; no broker orders are placed."
-        )
-        return
-    return _V44_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # -----------------------------------------------------------------------------
 # V4.4.1 USER-FRIENDLY MONTHLY PLAN CLARITY OVERLAY
@@ -16637,44 +11539,6 @@ def _v441_format_monthly_plan(plan: Dict[str, Any], sleeve: str, title: str, tar
     msg += "• Use ACTUAL_FILL_PRICE after broker fill; do not enter broker average cost if it includes commission.\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-_V441_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
-
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    return _v441_format_monthly_plan(
-        plan,
-        sleeve="CORE",
-        title="🏛️ CORE WEALTH PLAN v4.4.1 — CLEAR EXECUTION VIEW",
-        target_key="target_core_value",
-        current_key="current_core_value",
-        limit_buffer=V441_CORE_LIMIT_BUFFER_PCT,
-        max_rank=WEALTH_CORE_TOP_N,
-    )
-
-_V441_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
-
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    return _v441_format_monthly_plan(
-        plan,
-        sleeve="GROWTH",
-        title="🚀 GROWTH ALPHA PLAN v4.4.1 — CLEAR EXECUTION VIEW",
-        target_key="target_growth_value",
-        current_key="current_growth_value",
-        limit_buffer=V441_GROWTH_LIMIT_BUFFER_PCT,
-        max_rank=GROWTH_ALPHA_TOP_N,
-    )
-
-_V441_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
-
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    return _v441_format_monthly_plan(
-        plan,
-        sleeve="SPEC",
-        title="⚡ SPEC_ALPHA PLAN v4.4.1 — CLEAR EXECUTION VIEW",
-        target_key="target_spec_value",
-        current_key="current_spec_value",
-        limit_buffer=V441_SPEC_LIMIT_BUFFER_PCT,
-        max_rank=SPEC_ALPHA_TOP_N,
-    )
 
 def _v441_position_over_target(plan: Dict[str, Any], ticker: str, loader_name: str, target_multiplier: float = V441_OVERWEIGHT_RESIZE_THRESHOLD) -> Tuple[bool, str]:
     try:
@@ -16702,7 +11566,6 @@ def _v441_position_over_target(plan: Dict[str, Any], ticker: str, loader_name: s
     except Exception as exc:
         return False, str(exc)
 
-_V441_OLD_RECORD_GROWTH_SELL = record_growth_sell
 
 def record_growth_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
@@ -16714,7 +11577,6 @@ def record_growth_sell(ticker: str, shares: float, price: float, update_id: Opti
             pass
     return _V441_OLD_RECORD_GROWTH_SELL(ticker, shares, price, update_id=update_id)
 
-_V441_OLD_RECORD_SPEC_SELL = record_spec_sell
 
 def record_spec_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
@@ -16726,7 +11588,6 @@ def record_spec_sell(ticker: str, shares: float, price: float, update_id: Option
             pass
     return _V441_OLD_RECORD_SPEC_SELL(ticker, shares, price, update_id=update_id)
 
-_V441_OLD_RECORD_CORE_SELL = record_core_sell
 
 def record_core_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:  # type: ignore[override]
     if V441_ALLOW_OVERWEIGHT_RESIZE_SELL:
@@ -16738,36 +11599,6 @@ def record_core_sell(ticker: str, shares: float, price: float, update_id: Option
             pass
     return _V441_OLD_RECORD_CORE_SELL(ticker, shares, price, update_id=update_id)
 
-_V441_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        win = _v44_monthly_rebalance_window_info()
-        send(
-            "🛠️ V4.4.1 CLEAR PLANS + MONTHLY LOCK STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-            "Plan display improvements:\n"
-            "• Core/Growth/SPEC plans now show estimated quantity and max limit guide.\n"
-            "• Messages separate ACTIONABLE buys from HOLD/WATCH monitoring.\n"
-            "• Monthly-lock still blocks daily churn sells.\n"
-            "• Overweight resize sells are allowed only to correct oversized manual buys.\n\n"
-            "Execution policy:\n"
-            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | max new Core buys: {V43_CORE_MAX_NEW_BUYS_SMALL}\n"
-            f"• Growth buy/add ranks: top {V43_GROWTH_EXECUTE_TOP_N_SMALL} | min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)} | avoid SPEC overlap {yes_no(V43_GROWTH_AVOID_SPEC_OVERLAP)}\n"
-            f"• SPEC buy/add ranks: top {V43_SPEC_BUY_RANK_LIMIT_SMALL} | max holdings {V43_SPEC_MAX_HOLDINGS_SMALL} | min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-            "• Read-only IBKR reconciliation only; no broker orders are placed."
-        )
-        return
-    return _V441_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.4.2 PARTIAL-FILL + LEDGER CORRECTION HOTFIX
@@ -16837,9 +11668,8 @@ def _v442_append_position_note(table: str, ticker: str, note: str) -> None:
     except Exception as exc:
         print(f"[V4.4.2 NOTE WARNING] {ticker}: {exc}")
 
-_V442_OLD_RECORD_CORE_BUY = record_core_buy
 
-def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+def _V443_OLD_RECORD_CORE_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if partial_ok:
         plan = current_core_plan_for_validation()
@@ -16854,9 +11684,8 @@ def record_core_buy(ticker: str, shares: float, price: float, update_id: Optiona
         return ok2, msg
     return _V442_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee)
 
-_V442_OLD_RECORD_GROWTH_BUY = record_growth_buy
 
-def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+def _V443_OLD_RECORD_GROWTH_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if partial_ok:
         plan = current_growth_plan_for_validation()
@@ -16874,9 +11703,8 @@ def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optio
         return ok2, msg
     return _V442_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id)
 
-_V442_OLD_RECORD_SPEC_BUY = record_spec_buy
 
-def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
+def _V443_OLD_RECORD_SPEC_BUY(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if partial_ok:
         plan = current_spec_plan_for_validation()
@@ -16892,7 +11720,6 @@ def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optiona
         return ok2, msg
     return _V442_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id)
 
-_V442_OLD_COMPUTE_GROWTH_PLAN = compute_growth_alpha_plan
 
 def compute_growth_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     plan = _V442_OLD_COMPUTE_GROWTH_PLAN()
@@ -16943,6 +11770,7 @@ def current_growth_plan_for_validation() -> Dict[str, Any]:  # type: ignore[over
         return compute_growth_alpha_plan()
     return plan
 
+
 def _v442_set_monthly_position(table: str, id_col: str, ticker: str, shares: float, avg_price: float, note: str) -> Tuple[bool, str]:
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if not ticker_norm:
@@ -16975,6 +11803,7 @@ def _v442_set_monthly_position(table: str, id_col: str, ticker: str, shares: flo
     except Exception as exc:
         return False, str(exc)
 
+
 def _v442_set_crypto_position(ticker: str, units: float, avg_price: float, note: str) -> Tuple[bool, str]:
     ticker_norm = normalize_ticker(str(ticker)) or ""
     if not ticker_norm:
@@ -17003,9 +11832,8 @@ def _v442_set_crypto_position(ticker: str, units: float, avg_price: float, note:
     except Exception as exc:
         return False, str(exc)
 
-_V442_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
 
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V443_OLD_FORMAT_GROWTH_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     msg = _v441_format_monthly_plan(
         plan,
         sleeve="GROWTH",
@@ -17022,7 +11850,7 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
     )
     return (msg + extra)[:MAX_TELEGRAM_MESSAGE]
 
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V443_OLD_FORMAT_CORE_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     msg = _v441_format_monthly_plan(
         plan,
         sleeve="CORE",
@@ -17034,7 +11862,7 @@ def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
     )
     return (msg + "\n🧩 v4.4.2: Core partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
 
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V443_OLD_FORMAT_SPEC_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     msg = _v441_format_monthly_plan(
         plan,
         sleeve="SPEC",
@@ -17046,99 +11874,6 @@ def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overrid
     )
     return (msg + "\n🧩 v4.4.2: SPEC partial fills may be recorded with 'partial' only when they already happened in broker.\n")[:MAX_TELEGRAM_MESSAGE]
 
-_V442_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower in {"v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        market_ok, reason = growth_alpha_market_filter_ok()
-        win = _v44_monthly_rebalance_window_info()
-        send(
-            "🛠️ V4.4.2 PARTIAL-FILL + MONTHLY LOCK STATUS\n\n"
-            f"Strategy display: {STRATEGY_VERSION}\n"
-            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-            f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-            f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-            f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-            "Execution controls:\n"
-            f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
-            f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
-            f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-            "\nPartial-fill commands after a real broker fill:\n"
-            "• growthbuy TICKER QTY at PRICE partial\n"
-            "• specbuy TICKER QTY at PRICE partial\n"
-            "• corebuy TICKER QTY at PRICE fee COMMISSION partial\n\n"
-            "Manual correction commands, existing positions only, CONFIRM required:\n"
-            "• editgrowth TICKER SHARES at AVG_PRICE CONFIRM\n"
-            "• editspec TICKER SHARES at AVG_PRICE CONFIRM\n"
-            "• editcore TICKER SHARES at AVG_PRICE CONFIRM\n"
-            "• editcrypto TICKER UNITS at AVG_PRICE CONFIRM\n\n"
-            "Read-only IBKR reconciliation only; no broker orders are placed."
-        )
-        return
-
-    # Confirmed partial-fill recording for monthly ledgers.
-    core_partial = re.fullmatch(
-        r"(?i)\s*corebuy\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+fee\s+([0-9]+(?:\.[0-9]+)?))?\s+partial\s*",
-        text_clean,
-    )
-    if core_partial:
-        ticker = normalize_ticker(core_partial.group(1))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        shares = float(core_partial.group(2)); price = float(core_partial.group(3)); fee = float(core_partial.group(4) or 0.0)
-        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=True)
-        send(msg if ok else "❌ ERROR: " + msg)
-        return
-
-    monthly_partial = re.fullmatch(
-        r"(?i)\s*(growthbuy|specbuy)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+partial\s*",
-        text_clean,
-    )
-    if monthly_partial:
-        action = monthly_partial.group(1).lower()
-        ticker = normalize_ticker(monthly_partial.group(2))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        shares = float(monthly_partial.group(3)); price = float(monthly_partial.group(4))
-        if action == "growthbuy":
-            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
-        else:
-            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
-        send(msg if ok else "❌ ERROR: " + msg)
-        return
-
-    # Manual ledger correction commands. These do not touch cash or trade history.
-    edit_cmd = re.fullmatch(
-        r"(?i)\s*(editcore|editgrowth|editspec|editcrypto)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+CONFIRM\s*",
-        text_clean,
-    )
-    if edit_cmd:
-        cmd = edit_cmd.group(1).lower()
-        ticker = normalize_ticker(edit_cmd.group(2))
-        qty = float(edit_cmd.group(3)); avg = float(edit_cmd.group(4))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        note = f"v4.4.2 manual ledger edit at {ny_now().strftime('%Y-%m-%d %H:%M %Z')}"
-        if cmd == "editcore":
-            ok, msg = _v442_set_monthly_position("core_positions", "core_position_id", ticker, qty, avg, note)
-        elif cmd == "editgrowth":
-            ok, msg = _v442_set_monthly_position("growth_positions", "growth_position_id", ticker, qty, avg, note)
-        elif cmd == "editspec":
-            ok, msg = _v442_set_monthly_position("spec_positions", "spec_position_id", ticker, qty, avg, note)
-        else:
-            ok, msg = _v442_set_crypto_position(ticker, qty, avg, note)
-        send(msg if ok else "❌ ERROR: " + msg)
-        return
-
-    return _V442_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.4.3 REPORTING / LABEL / VALIDATION CLEANUP
@@ -17156,23 +11891,6 @@ if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() == "1":
 else:
     STRATEGY_VERSION = V443_VERSION
 
-V443_VALIDATION_STRATEGY_LABEL = "v4.4.2 partial-fill/monthly-lock/cost-aware"
-V443_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 20 / Long VCP 5 / Crypto 10"
-V443_KNOWN_LIMITATIONS = [
-    "v4.4.2 is aggressive and growth-led",
-    "backtest period is limited",
-    "crypto permission/gate required",
-    "manual execution and reconciliation still required",
-    "Core UCITS fee drag controlled by cost-aware execution",
-]
-V443_LIVE_VALIDATION_RULES = [
-    "Keep Core/Growth/SPEC as monthly rotation sleeves; daily plan checks are monitoring unless monthly-lock allows action.",
-    "Use partial-fill commands only for real broker fills that already happened.",
-    "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
-    "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
-    "Do not enable broker order automation in this version; IBKR reconciliation remains read-only.",
-    "Export download_state regularly, especially before redeploys or manual corrections.",
-]
 
 def _v443_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -17216,34 +11934,7 @@ def _v443_label_cleanup(msg: Any) -> str:
     return text
 
 # ---- Validation snapshot cleanup ----
-def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
-    return {
-        "strategy_version": STRATEGY_VERSION,
-        "strategy": V443_VALIDATION_STRATEGY_LABEL,
-        "allocation": V443_ALLOCATION_LABEL,
-        "known_limitations": list(V443_KNOWN_LIMITATIONS),
-        "live_validation_rules": list(V443_LIVE_VALIDATION_RULES),
-        "notes": [
-            "v4.4.3 is a reporting/label cleanup over v4.4.2; trading logic is unchanged.",
-            "Historical v3.8 modeled validation numbers are intentionally removed from the live validation text to avoid confusion.",
-        ],
-    }
 
-def format_validation_status() -> str:  # type: ignore[override]
-    limitations = "\n".join(f"- {x}" for x in V443_KNOWN_LIMITATIONS)
-    rules = "\n".join(f"• {x}" for x in V443_LIVE_VALIDATION_RULES)
-    return (
-        "🧪 VALIDATION STATUS v4.4.3\n\n"
-        f"Strategy: {V443_VALIDATION_STRATEGY_LABEL}\n"
-        f"Allocation: {V443_ALLOCATION_LABEL}\n\n"
-        "Known limitations:\n"
-        f"{limitations}\n\n"
-        "Live validation rules:\n"
-        f"{rules}\n\n"
-        "Reporting note: v4.4.3 changes labels/validation text only; strategy logic remains v4.4.2 partial-fill/monthly-lock/cost-aware."
-    )[:MAX_TELEGRAM_MESSAGE]
-
-_V443_OLD_INSTITUTIONAL_SNAPSHOT = institutional_snapshot
 
 def institutional_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     data = _V443_OLD_INSTITUTIONAL_SNAPSHOT()
@@ -17255,35 +11946,13 @@ def institutional_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     return data
 
 # ---- Wrap existing report formatters with label cleanup ----
-_V443_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
-_V443_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
-_V443_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
-_V443_OLD_FORMAT_STRESS_STATUS = format_stress_status
-_V443_OLD_FORMAT_EXECUTION_STATUS = format_execution_status
-_V443_OLD_FORMAT_DRIFT_STATUS = format_drift_status
-_V443_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
-_V443_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V443_OLD_FORMAT_BROKERPOSITIONS = format_brokerpositions
-_V443_OLD_FORMAT_BROKEREXTERNAL = format_brokerexternal
-_V443_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V443_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
-_V443_OLD_BROKER_SYNC_APPLY_CONFIRMED = broker_sync_apply_confirmed
-_V443_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
-_V443_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
-_V443_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
-_V443_OLD_FORMAT_CRYPTO_PLAN = format_crypto_alpha_plan
 
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_INSTITUTIONAL_STATUS() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_DATAHEALTH_STATUS() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
-    return _v443_label_cleanup(_V443_OLD_FORMAT_RISKMATRIX_STATUS())[:MAX_TELEGRAM_MESSAGE]
-
-def format_stress_status() -> str:  # type: ignore[override]
-    return _v443_label_cleanup(_V443_OLD_FORMAT_STRESS_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
 def format_execution_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_EXECUTION_STATUS())[:MAX_TELEGRAM_MESSAGE]
@@ -17291,10 +11960,8 @@ def format_execution_status() -> str:  # type: ignore[override]
 def format_drift_status() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_DRIFT_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    return _v443_label_cleanup(_V443_OLD_FORMAT_ALLOCATION_PLAN())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerstatus() -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_BROKERSTATUS() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
 
 def format_brokerpositions() -> str:  # type: ignore[override]
@@ -17303,126 +11970,44 @@ def format_brokerpositions() -> str:  # type: ignore[override]
 def format_brokerexternal() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKEREXTERNAL())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerreconcile() -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_BROKERRECONCILE() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokersyncpreview() -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
 
 def broker_sync_apply_confirmed() -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_BROKER_SYNC_APPLY_CONFIRMED()
     return ok, _v443_label_cleanup(msg)
 
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_GROWTH_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_GROWTH_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_CORE_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_CORE_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V45_OLD_FORMAT_SPEC_PLAN(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v443_label_cleanup(_V443_OLD_FORMAT_SPEC_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
-    return _v443_label_cleanup(_V443_OLD_FORMAT_CRYPTO_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
 # ---- Relabel a few command response strings without changing behavior ----
-_V443_OLD_RECORD_CORE_BUY = record_core_buy
 
 def record_core_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_RECORD_CORE_BUY(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
 
-_V443_OLD_RECORD_GROWTH_BUY = record_growth_buy
 
 def record_growth_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_RECORD_GROWTH_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
 
-_V443_OLD_RECORD_SPEC_BUY = record_spec_buy
 
 def record_spec_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:  # type: ignore[override]
     ok, msg = _V443_OLD_RECORD_SPEC_BUY(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
     return ok, _v443_label_cleanup(msg)
 
 # ---- Status/command cleanup ----
-_V443_OLD_HANDLE_COMMAND = handle_command
 
-def _v443_status_text() -> str:
-    try:
-        market_ok, reason = growth_alpha_market_filter_ok()
-    except Exception as exc:
-        market_ok, reason = False, f"error: {exc}"
-    try:
-        win = _v44_monthly_rebalance_window_info()
-    except Exception as exc:
-        win = {"open": False, "reason": f"error: {exc}"}
-    return (
-        "🛠️ V4.4.3 REPORTING CLEANUP STATUS\n\n"
-        f"Strategy display: {STRATEGY_VERSION}\n"
-        f"Strategy logic: {V443_VALIDATION_STRATEGY_LABEL}\n"
-        f"Allocation: {V443_ALLOCATION_LABEL}\n"
-        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-        f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-        "Execution controls unchanged from v4.4.2:\n"
-        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
-        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
-        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-        "• Crypto/VCP logic unchanged.\n"
-        "• Read-only IBKR reconciliation only; no broker orders are placed.\n\n"
-        "Reporting cleanup:\n"
-        "• Broker/risk/stress/validation labels now show v4.4.3.\n"
-        "• Old v3.8 validation model text removed from validationstatus."
-    )
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-
-    if text_lower in {"v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        send(_v443_status_text())
-        return
-
-    if text_lower == "validationstatus":
-        send(format_validation_status())
-        return
-
-    if text_lower in {"brokerhelp", "ibkrhelp"}:
-        send(
-            "🏦 IBKR RECONCILIATION COMMANDS v4.4.3\n\n"
-            "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
-            "brokerpositions — show bot-managed positions as seen by IBKR\n"
-            "brokerexternal — show external legacy broker positions outside bot scope\n"
-            "brokerreconcile — compare IBKR vs bot ledgers\n"
-            "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
-            "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
-            "No broker orders are placed in v4.4.3."
-        )
-        return
-
-    if text_lower in {"brokerping", "bridgeping"}:
-        try:
-            ok, info, snap = _v42_fetch_snapshot()
-            if ok and isinstance(snap, dict):
-                conn = snap.get("connection") or {}
-                send(
-                    "🏓 IBKR BRIDGE PING v4.4.3\n\n"
-                    f"Status: ✅ OK\n"
-                    f"Source: {info}\n"
-                    f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
-                    f"Created UTC: {snap.get('created_utc', 'n/a')}\n"
-                    "No broker orders are placed."
-                )
-            else:
-                send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {info}")
-        except Exception as exc:
-            send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {exc}")
-        return
-
-    return _V443_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.5 HYBRID CRYPTO + GROWTH / CORE / SPEC CANDIDATE
@@ -17455,12 +12040,10 @@ V45_SPEC_ALLOC = float(os.getenv("V45_SPEC_ALLOC", "20"))
 V45_LONG_VCP_ALLOC = float(os.getenv("V45_LONG_VCP_ALLOC", "0"))
 V45_CRYPTO_ALLOC = float(os.getenv("V45_CRYPTO_ALLOC", "10"))
 V45_BEAR_ALLOC = float(os.getenv("V45_BEAR_ALLOC", "0"))
-V45_CASH_ALLOC = max(0.0, 100.0 - V45_CORE_ALLOC - V45_GROWTH_ALLOC - V45_SPEC_ALLOC - V45_LONG_VCP_ALLOC - V45_CRYPTO_ALLOC - V45_BEAR_ALLOC)
 
 # Suppress disabled tactical systems by default. Legacy functions remain in the
 # file for backward compatibility with old state/exports, but they do not create
 # new signals unless explicitly re-enabled.
-V45_SUPPRESS_DISABLED_TACTICAL_SCANS = os.getenv("V45_SUPPRESS_DISABLED_TACTICAL_SCANS", "1") != "0"
 V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = os.getenv("V45_LONG_VCP_SIGNAL_ENGINE_ENABLED", "0") != "0"
 V45_BEAR_SIGNAL_ENGINE_ENABLED = os.getenv("V45_BEAR_SIGNAL_ENGINE_ENABLED", "0") != "0"
 BEAR_SLEEVE_ENABLED = BEAR_SLEEVE_ENABLED and V45_BEAR_SIGNAL_ENGINE_ENABLED and V45_BEAR_ALLOC > 0
@@ -17479,16 +12062,6 @@ except Exception:
 
 # Make the live allocation variables reflect v4.5 where old code reads them.
 WEALTH_CORE_ACCOUNT_ALLOC_PCT = V45_CORE_ALLOC / 100.0
-WEALTH_CORE_ALLOC_BULL = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_UNCERTAIN = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_BEAR = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_RISK_OFF = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_TACTICAL_LONG_ALLOC_BULL = V45_LONG_VCP_ALLOC / 100.0
-WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = 0.0
-WEALTH_TACTICAL_LONG_ALLOC_BEAR = 0.0
-WEALTH_BEAR_ALLOC_BULL = 0.0
-WEALTH_BEAR_ALLOC_UNCERTAIN = 0.0
-WEALTH_BEAR_ALLOC_BEAR = 0.0
 try:
     GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = V45_GROWTH_ALLOC / 100.0
     SPEC_ALPHA_ACCOUNT_ALLOC_PCT = V45_SPEC_ALLOC / 100.0
@@ -17504,7 +12077,6 @@ CRYPTO_ALPHA_ALL_SYMBOLS = list(dict.fromkeys(CRYPTO_ALPHA_INDICATORS + CRYPTO_A
 CRYPTO_ALPHA_MAX_OPEN_POSITIONS = int(os.getenv("CRYPTO_ALPHA_MAX_OPEN_POSITIONS", "2"))
 CRYPTO_ALPHA_MIN_TRADE_DOLLARS = float(os.getenv("CRYPTO_ALPHA_MIN_TRADE_DOLLARS", "75"))
 CRYPTO_ALPHA_BREAKOUT_DAYS = int(os.getenv("CRYPTO_ALPHA_BREAKOUT_DAYS", "20"))
-CRYPTO_ALPHA_GATE_MIN_ABOVE_MA200 = 1  # daily module uses BTC MA200; 4h module uses 2-of-3 internally.
 V45_CRYPTO_DAILY_WEIGHT = float(os.getenv("V45_CRYPTO_DAILY_WEIGHT", "0.70"))
 V45_CRYPTO_4H_WEIGHT = float(os.getenv("V45_CRYPTO_4H_WEIGHT", "0.30"))
 V45_CRYPTO_4H_ENABLED = os.getenv("V45_CRYPTO_4H_ENABLED", "1") != "0"
@@ -17514,18 +12086,9 @@ V45_CRYPTO_4H_BB_RATIO_MAX = float(os.getenv("V45_CRYPTO_4H_BB_RATIO_MAX", "0.75
 V45_CRYPTO_MAX_EXTENSION_EMA20 = float(os.getenv("V45_CRYPTO_MAX_EXTENSION_EMA20", "0.50"))
 V45_CRYPTO_ATR_STOP_MULT = float(os.getenv("V45_CRYPTO_ATR_STOP_MULT", "2.5"))
 V45_CRYPTO_TRAIL_ATR_MULT = float(os.getenv("V45_CRYPTO_TRAIL_ATR_MULT", "3.5"))
-V45_CRYPTO_LIVE_SOURCE = os.getenv("V45_CRYPTO_LIVE_SOURCE", "fmp_daily_binance_4h")
 
 V45_VALIDATION_STRATEGY_LABEL = "v4.5 hybrid crypto/growth-core-spec"
 V45_ALLOCATION_LABEL = "Core 20 / Growth 50 / SPEC 20 / Crypto 10 / Long VCP 0 / Bear 0 / Options 0"
-V45_KNOWN_LIMITATIONS = [
-    "v4.5 is aggressive and growth-led",
-    "crypto logic uses Binance 4h data for the compression sub-strategy and FMP daily data for daily module/quotes",
-    "crypto permission/gate required before live crypto trades",
-    "manual execution and read-only IBKR reconciliation still required",
-    "Core UCITS fee drag controlled by cost-aware execution",
-    "Long VCP and Bear signal engines are disabled by default in this candidate",
-]
 
 def _v45_map_crypto_to_binance(ticker: str) -> Optional[str]:
     mapping = {
@@ -17716,8 +12279,6 @@ def _v45_crypto_4h_compression_score(ticker: str, gate_ref_ret: Optional[float] 
         print(f"[V4.5 CRYPTO 4H SCORE ERROR] {ticker}: {exc}")
         return None
 
-def crypto_score_ticker(ticker: str, gate_ref_ret: Optional[float] = None) -> Optional[Dict[str, Any]]:  # type: ignore[override]
-    return _v45_crypto_daily_score(ticker, gate_ref_ret=gate_ref_ret)
 
 def compute_crypto_alpha_plan() -> Dict[str, Any]:  # type: ignore[override]
     refresh_portfolio()
@@ -17870,7 +12431,7 @@ def crypto_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional[Dict
             return item
     return None
 
-def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V463_FINAL_OLD_CRYPTO_PLAN_FORMAT(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     gate = plan.get("gate", {}) or {}
     risk = plan.get("risk_guard", {}) or {}
     msg = (
@@ -17925,92 +12486,12 @@ def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
     )
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-_V45_OLD_DYNAMIC_TARGETS = dynamic_portfolio_allocation_targets
-
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
-    base = _V45_OLD_DYNAMIC_TARGETS()
-    market = str(base.get("market", "UNCERTAIN"))
-    risk = base.get("risk_guard", {}) or {}
-    if risk.get("hard_active"):
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    elif market == "BULL":
-        core, growth, spec, long_vcp, bear, crypto = V45_CORE_ALLOC, V45_GROWTH_ALLOC, V45_SPEC_ALLOC, V45_LONG_VCP_ALLOC, V45_BEAR_ALLOC, V45_CRYPTO_ALLOC
-    elif market == "BEAR":
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    else:
-        core, growth, spec, long_vcp, bear, crypto = 20.0, 25.0, 10.0, 0.0, 0.0, 5.0
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        growth *= 0.50
-        spec *= 0.50
-        crypto *= 0.50
-        long_vcp = 0.0
-        bear = 0.0
-    if not GROWTH_ALPHA_ENABLED:
-        growth = 0.0
-    if not SPEC_ALPHA_ENABLED:
-        spec = 0.0
-    if not CRYPTO_ALPHA_ENABLED:
-        crypto = 0.0
-    if not V45_LONG_VCP_SIGNAL_ENGINE_ENABLED:
-        long_vcp = 0.0
-    if not BEAR_SLEEVE_ENABLED:
-        bear = 0.0
-    cash = max(0.0, 100.0 - core - growth - spec - long_vcp - bear - crypto)
-    base["strategy_version"] = "v4_5_hybrid_crypto_growth_core_spec_20_50_20_0_10_dynamic_allocation"
-    base["core_wealth_pct"] = round(core, 2)
-    base["growth_alpha_pct"] = round(growth, 2)
-    base["spec_alpha_pct"] = round(spec, 2)
-    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
-    base["bear_inverse_tactical_pct"] = round(bear, 2)
-    base["crypto_alpha_pct"] = round(crypto, 2)
-    base["cash_reserve_pct"] = round(cash, 2)
-    return base
 
 # Suppress tactical scan noise when VCP/Bear allocations are intentionally 0.
-_V45_OLD_SCAN_MARKET = scan_market
 
-def scan_market() -> bool:
-    # Legacy VCP/Bear scanner removed in v4.8. Final scan_market override routes to Swing Alpha.
-    try:
-        set_meta("last_scan_day", ny_date_str())
-        bar = expected_daily_bar_date()
-        if bar:
-            set_meta("last_scan_bar_date", bar)
-    except Exception:
-        pass
-    return True
 
 # Validation and reporting labels.
-def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
-    return {
-        "strategy_version": STRATEGY_VERSION,
-        "strategy": V45_VALIDATION_STRATEGY_LABEL,
-        "allocation": V45_ALLOCATION_LABEL,
-        "known_limitations": list(V45_KNOWN_LIMITATIONS),
-        "live_validation_rules": [
-            "Core/Growth/SPEC are monthly rotation sleeves; daily plan checks are monitoring unless monthly-lock allows action.",
-            "Crypto is a tactical separate ledger using BTC/ETH/SOL hybrid trend logic.",
-            "Long VCP and Bear tactical signal engines are disabled by default in v4.5.",
-            "Use partial-fill commands only for real broker fills that already happened.",
-            "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.",
-            "Do not treat external legacy IBKR positions as bot-managed strategy positions.",
-            "Do not enable broker order automation in this version; IBKR reconciliation remains read-only.",
-        ],
-    }
 
-def format_validation_status() -> str:  # type: ignore[override]
-    limitations = "\n".join(f"- {x}" for x in V45_KNOWN_LIMITATIONS)
-    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
-    return (
-        "🧪 VALIDATION STATUS v4.5\n\n"
-        f"Strategy: {V45_VALIDATION_STRATEGY_LABEL}\n"
-        f"Allocation: {V45_ALLOCATION_LABEL}\n\n"
-        "Known limitations:\n"
-        f"{limitations}\n\n"
-        "Live validation rules:\n"
-        f"{rules}\n\n"
-        "Reporting note: v4.5 changes allocation and crypto logic; IBKR remains read-only and execution remains manual."
-    )[:MAX_TELEGRAM_MESSAGE]
 
 def _v45_label_cleanup(msg: Any) -> str:
     text = _v443_label_cleanup(str(msg)) if '_v443_label_cleanup' in globals() else str(msg)
@@ -18029,102 +12510,34 @@ def _v45_label_cleanup(msg: Any) -> str:
     return text
 
 # Wrap key reports again for v4.5 labels.
-_V45_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
-_V45_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
-_V45_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
-_V45_OLD_FORMAT_STRESS_STATUS = format_stress_status
-_V45_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
-_V45_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V45_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V45_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
-_V45_OLD_FORMAT_CORE_PLAN = format_wealth_core_plan
-_V45_OLD_FORMAT_GROWTH_PLAN = format_growth_alpha_plan
-_V45_OLD_FORMAT_SPEC_PLAN = format_spec_alpha_plan
 
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V46_OLD_FORMAT_INSTITUTIONAL_STATUS() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V46_OLD_FORMAT_DATAHEALTH_STATUS() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
-    return _v45_label_cleanup(_V45_OLD_FORMAT_RISKMATRIX_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_stress_status() -> str:  # type: ignore[override]
-    return _v45_label_cleanup(_V45_OLD_FORMAT_STRESS_STATUS())[:MAX_TELEGRAM_MESSAGE]
-
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    msg = _v45_label_cleanup(_V45_OLD_FORMAT_ALLOCATION_PLAN())
-    extra = (
-        "\n\n🧾 v4.5 allocation cleanup:\n"
-        "• Long VCP allocation is 0%; VCP/Bear tactical signal scans are suppressed by default.\n"
-        "• Crypto allocation uses BTC/ETH/SOL hybrid daily/4h trend logic, not old cheap-alt rotation.\n"
-        "• Read-only IBKR reconciliation only; no broker orders are placed."
-    )
-    return (msg + extra)[:MAX_TELEGRAM_MESSAGE]
-
-def format_brokerstatus() -> str:  # type: ignore[override]
+def _V46_OLD_FORMAT_BROKERSTATUS() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerreconcile() -> str:  # type: ignore[override]
+def _V46_OLD_FORMAT_BROKERRECONCILE() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokersyncpreview() -> str:  # type: ignore[override]
+def _V46_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
 
-def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V463_FINAL_OLD_CORE_PLAN_FORMAT(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_CORE_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V463_FINAL_OLD_GROWTH_PLAN_FORMAT(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_GROWTH_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
-def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V463_FINAL_OLD_SPEC_PLAN_FORMAT(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v45_label_cleanup(_V45_OLD_FORMAT_SPEC_PLAN(plan))[:MAX_TELEGRAM_MESSAGE]
 
 # Status command.
-_V45_OLD_HANDLE_COMMAND = handle_command
 
-def _v45_status_text() -> str:
-    try:
-        market_ok, reason = growth_alpha_market_filter_ok()
-    except Exception as exc:
-        market_ok, reason = False, f"error: {exc}"
-    try:
-        win = _v44_monthly_rebalance_window_info()
-    except Exception as exc:
-        win = {"open": False, "reason": f"error: {exc}"}
-    return (
-        "🛠️ V4.5 HYBRID CRYPTO + GROWTH STATUS\n\n"
-        f"Strategy display: {STRATEGY_VERSION}\n"
-        f"Allocation: {V45_ALLOCATION_LABEL}\n"
-        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-        f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
-        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-        "Execution controls:\n"
-        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
-        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
-        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-        "• Crypto: BTC/ETH/SOL hybrid major trend, 70% daily breakout + 30% 4h compression.\n"
-        f"• Long VCP signal engine: {yes_no(V45_LONG_VCP_SIGNAL_ENGINE_ENABLED)} | Bear signal engine: {yes_no(BEAR_SLEEVE_ENABLED)}\n"
-        "• Read-only IBKR reconciliation only; no broker orders are placed.\n\n"
-        "Removed/disabled from live plan:\n"
-        "• Old cheap-alt crypto universe is no longer used by default.\n"
-        "• Bear/inverse sleeve and Long VCP allocation are 0 by default in v4.5."
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        send(_v45_status_text())
-        return
-    if text_lower == "validationstatus":
-        send(format_validation_status())
-        return
-    return _V45_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.6 FREEZE CANDIDATE - SWING ALPHA + HYBRID CRYPTO + MONTHLY ROTATION
@@ -18151,21 +12564,8 @@ V46_GROWTH_ALLOC = float(os.getenv("V46_GROWTH_ALLOC", "45"))
 V46_SPEC_ALLOC = float(os.getenv("V46_SPEC_ALLOC", "15"))
 V46_SWING_ALLOC = float(os.getenv("V46_SWING_ALLOC", "10"))
 V46_CRYPTO_ALLOC = float(os.getenv("V46_CRYPTO_ALLOC", "10"))
-V46_LONG_VCP_ALLOC = float(os.getenv("V46_LONG_VCP_ALLOC", "0"))
-V46_BEAR_ALLOC = float(os.getenv("V46_BEAR_ALLOC", "0"))
-V46_CASH_ALLOC = max(0.0, 100.0 - V46_CORE_ALLOC - V46_GROWTH_ALLOC - V46_SPEC_ALLOC - V46_SWING_ALLOC - V46_CRYPTO_ALLOC - V46_LONG_VCP_ALLOC - V46_BEAR_ALLOC)
 
 WEALTH_CORE_ACCOUNT_ALLOC_PCT = V46_CORE_ALLOC / 100.0
-WEALTH_CORE_ALLOC_BULL = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_UNCERTAIN = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_BEAR = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_CORE_ALLOC_RISK_OFF = WEALTH_CORE_ACCOUNT_ALLOC_PCT
-WEALTH_TACTICAL_LONG_ALLOC_BULL = 0.0
-WEALTH_TACTICAL_LONG_ALLOC_UNCERTAIN = 0.0
-WEALTH_TACTICAL_LONG_ALLOC_BEAR = 0.0
-WEALTH_BEAR_ALLOC_BULL = 0.0
-WEALTH_BEAR_ALLOC_UNCERTAIN = 0.0
-WEALTH_BEAR_ALLOC_BEAR = 0.0
 GROWTH_ALPHA_ACCOUNT_ALLOC_PCT = V46_GROWTH_ALLOC / 100.0
 SPEC_ALPHA_ACCOUNT_ALLOC_PCT = V46_SPEC_ALLOC / 100.0
 CRYPTO_ALPHA_ACCOUNT_ALLOC_PCT = V46_CRYPTO_ALLOC / 100.0
@@ -18187,15 +12587,6 @@ except Exception:
     pass
 
 V46_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
-V46_VALIDATION_STRATEGY_LABEL = "v4.6 Swing Alpha MACD+VAH + Hybrid Crypto + cost-aware monthly rotation"
-V46_KNOWN_LIMITATIONS = [
-    "v4.6 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.",
-    "Swing Alpha MACD+VAH is promising but winner/sector dependent and should be forward-tested.",
-    "Backtest period is limited and not broker-grade execution simulation.",
-    "Crypto permission/gate required; crypto remains disabled in practice until broker permission and signal are valid.",
-    "Manual execution and read-only IBKR reconciliation are still required; no broker orders are placed.",
-    "Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.",
-]
 
 # ---- Swing Alpha configuration ----
 SWING_ALPHA_ENABLED = os.getenv("SWING_ALPHA_ENABLED", "1") != "0"
@@ -18209,7 +12600,6 @@ SWING_ALPHA_QUOTE_DEVIATION_LIMIT = float(os.getenv("SWING_ALPHA_QUOTE_DEVIATION
 SWING_ALPHA_REQUIRE_LIVE_QUOTE = os.getenv("SWING_ALPHA_REQUIRE_LIVE_QUOTE", "1") != "0"
 SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY = os.getenv("SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY", "1") != "0"
 SWING_ALPHA_ALLOW_FRACTIONAL_SHARES = os.getenv("SWING_ALPHA_ALLOW_FRACTIONAL_SHARES", "1") != "0"
-SWING_ALPHA_PLAN_VALID_DAYS = int(os.getenv("SWING_ALPHA_PLAN_VALID_DAYS", "3"))
 SWING_ALPHA_MIN_PRICE = float(os.getenv("SWING_ALPHA_MIN_PRICE", "8"))
 SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME = float(os.getenv("SWING_ALPHA_MIN_AVG_DOLLAR_VOLUME", "25000000"))
 SWING_ALPHA_MIN_RET63 = float(os.getenv("SWING_ALPHA_MIN_RET63", "0.05"))
@@ -18242,7 +12632,6 @@ def _v46_cluster(ticker: str) -> str:
     return "other"
 
 # ---- DB tables ----
-_V46_OLD_INIT_DB = init_db
 
 def init_db() -> None:  # type: ignore[override]
     _V46_OLD_INIT_DB()
@@ -18293,6 +12682,20 @@ def init_db() -> None:  # type: ignore[override]
                 status TEXT NOT NULL DEFAULT 'ACTIVE'
             );
             CREATE INDEX IF NOT EXISTS idx_swing_alpha_signals_time ON swing_alpha_signals(time);
+            CREATE TABLE IF NOT EXISTS cash_deposits (
+                id TEXT PRIMARY KEY,
+                time REAL NOT NULL,
+                amount REAL NOT NULL CHECK (amount > 0),
+                cash_before REAL NOT NULL,
+                cash_after REAL NOT NULL,
+                equity_before REAL NOT NULL,
+                equity_after REAL NOT NULL,
+                withdrawal_hwm_before REAL,
+                withdrawal_hwm_after REAL NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_cash_deposits_time ON cash_deposits(time);
             """
         )
         conn.commit()
@@ -18594,7 +12997,7 @@ def swing_alpha_target_for_ticker(plan: Dict[str, Any], ticker: str) -> Optional
             return item
     return None
 
-def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:
+def _V463_FINAL_OLD_SWING_PLAN_FORMAT(plan: Dict[str, Any]) -> str:
     risk = plan.get("risk_guard", {}) or {}
     msg = (
         "🎯 SWING_ALPHA PLAN v4.6 — MACD + VAH RECLAIM\n\n"
@@ -18796,7 +13199,6 @@ def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id:
     return True, (f"🎯 SWING_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized Swing Alpha P/L: {format_money(realized)} ({format_pct(pct)})\n💵 Cash now: {format_money(load_portfolio()['cash'])}")
 
 # ---- Include Swing Alpha in equity and reports ----
-_V46_OLD_COMPUTE_EQUITY = compute_equity_snapshot_data
 
 def compute_equity_snapshot_data() -> Dict[str, float]:  # type: ignore[override]
     snapshot = _V46_OLD_COMPUTE_EQUITY()
@@ -18807,9 +13209,13 @@ def compute_equity_snapshot_data() -> Dict[str, float]:  # type: ignore[override
     snapshot["swing_alpha_unrealized_profit"] = round(float(details.get("unrealized_profit", 0) or 0), 2)
     snapshot["positions_value"] = round(float(snapshot.get("positions_value", 0) or 0) + swing_value, 2)
     snapshot["equity"] = round(float(snapshot.get("equity", 0) or 0) + swing_value, 2)
+    try:
+        snapshot.update(cash_deposit_summary())
+        snapshot["performance_base_capital"] = round(get_performance_base_capital(), 2)
+    except Exception:
+        pass
     return snapshot
 
-_V46_OLD_REALIZED_PERF = realized_performance_all_time
 
 def realized_performance_all_time() -> Dict[str, Any]:  # type: ignore[override]
     perf = _V46_OLD_REALIZED_PERF()
@@ -18817,92 +13223,22 @@ def realized_performance_all_time() -> Dict[str, Any]:  # type: ignore[override]
     swing_profit = round(sum(float(t.get("realized_profit") or 0.0) for t in trades if str(t.get("side")).upper() == "SELL"), 2)
     perf["swing_alpha_realized_profit"] = swing_profit
     perf["profit"] = round(float(perf.get("profit", 0) or 0) + swing_profit, 2)
-    base_cap = float(perf.get("base_capital", 0) or 0)
+    base_cap = get_performance_base_capital()
+    perf["base_capital"] = round(base_cap, 2)
     perf["pct"] = None if base_cap <= 0 else (perf["profit"] / base_cap) * 100
     perf["swing_alpha_trade_records"] = len(trades)
     perf["trade_records"] = int(perf.get("trade_records", 0) or 0) + len(trades)
+    try:
+        perf.update(cash_deposit_summary())
+    except Exception:
+        pass
     return perf
 
-_V46_OLD_FORMAT_COMBINED_PORTFOLIO = format_combined_portfolio_report
-
-def format_combined_portfolio_report() -> str:  # type: ignore[override]
-    base = _V46_OLD_FORMAT_COMBINED_PORTFOLIO()
-    rows = swing_alpha_position_market_value_details().get("rows", []) if SWING_ALPHA_LEDGER_ENABLED else []
-    if not rows:
-        return base
-    msg = base + "\n\n🎯 SWING_ALPHA POSITIONS\n\n"
-    for row in rows:
-        msg += (f"📦 {row['ticker']}\n"
-                f"Shares: {format_core_shares(row['shares'])}\n"
-                f"Avg: {round(float(row['avg_entry_price']), 4)} | Now: {round(float(row['mark_price']), 4)}\n"
-                f"Value: {format_money(float(row['market_value']))}\n"
-                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n\n")
-    return msg[:MAX_TELEGRAM_MESSAGE]
 
 # ---- Allocation and risk reports ----
-def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
-    try:
-        base = _V45_OLD_DYNAMIC_ALLOC()
-    except Exception:
-        base = {"ny_time": ny_now().strftime("%Y-%m-%d %H:%M %Z"), "market": market_condition(), "market_score": None, "bear_score": None, "risk_guard": portfolio_risk_guard_details()}
-    risk = base.get("risk_guard", {}) or portfolio_risk_guard_details()
-    market = str(base.get("market", "UNCERTAIN")).upper()
-    if risk.get("hard_active"):
-        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    elif market == "BULL":
-        core, growth, spec, swing, crypto, long_vcp, bear = V46_CORE_ALLOC, V46_GROWTH_ALLOC, V46_SPEC_ALLOC, V46_SWING_ALLOC, V46_CRYPTO_ALLOC, 0.0, 0.0
-    elif market == "BEAR":
-        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    else:
-        core, growth, spec, swing, crypto, long_vcp, bear = 20.0, 20.0, 8.0, 5.0, 5.0, 0.0, 0.0
-    if risk.get("soft_active") and not risk.get("hard_active"):
-        growth *= 0.50; spec *= 0.50; swing *= 0.50; crypto *= 0.50
-    if not GROWTH_ALPHA_ENABLED: growth = 0.0
-    if not SPEC_ALPHA_ENABLED: spec = 0.0
-    if not SWING_ALPHA_ENABLED: swing = 0.0
-    if not CRYPTO_ALPHA_ENABLED: crypto = 0.0
-    cash = max(0.0, 100.0 - core - growth - spec - swing - crypto - long_vcp - bear)
-    base["strategy_version"] = "v4_6_freeze_swing_alpha_dynamic_allocation"
-    base["core_wealth_pct"] = round(core, 2)
-    base["growth_alpha_pct"] = round(growth, 2)
-    base["spec_alpha_pct"] = round(spec, 2)
-    base["swing_alpha_pct"] = round(swing, 2)
-    base["crypto_alpha_pct"] = round(crypto, 2)
-    base["long_vcp_tactical_pct"] = round(long_vcp, 2)
-    base["bear_inverse_tactical_pct"] = round(bear, 2)
-    base["cash_reserve_pct"] = round(cash, 2)
-    return base
 
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6 FREEZE CANDIDATE 20/45/15/10/10\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🐻 Bear pressure score: {plan.get('bear_score')}/60\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
-        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
-        f"🐂 Long VCP tactical: {plan.get('long_vcp_tactical_pct')}%\n"
-        f"🐻 Bear tactical: {plan.get('bear_inverse_tactical_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core/Growth/SPEC are monthly rotation sleeves with monthly-lock protection.\n"
-        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
-        "• Swing Alpha replaces disabled VCP allocation using MACD + VAH reclaim logic.\n"
-        "• Crypto uses BTC/ETH/SOL hybrid major trend logic.\n"
-        "• Bear/VCP/Options remain disabled.\n"
-        "• Read-only IBKR reconciliation only; no broker orders are placed."
-    )[:MAX_TELEGRAM_MESSAGE]
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_RISKMATRIX_STATUS() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     equity = float(snapshot.get("equity", 0) or 0)
     ledgers = [
@@ -18944,7 +13280,7 @@ def format_riskmatrix_status() -> str:  # type: ignore[override]
     msg += "\n" + ("✅ No concentration warnings." if not warnings else "⚠️ Warnings:\n" + "\n".join(f"• {w}" for w in warnings))
     return msg[:MAX_TELEGRAM_MESSAGE]
 
-def format_stress_status() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_STRESS_STATUS() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     equity = float(snapshot.get("equity", 0) or 0)
     core = float(snapshot.get("core_positions_value", 0) or 0)
@@ -18966,20 +13302,7 @@ def format_stress_status() -> str:  # type: ignore[override]
     return msg[:MAX_TELEGRAM_MESSAGE]
 
 # Validation/reporting labels.
-def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
-    return {"strategy_version": STRATEGY_VERSION, "strategy": V46_VALIDATION_STRATEGY_LABEL, "allocation": V46_ALLOCATION_LABEL, "known_limitations": list(V46_KNOWN_LIMITATIONS), "live_validation_rules": ["Core/Growth/SPEC remain monthly rotation sleeves; daily plans are monitoring unless monthly-lock allows action.", "Swing Alpha is tactical and separate from monthly ledgers.", "Crypto is tactical and separate, using BTC/ETH/SOL hybrid trend logic.", "Do not chase above max limit guide.", "Use partial-fill commands only for real broker fills already executed.", "Use brokerreconcile/brokersyncpreview after manual fills and before any sync apply.", "Do not treat external legacy IBKR positions as bot-managed strategy positions.", "No broker order automation in v4.6; IBKR reconciliation remains read-only."]}
 
-def format_validation_status() -> str:  # type: ignore[override]
-    limitations = "\n".join(f"- {x}" for x in V46_KNOWN_LIMITATIONS)
-    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
-    return ("🧪 VALIDATION STATUS v4.6\n\n"
-            f"Strategy: {V46_VALIDATION_STRATEGY_LABEL}\n"
-            f"Allocation: {V46_ALLOCATION_LABEL}\n\n"
-            "Known limitations:\n"
-            f"{limitations}\n\n"
-            "Live validation rules:\n"
-            f"{rules}\n\n"
-            "Reporting note: v4.6 adds Swing Alpha and changes allocation; IBKR remains read-only and execution remains manual.")[:MAX_TELEGRAM_MESSAGE]
 
 def _v46_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -18989,31 +13312,25 @@ def _v46_label_cleanup(msg: Any) -> str:
     text = text.replace("Core 20 / Growth 55 / SPEC 15 / Crypto 10 / Swing 0", V46_ALLOCATION_LABEL)
     return text
 
-_V46_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
-_V46_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
-_V46_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V46_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V46_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_INSTITUTIONAL_STATUS() -> str:  # type: ignore[override]
     return _v46_label_cleanup(_V46_OLD_FORMAT_INSTITUTIONAL_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_DATAHEALTH_STATUS() -> str:  # type: ignore[override]
     return _v46_label_cleanup(_V46_OLD_FORMAT_DATAHEALTH_STATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerstatus() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_BROKERSTATUS() -> str:  # type: ignore[override]
     return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERSTATUS())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokerreconcile() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_BROKERRECONCILE() -> str:  # type: ignore[override]
     return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERRECONCILE())[:MAX_TELEGRAM_MESSAGE]
 
-def format_brokersyncpreview() -> str:  # type: ignore[override]
+def _V461_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:  # type: ignore[override]
     return _v46_label_cleanup(_V46_OLD_FORMAT_BROKERSYNCPREVIEW())[:MAX_TELEGRAM_MESSAGE]
 
 # Export and reset integration.
-_V46_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V461_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V46_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -19024,7 +13341,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
         print(f"[SWING ALPHA EXPORT WARNING] {exc}")
     return zip_path
 
-_V46_OLD_RESET_ALL = reset_all_paper_state
 
 def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, Optional[str]]:  # type: ignore[override]
     ok, msg, backup_path = _V46_OLD_RESET_ALL(update_id=update_id)
@@ -19032,117 +13348,12 @@ def reset_all_paper_state(update_id: Optional[int] = None) -> Tuple[bool, str, O
         conn.execute("DELETE FROM swing_alpha_positions")
         conn.execute("DELETE FROM swing_alpha_trades")
         conn.execute("DELETE FROM swing_alpha_signals")
-    return ok, msg + "\n✅ Swing Alpha positions/trades/signals cleared", backup_path
+        conn.execute("DELETE FROM cash_deposits")
+    msg = str(msg).replace("setcash", "depositcash")
+    return ok, msg + "\nSwing Alpha positions/trades/signals cleared\nCash deposit ledger cleared", backup_path
 
 # Command routing.
-_V46_OLD_HANDLE_COMMAND = handle_command
 
-def _v46_status_text() -> str:
-    try:
-        market_ok, swing_reason = swing_alpha_market_filter_ok()
-    except Exception as exc:
-        market_ok, swing_reason = False, f"error: {exc}"
-    try:
-        growth_ok, growth_reason = growth_alpha_market_filter_ok()
-    except Exception as exc:
-        growth_ok, growth_reason = False, f"error: {exc}"
-    try:
-        win = _v44_monthly_rebalance_window_info()
-    except Exception as exc:
-        win = {"open": False, "reason": f"error: {exc}"}
-    return (
-        "🛠️ V4.6 FREEZE CANDIDATE STATUS\n\n"
-        f"Strategy display: {STRATEGY_VERSION}\n"
-        f"Strategy logic: {V46_VALIDATION_STRATEGY_LABEL}\n"
-        f"Allocation: {V46_ALLOCATION_LABEL}\n"
-        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
-        f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
-        f"Growth market filter: {yes_no(growth_ok)} — {growth_reason}\n"
-        f"Swing market filter: {yes_no(market_ok)} — {swing_reason}\n"
-        f"Small-account mode: {yes_no(_v43_small_account_mode())} under {format_money(V43_SMALL_ACCOUNT_EQUITY)}\n"
-        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)}\n"
-        f"Monthly rebalance window: {yes_no(bool(win.get('open')))} — {win.get('reason')}\n\n"
-        "Execution controls:\n"
-        f"• Core min order: {format_money(V43_CORE_MIN_ORDER_DOLLARS)} | partial-fill recording: {yes_no(V442_ALLOW_PARTIAL_FILL_RECORDING)}\n"
-        f"• Growth top-{V43_GROWTH_EXECUTE_TOP_N_SMALL}, min order {format_money(V43_GROWTH_MIN_ORDER_DOLLARS)}, underfill priority {yes_no(V442_UNDERFILL_PRIORITY_ENABLED)}\n"
-        f"• SPEC ranks 1-{V43_SPEC_BUY_RANK_LIMIT_SMALL}, max holdings {V43_SPEC_MAX_HOLDINGS_SMALL}, min order {format_money(V43_SPEC_MIN_ORDER_DOLLARS)}\n"
-        f"• Swing Alpha max {SWING_ALPHA_MAX_OPEN_POSITIONS}, min order {format_money(SWING_ALPHA_MIN_TRADE_DOLLARS)}, cluster cap {SWING_ALPHA_MAX_PER_CLUSTER}\n"
-        "• Crypto: BTC/ETH/SOL hybrid major trend, 70% daily breakout + 30% 4h compression.\n"
-        "• VCP/Bear/Options disabled.\n"
-        "• Read-only IBKR reconciliation only; no broker orders are placed."
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v46status", "v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        send(_v46_status_text())
-        return
-    if text_lower == "validationstatus":
-        send(format_validation_status())
-        return
-    if text_lower == "swingplan":
-        send("🎯 Swing Alpha plan started. This scans strong leaders for MACD + VAH reclaim swing setups.")
-        plan = compute_swing_alpha_plan()
-        save_swing_alpha_plan(plan)
-        send(format_swing_alpha_plan(plan))
-        return
-    if text_lower == "swingstatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        latest = load_latest_swing_alpha_signal()
-        details = swing_alpha_position_market_value_details()
-        m_ok, m_reason = swing_alpha_market_filter_ok()
-        send("🎯 SWING_ALPHA STATUS v4.6\n\n" +
-             f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\nLedger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n" +
-             f"Target now: {alloc.get('swing_alpha_pct')}% of account\n" +
-             f"Strategy: MACD + VAH reclaim\nUniverse size: {len(SWING_ALPHA_UNIVERSE)}\n" +
-             f"Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n" +
-             f"Market filter: {yes_no(m_ok)} — {m_reason}\n" +
-             f"Swing value: {format_money(float(details.get('value',0) or 0))}\n" +
-             f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n" +
-             "Commands:\nswingplan\nswingbuy TICKER SHARES at PRICE\nswingsell TICKER SHARES at PRICE\nswingportfolio | swingpnl | swingexposure")
-        return
-    if text_lower == "swingportfolio":
-        send(format_swing_alpha_portfolio_report())
-        return
-    if text_lower == "swingpnl":
-        send(format_swing_alpha_pnl_report())
-        return
-    if text_lower == "swingexposure":
-        send(format_swing_alpha_exposure_report())
-        return
-    if text_lower == "equity":
-        snapshot = compute_equity_snapshot_data()
-        send(
-            "💼 ACCOUNT EQUITY\n\n"
-            f"💵 Cash: {format_money(snapshot['cash'])}\n"
-            f"⚡ Legacy swing positions: {format_money(snapshot.get('swing_positions_value', 0))}\n"
-            f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}\n"
-            f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}\n"
-            f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}\n"
-            f"🎯 Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}\n"
-            f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}\n"
-            f"📦 Total positions: {format_money(snapshot['positions_value'])}\n"
-            f"🏦 Total Equity: {format_money(snapshot['equity'])}"
-        )
-        return
-    swing_cmd = re.fullmatch(r"(?i)\s*(swingbuy|swingsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+(partial))?\s*", text_clean)
-    if swing_cmd:
-        action = swing_cmd.group(1).lower()
-        ticker = normalize_ticker(swing_cmd.group(2))
-        shares = float(swing_cmd.group(3))
-        price = float(swing_cmd.group(4))
-        partial_ok = bool(swing_cmd.group(5))
-        if not ticker:
-            send("Invalid ticker")
-            return
-        if action == "swingbuy":
-            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
-        else:
-            ok, msg = record_swing_alpha_sell(ticker, shares, price, update_id=update_id)
-        send(msg if ok else "❌ ERROR: " + msg)
-        return
-    return _V46_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.6.2 - SWING ALPHA LIVE SIGNAL REPLACEMENT LAYER
@@ -19287,27 +13498,7 @@ def _v461_score_swing_candidate_live(ticker: str) -> Optional[Dict[str, Any]]:
 _v46_score_swing_candidate = _v461_score_swing_candidate_live  # type: ignore[assignment]
 
 # Clearer labels for Swing Alpha public/private formatting.
-_V461_OLD_SLEEVE_LABEL = sleeve_label
-_V461_OLD_SLEEVE_SHORT_LABEL = sleeve_short_label
-_V461_OLD_SETUP_LABEL = setup_label
 
-def sleeve_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
-    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
-    if sleeve == "SWING_ALPHA":
-        return "🎯 SWING ALPHA"
-    return _V461_OLD_SLEEVE_LABEL(entry_data)
-
-def sleeve_short_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
-    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
-    if sleeve == "SWING_ALPHA":
-        return "SWING_ALPHA"
-    return _V461_OLD_SLEEVE_SHORT_LABEL(entry_data)
-
-def setup_label(setup_type: str) -> str:  # type: ignore[override]
-    setup = str(setup_type).lower()
-    if setup == "macd_vah_reclaim":
-        return "🎯 MACD + VAH Reclaim"
-    return _V461_OLD_SETUP_LABEL(setup_type)
 
 def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
@@ -19390,13 +13581,6 @@ def _v461_public_swing_exit(item: Dict[str, Any]) -> str:
         f"{public_signal_footer()}"
     )[:MAX_TELEGRAM_MESSAGE]
 
-def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:
-    try:
-        set_meta("last_swing_alpha_auto_scan_day", day)
-        if bar:
-            set_meta("last_swing_alpha_auto_scan_bar", bar)
-    except Exception:
-        pass
 
 def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     """Run Swing Alpha as the live tactical scan engine."""
@@ -19467,7 +13651,6 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
 
 # Replace the disabled VCP/Bear scan path with Swing Alpha. The legacy VCP/Bear
 # code remains inert for compatibility but no longer owns the tactical scan.
-_V461_OLD_SCAN_MARKET = scan_market
 
 def scan_market() -> bool:  # type: ignore[override]
     if SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED and SWING_ALPHA_ACCOUNT_ALLOC_PCT > 0:
@@ -19483,33 +13666,6 @@ def scan_market() -> bool:  # type: ignore[override]
     return True
 
 # Remove disabled VCP/Bear clutter from the main allocation text.
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.6.2\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
-        f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
-        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Disabled / removed from live allocation:\n"
-        "• Long VCP tactical: 0% — replaced by Swing Alpha.\n"
-        "• Bear / inverse sleeve: 0% — disabled.\n"
-        "• Options: 0% — research-only.\n\n"
-        "Rules:\n"
-        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
-        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
-        "• Swing Alpha sends live entry/exit alerts during the tactical scan window.\n"
-        "• IBKR reconciliation is read-only; no broker orders are placed."
-    )[:MAX_TELEGRAM_MESSAGE]
 
 def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[override]
     return {
@@ -19530,19 +13686,6 @@ def institutional_validation_snapshot() -> Dict[str, Any]:  # type: ignore[overr
         ],
     }
 
-def format_validation_status() -> str:  # type: ignore[override]
-    limitations = "\n".join(f"- {x}" for x in V461_KNOWN_LIMITATIONS)
-    rules = "\n".join(f"• {x}" for x in institutional_validation_snapshot()["live_validation_rules"])
-    return (
-        "🧪 VALIDATION STATUS v4.6.2\n\n"
-        f"Strategy: {V461_VALIDATION_STRATEGY_LABEL}\n"
-        f"Allocation: {V461_ALLOCATION_LABEL}\n\n"
-        "Known limitations:\n"
-        f"{limitations}\n\n"
-        "Live validation rules:\n"
-        f"{rules}\n\n"
-        "Reporting note: v4.6.2 replaces disabled VCP/Bear live signal path with Swing Alpha; IBKR remains read-only."
-    )[:MAX_TELEGRAM_MESSAGE]
 
 def _v461_label_cleanup(msg: Any) -> str:
     text = str(msg)
@@ -19553,39 +13696,31 @@ def _v461_label_cleanup(msg: Any) -> str:
     return text[:MAX_TELEGRAM_MESSAGE]
 
 # Wrap status/report labels.
-_V461_OLD_FORMAT_INSTITUTIONAL_STATUS = format_institutional_status
-_V461_OLD_FORMAT_DATAHEALTH_STATUS = format_datahealth_status
-_V461_OLD_FORMAT_RISKMATRIX_STATUS = format_riskmatrix_status
-_V461_OLD_FORMAT_STRESS_STATUS = format_stress_status
-_V461_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V461_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V461_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_INSTITUTIONAL() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_INSTITUTIONAL_STATUS())
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_DATAHEALTH() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_DATAHEALTH_STATUS())
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_RISK() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_RISKMATRIX_STATUS())
 
-def format_stress_status() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_STRESS() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_STRESS_STATUS())
 
-def format_brokerstatus() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_BROKERSTATUS() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERSTATUS())
 
-def format_brokerreconcile() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_BROKERRECONCILE() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERRECONCILE())
 
-def format_brokersyncpreview() -> str:  # type: ignore[override]
+def _V463_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:  # type: ignore[override]
     return _v461_label_cleanup(_V461_OLD_FORMAT_BROKERSYNCPREVIEW())
 
 # Export metadata for the tactical replacement layer.
-_V461_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V463_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V461_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         meta = {
@@ -19603,7 +13738,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
     return zip_path
 
 # Command routing.
-_V461_OLD_HANDLE_COMMAND = handle_command
 
 def _v461_status_text() -> str:
     try:
@@ -19640,80 +13774,6 @@ def _v461_status_text() -> str:
         "• Read-only IBKR reconciliation only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v461status", "v46status", "v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
-        send(_v461_status_text())
-        return
-    if text_lower == "validationstatus":
-        send(format_validation_status())
-        return
-    if text_lower == "allocationplan":
-        send(format_portfolio_allocation_plan())
-        return
-    if text_lower == "bearstatus":
-        send(
-            "🐻 BEAR / INVERSE SLEEVE STATUS v4.6.2\n\n"
-            "Status: disabled / removed from live allocation.\n"
-            "Reason: inverse ETFs/KID restrictions and weak replacement tests.\n\n"
-            "Live tactical scan path is now owned by Swing Alpha.\n"
-            "Use swingstatus / swingplan / swingbuy / swingsell."
-        )
-        return
-    if text_lower == "sleevestatus":
-        send(
-            "🧭 SLEEVE STATUS v4.6.2\n\n"
-            "Active sleeves:\n"
-            "• Core monthly rotation — corebuy/coresell\n"
-            "• Growth monthly rotation — growthbuy/growthsell\n"
-            "• SPEC monthly rotation — specbuy/specsell\n"
-            "• Swing Alpha tactical — swingbuy/swingsell\n"
-            "• Crypto tactical — cryptobuy/cryptosell\n\n"
-            "Disabled live sleeves:\n"
-            "• Long VCP legacy scan path: replaced by Swing Alpha\n"
-            "• Bear/inverse: disabled\n"
-            "• Options: research-only"
-        )
-        return
-    if text_lower == "forcescan":
-        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.6.2.")
-        ok = scan_swing_alpha_market(force=True, verbose=True)
-        send("✅ Manual Swing Alpha scan complete." if ok else "⚠️ Manual Swing Alpha scan did not complete cleanly.")
-        return
-    if text_lower == "swingplan":
-        send("🎯 Swing Alpha plan started. This scans strong leaders for MACD + VAH reclaim swing setups. Live entries are also sent automatically during the tactical scan window.")
-        plan = compute_swing_alpha_plan()
-        save_swing_alpha_plan(plan)
-        send(format_swing_alpha_plan(plan))
-        return
-    if text_lower == "swingstatus":
-        alloc = dynamic_portfolio_allocation_targets()
-        latest = load_latest_swing_alpha_signal()
-        details = swing_alpha_position_market_value_details()
-        m_ok, m_reason = swing_alpha_market_filter_ok()
-        send(
-            "🎯 SWING_ALPHA STATUS v4.6.2\n\n"
-            f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
-            f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
-            f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
-            f"Target now: {alloc.get('swing_alpha_pct')}% of account\n"
-            "Strategy: MACD + VAH reclaim\n"
-            f"Universe size: {len(SWING_ALPHA_UNIVERSE)}\n"
-            f"Max signals per scan: {SWING_ALPHA_MAX_SIGNALS_PER_SCAN}\n"
-            f"Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n"
-            f"Market filter: {yes_no(m_ok)} — {m_reason}\n"
-            f"Swing value: {format_money(float(details.get('value',0) or 0))}\n"
-            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
-            "Commands:\n"
-            "swingplan — manual preview/plan\n"
-            "forcescan — manual Swing Alpha signal scan\n"
-            "swingbuy TICKER SHARES at PRICE\n"
-            "swingsell TICKER SHARES at PRICE\n"
-            "swingportfolio | swingpnl | swingexposure"
-        )
-        return
-    return _V461_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # ---- Swing Alpha live position management / exit alerts ----
 def _v461_send_swing_exit_once(ticker: str, reason_key: str, message: str, public_item: Optional[Dict[str, Any]] = None) -> None:
@@ -19815,7 +13875,6 @@ def manage_swing_alpha_positions() -> None:
         except Exception as exc:
             logger.exception(f"[SWING ALPHA MANAGE ERROR] {ticker}: {exc}")
 
-_V461_OLD_MANAGE_POSITIONS = manage_positions
 
 def manage_positions() -> None:  # type: ignore[override]
     # v4.8.1 active-only: legacy VCP/Bear position manager is not called.
@@ -19836,24 +13895,6 @@ def _v461_mark_swing_auto_scan_done(day: str, bar: Optional[str]) -> None:  # ty
     except Exception:
         pass
 
-def v462_deployment_check_text() -> str:
-    return (
-        "🛠️ V4.6.2 DEPLOYMENT CHECK\n\n"
-        "✅ Swing Alpha live signal path is active.\n"
-        "✅ Legacy VCP/Bear live signal allocation is disabled.\n"
-        "✅ scanstatus metadata is updated by Swing Alpha scans.\n"
-        "✅ IBKR reconciliation remains read-only; no broker orders are placed.\n"
-        "✅ Monthly Core/Growth/SPEC logic remains monthly-locked.\n"
-        "✅ Crypto remains permission/gate-dependent.\n"
-    )
-
-_V462_OLD_HANDLE_COMMAND = handle_command
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    if text_clean.lower() in {"v462status", "deploycheck"}:
-        send(_v461_status_text() + "\n\n" + v462_deployment_check_text())
-        return
-    return _V462_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.6.3 MONTHLY DASHBOARD + CRYPTO AUTO ALERTS
@@ -19994,7 +14035,7 @@ def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optio
         + ("\nDetailed Core/Growth/SPEC plans follow." if V463_MONTHLY_SEND_DETAILED_PLANS else "")
     )[:MAX_TELEGRAM_MESSAGE]
 
-def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False) -> bool:
+def _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force: bool = False, preview_only: bool = False) -> bool:
     if not (V463_MONTHLY_DASHBOARD_ENABLED or force):
         return False
     n = ny_now()
@@ -20036,58 +14077,6 @@ def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False)
         audit("V463_MONTHLY_DASHBOARD", f"month={month_key} errors={list(errors.keys())}")
     return True
 
-def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:
-    if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
-        return False
-    if not CRYPTO_ALPHA_ENABLED:
-        return False
-    n = ny_now()
-    today = n.date().isoformat()
-    if not force:
-        last_ts = get_meta("last_v463_crypto_auto_check_ts")
-        if last_ts:
-            try:
-                elapsed = (now_ts() - float(last_ts)) / 60.0
-                daily_due = V463_CRYPTO_SEND_NO_ACTION_DAILY and _v463_after_minute(V463_CRYPTO_DAILY_STATUS_MINUTE) and get_meta("last_v463_crypto_daily_status_day") != today
-                if elapsed < max(15, V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN) and not daily_due:
-                    return False
-            except Exception:
-                pass
-    try:
-        plan = compute_crypto_alpha_plan()
-    except Exception as exc:
-        logger.exception(f"[V4.6.3 CRYPTO AUTO CHECK ERROR] {exc}")
-        if force:
-            send(f"⚠️ Crypto auto-check failed: {exc}")
-        return False
-    set_meta("last_v463_crypto_auto_check_ts", str(now_ts()))
-    gate_sig = _v463_crypto_gate_signature(plan)
-    action_sig = _v463_crypto_action_signature(plan)
-    last_gate = get_meta("last_v463_crypto_gate_signature")
-    last_action = get_meta("last_v463_crypto_action_signature")
-    reason = ""
-    if force:
-        reason = "manual check"
-    elif action_sig != "NO_ACTION" and action_sig != last_action:
-        reason = "new crypto action"
-    elif last_gate is not None and gate_sig != last_gate:
-        reason = "crypto gate changed"
-    elif V463_CRYPTO_SEND_NO_ACTION_DAILY and _v463_after_minute(V463_CRYPTO_DAILY_STATUS_MINUTE) and get_meta("last_v463_crypto_daily_status_day") != today:
-        reason = "daily crypto status"
-    if not reason:
-        if last_gate is None:
-            set_meta("last_v463_crypto_gate_signature", gate_sig)
-        if last_action is None:
-            set_meta("last_v463_crypto_action_signature", action_sig)
-        return False
-    header = f"🪙 CRYPTO AUTO CHECK v4.6.3 — {reason}\n\n"
-    send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
-    set_meta("last_v463_crypto_gate_signature", gate_sig)
-    set_meta("last_v463_crypto_action_signature", action_sig)
-    if reason == "daily crypto status":
-        set_meta("last_v463_crypto_daily_status_day", today)
-    audit("V463_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
-    return True
 
 # Replace the chained monthly hook with a unified user-friendly hook.
 def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
@@ -20104,65 +14093,26 @@ def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
     except Exception as exc:
         logger.exception(f"[V4.6.3 IBKR AUTO ERROR] {exc}")
 
-def _v463_label_cleanup(text: Any) -> str:
-    out = str(text)
-    for old, new in [
-        ("v4.6.2", "v4.6.3"), ("V4.6.2", "V4.6.3"),
-        ("v4.6.1", "v4.6.3"), ("V4.6.1", "V4.6.3"),
-    ]:
-        out = out.replace(old, new)
-    out = out.replace(V461_VALIDATION_STRATEGY_LABEL, V463_VALIDATION_STRATEGY_LABEL)
-    out = out.replace(V461_ALLOCATION_LABEL, V463_ALLOCATION_LABEL)
-    return out[:MAX_TELEGRAM_MESSAGE]
 
-_V463_OLD_FORMAT_ALLOCATION_PLAN = format_portfolio_allocation_plan
-_V463_OLD_FORMAT_VALIDATION = format_validation_status
-_V463_OLD_FORMAT_INSTITUTIONAL = format_institutional_status
-_V463_OLD_FORMAT_DATAHEALTH = format_datahealth_status
-_V463_OLD_FORMAT_RISK = format_riskmatrix_status
-_V463_OLD_FORMAT_STRESS = format_stress_status
-_V463_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V463_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V463_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
-
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    msg = _v463_label_cleanup(_V463_OLD_FORMAT_ALLOCATION_PLAN())
-    note = (
-        "\n\n🧭 v4.6.3 automation note:\n"
-        "• Monthly dashboard auto-sends Core/Growth/SPEC during the monthly review window.\n"
-        "• Crypto auto-checks separately because it is tactical, not monthly.\n"
-    )
-    return (msg + note)[:MAX_TELEGRAM_MESSAGE]
-
-def format_validation_status() -> str:  # type: ignore[override]
-    msg = _v463_label_cleanup(_V463_OLD_FORMAT_VALIDATION())
-    msg += (
-        "\n\nUser-friendly automation v4.6.3:\n"
-        "• Core/Growth/SPEC full monthly plans are sent together by the dashboard.\n"
-        "• Crypto sends tactical auto-check messages when action/gate changes and daily after the configured review time.\n"
-        "• Swing Alpha remains the live near-close signal engine.\n"
-    )
-    return msg[:MAX_TELEGRAM_MESSAGE]
-
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_INSTITUTIONAL() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_INSTITUTIONAL())
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_DATAHEALTH() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_DATAHEALTH())
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_RISK() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_RISK())
 
-def format_stress_status() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_STRESS() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_STRESS())
 
-def format_brokerstatus() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_BROKERSTATUS() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSTATUS())
 
-def format_brokerreconcile() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_BROKERRECONCILE() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERRECONCILE())
 
-def format_brokersyncpreview() -> str:  # type: ignore[override]
+def _V47_OLD_FORMAT_BROKERSYNCPREVIEW() -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_OLD_FORMAT_BROKERSYNCPREVIEW())
 
 def _v463_status_text() -> str:
@@ -20199,25 +14149,8 @@ def _v463_status_text() -> str:
         "No broker orders are placed. IBKR reconciliation remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
 
-_V463_OLD_HANDLE_COMMAND = handle_command
 
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v463status", "dashboardstatus", "v462status", "deploycheck"}:
-        send(_v463_status_text())
-        return
-    if text_lower in {"monthlydashboard", "rebalancedashboard", "dashboard"}:
-        send_v463_monthly_dashboard(force=True, preview_only=True)
-        return
-    if text_lower in {"cryptocheck", "cryptoalert", "cryptoscan"}:
-        maybe_send_crypto_alpha_auto_signal(force=True)
-        return
-    return _V463_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-_V463_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V47_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V463_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -20262,11 +14195,6 @@ def _v463_label_cleanup(text: Any) -> str:  # type: ignore[override]
         pass
     return out[:MAX_TELEGRAM_MESSAGE]
 
-_V463_FINAL_OLD_CORE_PLAN_FORMAT = format_wealth_core_plan
-_V463_FINAL_OLD_GROWTH_PLAN_FORMAT = format_growth_alpha_plan
-_V463_FINAL_OLD_SPEC_PLAN_FORMAT = format_spec_alpha_plan
-_V463_FINAL_OLD_CRYPTO_PLAN_FORMAT = format_crypto_alpha_plan
-_V463_FINAL_OLD_SWING_PLAN_FORMAT = format_swing_alpha_plan
 
 def format_wealth_core_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_CORE_PLAN_FORMAT(plan))
@@ -20277,7 +14205,7 @@ def format_growth_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overr
 def format_spec_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_SPEC_PLAN_FORMAT(plan))
 
-def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
+def _V483_FORMAT_CRYPTO_BASE(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v463_label_cleanup(_V463_FINAL_OLD_CRYPTO_PLAN_FORMAT(plan))
 
 def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
@@ -20308,21 +14236,6 @@ def _v463_cryptostatus_text() -> str:
         "cryptoportfolio | cryptopnl | cryptoexposure"
     )[:MAX_TELEGRAM_MESSAGE]
 
-_V463_FINAL_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower == "cryptostatus":
-        send(_v463_cryptostatus_text())
-        return
-    if text_lower == "cryptoplan":
-        send("🪙 Crypto tactical plan started. v4.6.3 scores BTC/ETH/SOL hybrid daily breakout + 4h compression modules.")
-        plan = compute_crypto_alpha_plan()
-        save_crypto_plan_signal(plan)
-        send(format_crypto_alpha_plan(plan))
-        return
-    return _V463_FINAL_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 # =============================================================================
 # V4.7.1 - LIVE OUTPUT CLEANUP / ACTIVE-SLEEVE PORTFOLIO FIX
@@ -20379,7 +14292,7 @@ def _v47_rows_section(title: str, rows: List[Dict[str, Any]], include_stop: bool
             msg += f"📦 {row.get('ticker', '?')} — row format error: {exc}\n\n"
     return msg
 
-def format_combined_portfolio_report() -> str:  # type: ignore[override]
+def _V48_OLD_COMBINED_PORTFOLIO_REPORT() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     cash = float(snapshot.get("cash", 0) or 0)
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
@@ -20392,46 +14305,48 @@ def format_combined_portfolio_report() -> str:  # type: ignore[override]
     equity = float(snapshot.get("equity", 0) or 0)
 
     msg = (
-        "📋 PORTFOLIO v4.7.1\n\n"
-        f"💵 Cash: {format_money(cash)}\n"
-        f"🏛️ Core value: {format_money(core_value)}\n"
-        f"🚀 Growth Alpha value: {format_money(growth_value)}\n"
-        f"⚡ SPEC_ALPHA value: {format_money(spec_value)}\n"
-        f"🎯 Swing Alpha value: {format_money(swing_alpha_value)}\n"
-        f"🪙 Crypto Alpha value: {format_money(crypto_value)}\n"
-        f"📦 Total active bot positions: {format_money(total_positions)}\n"
-        f"🏦 Total equity: {format_money(equity)}\n"
+        "PORTFOLIO v4.9.6\n\n"
+        f"Cash: {format_money(cash)}\n"
+        f"Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
+        f"Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
+        f"Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n"
+        f"Core value: {format_money(core_value)}\n"
+        f"Growth Alpha value: {format_money(growth_value)}\n"
+        f"SPEC_ALPHA value: {format_money(spec_value)}\n"
+        f"Swing Alpha value: {format_money(swing_alpha_value)}\n"
+        f"Crypto Alpha value: {format_money(crypto_value)}\n"
+        f"Total active bot positions: {format_money(total_positions)}\n"
+        f"Total equity: {format_money(equity)}\n"
     )
     if legacy_value > 0.01:
-        msg += f"\n⚠️ Legacy tactical value: {format_money(legacy_value)} — inactive compatibility ledger; use cleanup/manual review.\n"
+        msg += f"\nLegacy tactical value: {format_money(legacy_value)} - inactive compatibility ledger; use cleanup/manual review.\n"
     msg += "\n"
 
     try:
-        msg += _v47_rows_section("🏛️ CORE WEALTH POSITIONS", core_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("CORE WEALTH POSITIONS", core_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\n🏛️ CORE WEALTH POSITIONS\nCore section error: {exc}\n\n"
+        msg += f"\nCORE WEALTH POSITIONS\nCore section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("🚀 GROWTH_ALPHA POSITIONS", growth_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("GROWTH_ALPHA POSITIONS", growth_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\n🚀 GROWTH_ALPHA POSITIONS\nGrowth section error: {exc}\n\n"
+        msg += f"\nGROWTH_ALPHA POSITIONS\nGrowth section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("⚡ SPEC_ALPHA POSITIONS", spec_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("SPEC_ALPHA POSITIONS", spec_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\n⚡ SPEC_ALPHA POSITIONS\nSPEC section error: {exc}\n\n"
+        msg += f"\nSPEC_ALPHA POSITIONS\nSPEC section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("🎯 SWING_ALPHA POSITIONS", swing_alpha_position_market_value_details().get("rows", []), include_stop=True)
+        msg += _v47_rows_section("SWING_ALPHA POSITIONS", swing_alpha_position_market_value_details().get("rows", []), include_stop=True)
     except Exception as exc:
-        msg += f"\n🎯 SWING_ALPHA POSITIONS\nSwing Alpha section error: {exc}\n\n"
+        msg += f"\nSWING_ALPHA POSITIONS\nSwing Alpha section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("🪙 CRYPTO_ALPHA POSITIONS", crypto_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("CRYPTO_ALPHA POSITIONS", crypto_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\n🪙 CRYPTO_ALPHA POSITIONS\nCrypto section error: {exc}\n\n"
+        msg += f"\nCRYPTO_ALPHA POSITIONS\nCrypto section error: {exc}\n\n"
 
     if total_positions <= 0.01:
         msg += "No open active bot-managed positions.\n"
     return msg
 
-_V47_OLD_OPEN_RISK_DETAILS = open_risk_details
 
 def open_risk_details() -> Dict[str, float]:  # type: ignore[override]
     details = _V47_OLD_OPEN_RISK_DETAILS()
@@ -20470,19 +14385,23 @@ def _v47_equity_text() -> str:
     snapshot = compute_equity_snapshot_data()
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
     lines = [
-        "💼 ACCOUNT EQUITY v4.7.1",
+        "ACCOUNT EQUITY v4.9.6",
         "",
-        f"💵 Cash: {format_money(snapshot['cash'])}",
-        f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
-        f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}",
-        f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}",
-        f"🎯 Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}",
-        f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}",
-        f"📦 Total active bot positions: {format_money(snapshot['positions_value'])}",
-        f"🏦 Total Equity: {format_money(snapshot['equity'])}",
+        f"Cash: {format_money(snapshot['cash'])}",
+        f"Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}",
+        f"Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}",
+        f"Net external cash: {format_money(snapshot.get('net_external_cash', 0))}",
+        f"Performance base capital: {format_money(snapshot.get('performance_base_capital', get_performance_base_capital()))}",
+        f"Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
+        f"Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}",
+        f"SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}",
+        f"Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}",
+        f"Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}",
+        f"Total active bot positions: {format_money(snapshot['positions_value'])}",
+        f"Total Equity: {format_money(snapshot['equity'])}",
     ]
     if legacy_value > 0.01:
-        lines.insert(3, f"⚠️ Legacy tactical positions: {format_money(legacy_value)}")
+        lines.insert(7, f"Legacy tactical positions: {format_money(legacy_value)}")
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
 
 def _v47_openrisk_text() -> str:
@@ -20551,68 +14470,17 @@ def _v47_status_text() -> str:
         "• IBKR reconciliation remains read-only; no broker orders are placed."
     )[:MAX_TELEGRAM_MESSAGE]
 
-_V47_OLD_FORMAT_ALLOCATION = format_portfolio_allocation_plan
-_V47_OLD_FORMAT_VALIDATION = format_validation_status
-_V47_OLD_FORMAT_INSTITUTIONAL = format_institutional_status
-_V47_OLD_FORMAT_DATAHEALTH = format_datahealth_status
-_V47_OLD_FORMAT_RISK = format_riskmatrix_status
-_V47_OLD_FORMAT_STRESS = format_stress_status
-_V47_OLD_FORMAT_BROKERSTATUS = format_brokerstatus
-_V47_OLD_FORMAT_BROKERRECONCILE = format_brokerreconcile
-_V47_OLD_FORMAT_BROKERSYNCPREVIEW = format_brokersyncpreview
 
-def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
-    plan = dynamic_portfolio_allocation_targets()
-    risk = plan.get("risk_guard", {}) or {}
-    return (
-        "🏛️ ACTIVE ALLOCATION PLAN v4.7.1\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
-        f"🕒 NY time: {plan.get('ny_time')}\n"
-        f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))}\n"
-        f"🛡️ Risk guard: {risk.get('recommended_action', 'Normal risk mode.')}\n\n"
-        "Target active account buckets:\n"
-        f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
-        f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
-        f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
-        f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
-        f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
-        f"💵 Cash reserve: {plan.get('cash_reserve_pct')}%\n\n"
-        "Rules:\n"
-        "• Core/Growth/SPEC are monthly rotation sleeves.\n"
-        "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
-        "• IBKR reconciliation is read-only; no broker orders are placed.\n"
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def format_validation_status() -> str:  # type: ignore[override]
-    return (
-        "🧪 VALIDATION STATUS v4.7.1\n\n"
-        "Strategy: v4.7.1 active-sleeve cleanup over v4.6.3 logic\n"
-        f"Allocation: {V47_ALLOCATION_LABEL}\n\n"
-        "Known limitations:\n"
-        "- Strategy remains aggressive and growth/swing/crypto-led.\n"
-        "- Swing Alpha requires forward testing; backtests are not broker-grade execution simulation.\n"
-        "- Crypto permission/gate required; no crypto action without valid signal.\n"
-        "- Manual execution and read-only IBKR reconciliation are still required.\n"
-        "- Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.\n\n"
-        "Live validation rules:\n"
-        "• Core/Growth/SPEC stay monthly rotation sleeves; daily checks are monitoring unless monthly-lock allows action.\n"
-        "• Swing Alpha uses swingbuy/swingsell only.\n"
-        "• Crypto uses cryptobuy/cryptosell only.\n"
-        "• Use brokerreconcile/brokersyncpreview after manual fills.\n"
-        "• Do not treat external legacy IBKR positions as bot-managed strategy positions.\n"
-        "• Disabled VCP/Bear/Options are not active live sleeves.\n"
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def format_institutional_status() -> str:  # type: ignore[override]
+def _V48_OLD_INSTITUTIONAL() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_INSTITUTIONAL()).replace("v4.6.3", "v4.7")[:MAX_TELEGRAM_MESSAGE]
 
-def format_datahealth_status() -> str:  # type: ignore[override]
+def _V48_OLD_DATAHEALTH() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_DATAHEALTH())
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V48_OLD_RISKMATRIX() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_RISK())
 
-def format_stress_status() -> str:  # type: ignore[override]
+def _V48_OLD_STRESS() -> str:  # type: ignore[override]
     return _v47_label_cleanup(_V47_OLD_FORMAT_STRESS())
 
 def format_brokerstatus() -> str:  # type: ignore[override]
@@ -20648,9 +14516,8 @@ def _v47_sleevestatus_text() -> str:
         "• Options: 0% — research-only, not live."
     )[:MAX_TELEGRAM_MESSAGE]
 
-_V47_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V48_OLD_EXPORT_STATE_BUNDLE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V47_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -20667,47 +14534,6 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
         print(f"[V4.7.1 EXPORT WARNING] {exc}")
     return zip_path
 
-_V47_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v47status", "v471status", "cleanupstatus", "activelevers", "activeledgers"}:
-        send(_v47_status_text())
-        return
-    if text_lower == "equity":
-        send(_v47_equity_text())
-        return
-    if text_lower == "openrisk":
-        send(_v47_openrisk_text())
-        return
-    if text_lower == "scanstatus":
-        send(_v47_scanstatus_text())
-        return
-    if text_lower == "sleevestatus":
-        send(_v47_sleevestatus_text())
-        return
-    if text_lower in {"help", "/help"}:
-        send(
-            "Commands v4.7.1:\n"
-            "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus | v47status | sleevestatus\n"
-            "wealthplan | corestatus | coreportfolio | corepnl | coreexposure | corebuy | coresell\n"
-            "growthplan | growthstatus | growthportfolio | growthpnl | growthexposure | growthbuy | growthsell\n"
-            "specplan | specstatus | specportfolio | specpnl | specexposure | specbuy | specsell\n"
-            "swingstatus | swingplan | swingportfolio | swingpnl | swingexposure | swingbuy | swingsell | forcescan\n"
-            "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptopnl | cryptoexposure | cryptobuy | cryptosell\n"
-            "brokerstatus | brokerreconcile | brokerpositions | brokerexternal | brokersyncpreview | brokersyncapply CONFIRM\n"
-            "monthlydashboard | download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume"
-        )
-        return
-    if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
-        send("ℹ️ v4.7.1: Legacy VCP/Bear/Options sleeves are not active live strategies. Swing Alpha replaced the tactical stock signal path. No VCP/Bear action is available.")
-        return
-    if text_lower == "portfolio":
-        send(format_combined_portfolio_report())
-        return
-    return _V47_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
 
 # =============================================================================
 # V4.8 - ACTIVE-ONLY SINGLE-FILE CLEANUP
@@ -20722,53 +14548,14 @@ V48_VERSION = "v4.8.1-active-only-clean-20-45-15-10-10-monitor"
 if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
     STRATEGY_VERSION = V48_VERSION
 
-LEGACY_TACTICAL_REMOVED = True
 BEAR_SLEEVE_ENABLED = False
 BEAR_WATCHLIST = []
-V2_MAX_SIGNALS_PER_SCAN = 0
-V2_ALLOW_VCP = False
-V2_ALLOW_BREAKOUTS = False
-V2_ALLOW_PULLBACKS = False
-V2_ALLOW_MEDIUM = False
-V2_ALLOW_WEAK = False
 V45_LONG_VCP_ALLOC = 0.0
 V45_LONG_VCP_SIGNAL_ENGINE_ENABLED = False
-V46_LONG_VCP_ALLOC = 0.0
-V46_BEAR_ALLOC = 0.0
 
 V48_LOGIC_LABEL = "v4.8 active-only clean over v4.7.1 active sleeves"
 V48_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10"
 
-def sleeve_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
-    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
-    labels = {
-        "CORE_WEALTH": "🏛️ CORE WEALTH",
-        "GROWTH_ALPHA": "🚀 GROWTH ALPHA",
-        "SPEC_ALPHA": "⚡ SPEC ALPHA",
-        "SWING_ALPHA": "🎯 SWING ALPHA",
-        "CRYPTO_ALPHA": "🪙 CRYPTO ALPHA",
-    }
-    if sleeve in labels:
-        return labels[sleeve]
-    if sleeve in {"LONG_VCP", "BEAR_INVERSE", "BEAR_STOCK"}:
-        return "⚪ REMOVED LEGACY SLEEVE"
-    return f"⚙️ {sleeve or 'ACTIVE BOT'}"
-
-def sleeve_short_label(entry_data: Dict[str, Any]) -> str:  # type: ignore[override]
-    sleeve = str((entry_data or {}).get("strategy_sleeve", "")).upper()
-    if sleeve in {"LONG_VCP", "BEAR_INVERSE", "BEAR_STOCK"}:
-        return "REMOVED_LEGACY"
-    return sleeve or "ACTIVE_BOT"
-
-def setup_label(setup_type: str) -> str:  # type: ignore[override]
-    setup = str(setup_type or "").lower()
-    if "macd" in setup or "vah" in setup or "swing" in setup:
-        return "🎯 Swing Alpha MACD + VAH Reclaim"
-    if "crypto" in setup:
-        return "🪙 Crypto Hybrid Major Trend"
-    if setup in {"vcp_breakout", "bear_vcp_inverse"}:
-        return "⚪ Removed legacy setup"
-    return f"⚙️ {setup_type}"
 
 def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[override]
     try:
@@ -20822,8 +14609,9 @@ def dynamic_portfolio_allocation_targets() -> Dict[str, Any]:  # type: ignore[ov
 def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     plan = dynamic_portfolio_allocation_targets()
     risk = plan.get("risk_guard", {}) or {}
+    snapshot = compute_equity_snapshot_data()
     return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.8.1\n\n"
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.9.6\n\n"
         "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
@@ -20836,6 +14624,11 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
         f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
         f"💵 Cash reserve / unused: {plan.get('cash_reserve_pct')}%\n\n"
+        "Cash-flow ledger:\n"
+        f"➕ Deposited cash recorded: {format_money(float(snapshot.get('deposited_cash', 0) or 0))}\n"
+        f"➖ Withdrawals recorded: {format_money(float(snapshot.get('withdrawn_cash', 0) or 0))}\n"
+        f"🔁 Net external cash: {format_money(float(snapshot.get('net_external_cash_flow', 0) or 0))}\n"
+        f"📏 Performance base capital: {format_money(float(snapshot.get('performance_base_capital', 0) or 0))}\n\n"
         "Removed from live bot:\n"
         "• Legacy VCP: removed/replaced by Swing Alpha.\n"
         "• Bear / inverse sleeve: removed.\n"
@@ -20843,49 +14636,8 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
         "Rules:\n"
         "• Core/Growth/SPEC are monthly rotation sleeves.\n"
         "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
+        "• Deposits raise cash, performance base, and withdrawal HWM; deposits are not profit.\n"
         "• IBKR reconciliation is read-only; no broker orders are placed."
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def format_validation_status() -> str:  # type: ignore[override]
-    return (
-        "🧪 VALIDATION STATUS v4.8.1\n\n"
-        "Strategy: v4.8.1 active-only clean over v4.8\n"
-        "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
-        "Known limitations:\n"
-        "- v4.8 keeps v4.7.1 active strategy logic; this patch removes disabled legacy code paths.\n"
-        "- Swing Alpha and Crypto remain aggressive tactical sleeves requiring forward validation.\n"
-        "- Backtests are not broker-grade execution guarantees.\n"
-        "- Manual execution and read-only IBKR reconciliation are still required.\n"
-        "- Crypto permission/gate required before crypto trades.\n\n"
-        "Live validation rules:\n"
-        "• Use corebuy/growthbuy/specbuy/swingbuy/cryptobuy only for their matching ledgers.\n"
-        "• Legacy bought/sold VCP/Bear commands are intentionally disabled.\n"
-        "• Do not chase above max entry guide.\n"
-        "• Reconcile with IBKR after manual fills.\n"
-        "• External legacy IBKR positions remain outside bot strategy."
-    )[:MAX_TELEGRAM_MESSAGE]
-
-def _v48_status_text() -> str:
-    try:
-        win = _v44_monthly_rebalance_window_info()
-        win_txt = f"{yes_no(bool(win.get('open')))} — {win.get('reason')}"
-    except Exception:
-        win_txt = "n/a"
-    return (
-        "🛠️ V4.8.1 ACTIVE-ONLY CLEANUP STATUS\n\n"
-        f"Strategy display: {STRATEGY_VERSION}\n"
-        f"Strategy logic: {V48_LOGIC_LABEL}\n"
-        f"Allocation: {V48_ALLOCATION_LABEL}\n"
-        f"Monthly-lock enabled: {yes_no(V44_MONTHLY_LOCK_ENABLED)} | Window: {win_txt}\n"
-        f"Swing Alpha live signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED)}\n"
-        f"Crypto auto-check: {yes_no(V463_CRYPTO_AUTO_CHECK_ENABLED)}\n"
-        f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)} | read-only only\n\n"
-        "Removed from live code path:\n"
-        "• Legacy VCP bought/sold strategy\n"
-        "• Bear / inverse strategy\n"
-        "• Options strategy placeholder\n\n"
-        "Active commands remain:\n"
-        "core*, growth*, spec*, swing*, crypto*, broker*, monthlydashboard, withdrawal/export/status commands."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
@@ -20896,41 +14648,35 @@ def _v48_label_cleanup(text: Any) -> str:
         out = out.replace(old, "v4.8" if old.startswith("v") else "V4.8")
     return out[:MAX_TELEGRAM_MESSAGE]
 
-_V48_OLD_COMBINED_PORTFOLIO_REPORT = format_combined_portfolio_report
-def format_combined_portfolio_report() -> str:  # type: ignore[override]
+def _V481_COMBINED_PORTFOLIO_REPORT() -> str:  # type: ignore[override]
     return _v48_label_cleanup(_V48_OLD_COMBINED_PORTFOLIO_REPORT())
 
-def _v48_equity_text() -> str:
+def _V481_EQUITY_TEXT_BASE() -> str:
     return _v48_label_cleanup(_v47_equity_text())
 
-def _v48_openrisk_text() -> str:
+def _V481_OPENRISK_TEXT_BASE() -> str:
     return _v48_label_cleanup(_v47_openrisk_text())
 
-def _v48_scanstatus_text() -> str:
+def _V481_SCANSTATUS_TEXT_BASE() -> str:
     return _v48_label_cleanup(_v47_scanstatus_text())
 
-def _v48_sleevestatus_text() -> str:
+def _V481_SLEEVE_TEXT_BASE() -> str:
     return _v48_label_cleanup(_v47_sleevestatus_text())
 
-_V48_OLD_RISKMATRIX = format_riskmatrix_status
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V481_RISK_BASE() -> str:  # type: ignore[override]
     return _v48_label_cleanup(_V48_OLD_RISKMATRIX())
 
-_V48_OLD_STRESS = format_stress_status
-def format_stress_status() -> str:  # type: ignore[override]
+def _V481_STRESS_BASE() -> str:  # type: ignore[override]
     return _v48_label_cleanup(_V48_OLD_STRESS())
 
-_V48_OLD_INSTITUTIONAL = format_institutional_status
 def format_institutional_status() -> str:  # type: ignore[override]
     return _v48_label_cleanup(_V48_OLD_INSTITUTIONAL())
 
-_V48_OLD_DATAHEALTH = format_datahealth_status
 def format_datahealth_status() -> str:  # type: ignore[override]
     return _v48_label_cleanup(_V48_OLD_DATAHEALTH())
 
-_V48_OLD_EXPORT_STATE_BUNDLE = export_state_bundle
 
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V482_EXPORT_BASE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V48_OLD_EXPORT_STATE_BUNDLE(prefix=prefix)
     try:
         summary_path = os.path.join(DATA_DIR, "v4_8_1_active_only_manifest.json")
@@ -20949,70 +14695,8 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
         print(f"[V4.8 EXPORT MANIFEST ERROR] {exc}")
     return zip_path
 
-_V48_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    first = text_lower.split()[0] if text_lower else ""
-    if text_lower in {"v481status", "v48status", "activeonlystatus", "cleanupstatus"}:
-        send(_v48_status_text())
-        return
-    if text_lower == "portfolio":
-        send(format_combined_portfolio_report())
-        return
-    if text_lower == "equity":
-        send(_v48_equity_text())
-        return
-    if text_lower == "openrisk":
-        send(_v48_openrisk_text())
-        return
-    if text_lower == "scanstatus":
-        send(_v48_scanstatus_text())
-        return
-    if text_lower == "sleevestatus":
-        send(_v48_sleevestatus_text())
-        return
-    if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
-        send("ℹ️ v4.8.1: Legacy VCP/Bear/Options strategies were removed from the live bot. Swing Alpha owns the tactical stock signal path.")
-        return
-    if first in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
-        send("❌ Legacy VCP/Bear bought/sold commands are disabled in v4.8.1. Use swingbuy/swingsell for Swing Alpha, or core/growth/spec/crypto commands for their ledgers.")
-        return
-    if text_lower in {"help", "/help"}:
-        send(
-            "Commands v4.8.1:\n"
-            "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus | v481status | v48status | sleevestatus\n"
-            "wealthplan | corestatus | coreportfolio | corepnl | coreexposure | corebuy | coresell\n"
-            "growthplan | growthstatus | growthportfolio | growthpnl | growthexposure | growthbuy | growthsell\n"
-            "specplan | specstatus | specportfolio | specpnl | specexposure | specbuy | specsell\n"
-            "swingstatus | swingplan | swingportfolio | swingpnl | swingexposure | swingbuy | swingsell | forcescan\n"
-            "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptopnl | cryptoexposure | cryptobuy | cryptosell\n"
-            "brokerstatus | brokerreconcile | brokerpositions | brokerexternal | brokersyncpreview | brokersyncapply CONFIRM\n"
-            "monthlydashboard | download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume"
-        )
-        return
-    return _V48_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
 
 # ---- v4.8.1 active-only verification cleanup ----
-V481_LOGIC_LABEL = "v4.8.1 active-only clean; v4.8 strategy logic unchanged"
-
-def v481_status_text() -> str:
-    base = _v48_status_text()
-    base = base.replace("V4.8 ACTIVE-ONLY CLEANUP STATUS", "V4.8.1 ACTIVE-ONLY CLEANUP STATUS")
-    base = base.replace("v4.8-active-only-clean", "v4.8.1-active-only-clean")
-    base += "\n\n🧪 v4.8.1 check: legacy VCP/Bear manager is not called; active tactical management is Swing Alpha only."
-    return base[:MAX_TELEGRAM_MESSAGE]
-
-_V481_OLD_HANDLE_COMMAND = handle_command
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower == "v481status":
-        send(v481_status_text())
-        return
-    return _V481_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
 
 
 # v4.8.1 visible label wrappers for all user-facing active reports.
@@ -21033,37 +14717,52 @@ def _v481_label_cleanup(text: Any) -> str:
     out = out.replace("v4.8: Legacy", "v4.8.1: Legacy")
     return out[:MAX_TELEGRAM_MESSAGE]
 
-_V481_COMBINED_PORTFOLIO_REPORT = format_combined_portfolio_report
-def format_combined_portfolio_report() -> str:  # type: ignore[override]
+def _V482_PORTFOLIO_BASE() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_COMBINED_PORTFOLIO_REPORT())
 
-_V481_EQUITY_TEXT_BASE = _v48_equity_text
 def _v48_equity_text() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_EQUITY_TEXT_BASE())
 
-_V481_OPENRISK_TEXT_BASE = _v48_openrisk_text
 def _v48_openrisk_text() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_OPENRISK_TEXT_BASE())
 
-_V481_SCANSTATUS_TEXT_BASE = _v48_scanstatus_text
 def _v48_scanstatus_text() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_SCANSTATUS_TEXT_BASE())
 
-_V481_SLEEVE_TEXT_BASE = _v48_sleevestatus_text
 def _v48_sleevestatus_text() -> str:  # type: ignore[override]
-    return _v481_label_cleanup(_V481_SLEEVE_TEXT_BASE())
+    snapshot = compute_equity_snapshot_data()
+    alloc = dynamic_portfolio_allocation_targets()
+    equity = float(snapshot.get("equity", 0) or 0)
 
-_V481_RISK_BASE = format_riskmatrix_status
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+    def pct(value: Any) -> float:
+        try:
+            return 0.0 if equity <= 0 else (float(value or 0) / equity) * 100
+        except Exception:
+            return 0.0
+
+    return (
+        "🧭 ACTIVE SLEEVE STATUS v4.9.6\n\n"
+        f"💼 Equity: {format_money(equity)}\n"
+        f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n"
+        f"➕ Deposited cash recorded: {format_money(snapshot.get('deposited_cash', 0))}\n"
+        f"➖ Withdrawals recorded: {format_money(snapshot.get('withdrawn_cash', 0))}\n"
+        f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash_flow', 0))}\n\n"
+        f"🏛️ Core: {format_money(snapshot.get('core_positions_value', 0))} / target {alloc.get('core_wealth_pct')}%\n"
+        f"🚀 Growth Alpha: {format_money(snapshot.get('growth_alpha_positions_value', 0))} / target {alloc.get('growth_alpha_pct')}%\n"
+        f"⚡ SPEC_ALPHA: {format_money(snapshot.get('spec_positions_value', 0))} / target {alloc.get('spec_alpha_pct')}%\n"
+        f"🎯 Swing Alpha: {format_money(snapshot.get('swing_alpha_positions_value', 0))} / target {alloc.get('swing_alpha_pct')}%\n"
+        f"🪙 Crypto Alpha: {format_money(snapshot.get('crypto_alpha_positions_value', 0))} / target {alloc.get('crypto_alpha_pct')}%\n\n"
+        "Disabled live strategies:\n"
+        "• Long VCP: 0% — replaced by Swing Alpha.\n"
+        "• Bear/inverse: 0% — disabled.\n"
+        "• Options: 0% — research-only, not live."
+    )[:MAX_TELEGRAM_MESSAGE]
+
+def _V482_RISK_BASE() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_RISK_BASE())
 
-_V481_STRESS_BASE = format_stress_status
-def format_stress_status() -> str:  # type: ignore[override]
+def _V482_STRESS_BASE() -> str:  # type: ignore[override]
     return _v481_label_cleanup(_V481_STRESS_BASE())
-
-_V481_VALIDATION_BASE = format_validation_status
-def format_validation_status() -> str:  # type: ignore[override]
-    return _v481_label_cleanup(_V481_VALIDATION_BASE())
 
 
 # =============================================================================
@@ -21102,7 +14801,6 @@ try:
 except Exception:
     pass
 
-_V482_OLD_PUBLIC_SIGNAL_FOOTER = public_signal_footer
 
 def public_signal_footer() -> str:  # type: ignore[override]
     return (
@@ -21289,8 +14987,6 @@ def _v482_send_public_monthly_bundle(core_plan: Optional[Dict[str, Any]], growth
         send_public_signal(format_public_monthly_plan("SPEC Alpha", spec_plan))
 
 
-_V482_OLD_SEND_V463_MONTHLY_DASHBOARD = send_v463_monthly_dashboard
-
 def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False) -> bool:  # type: ignore[override]
     # Preserve private behavior first. Public forwarding is added only when an actual monthly dashboard is sent.
     sent_private = _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force=force, preview_only=preview_only)
@@ -21308,114 +15004,6 @@ def send_v463_monthly_dashboard(force: bool = False, preview_only: bool = False)
     return sent_private
 
 
-_V482_OLD_MAYBE_SEND_CRYPTO_ALPHA_AUTO_SIGNAL = maybe_send_crypto_alpha_auto_signal
-
-def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: ignore[override]
-    if not (V463_CRYPTO_AUTO_CHECK_ENABLED or force):
-        return False
-    if not CRYPTO_ALPHA_ENABLED:
-        return False
-    n = ny_now()
-    if not force:
-        last_ts = get_meta("last_v482_crypto_auto_check_ts") or get_meta("last_v463_crypto_auto_check_ts")
-        if last_ts:
-            try:
-                elapsed = (now_ts() - float(last_ts)) / 60.0
-                if elapsed < max(15, V463_CRYPTO_AUTO_CHECK_INTERVAL_MIN):
-                    return False
-            except Exception:
-                pass
-    try:
-        plan = compute_crypto_alpha_plan()
-    except Exception as exc:
-        logger.exception(f"[V4.8.2 CRYPTO AUTO CHECK ERROR] {exc}")
-        if force:
-            send(f"⚠️ Crypto auto-check failed: {exc}")
-        return False
-    set_meta("last_v482_crypto_auto_check_ts", str(now_ts()))
-    gate_sig = _v463_crypto_gate_signature(plan)
-    action_sig = _v463_crypto_action_signature(plan)
-    last_gate = get_meta("last_v482_crypto_gate_signature") or get_meta("last_v463_crypto_gate_signature")
-    last_action = get_meta("last_v482_crypto_action_signature") or get_meta("last_v463_crypto_action_signature")
-    reason = ""
-    public_reason = ""
-    if force:
-        reason = "manual check"
-    elif action_sig != last_action:
-        if action_sig != "NO_ACTION":
-            reason = "new crypto action"
-            public_reason = reason
-        elif last_action and last_action != "NO_ACTION":
-            reason = "crypto action cleared"
-    elif last_gate is not None and gate_sig != last_gate:
-        reason = "crypto gate changed"
-        public_reason = reason if V482_PUBLIC_CRYPTO_GATE_STATUS_ENABLED else ""
-    if not reason:
-        if last_gate is None:
-            set_meta("last_v482_crypto_gate_signature", gate_sig)
-        if last_action is None:
-            set_meta("last_v482_crypto_action_signature", action_sig)
-        return False
-    header = f"🪙 CRYPTO AUTO CHECK v4.8.2 — {reason}\n\n"
-    send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
-    if public_reason and PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED:
-        ok, info = send_public_signal(format_public_crypto_plan(plan, reason=public_reason))
-        if not ok:
-            send(f"⚠️ Public crypto alert failed: {info}")
-    set_meta("last_v482_crypto_gate_signature", gate_sig)
-    set_meta("last_v482_crypto_action_signature", action_sig)
-    # Also set old keys so old wrappers do not produce duplicate messages.
-    set_meta("last_v463_crypto_gate_signature", gate_sig)
-    set_meta("last_v463_crypto_action_signature", action_sig)
-    audit("V482_CRYPTO_AUTO_CHECK", f"reason={reason} action={action_sig} gate={gate_sig}")
-    return True
-
-
-def _v482_status_text() -> str:
-    base = v481_status_text()
-    base = base.replace("V4.8.1", "V4.8.2")
-    base = base.replace("v4.8.1", "v4.8.2")
-    extra = (
-        "\n\n📣 v4.8.2 public/crypto alert cleanup:\n"
-        f"• Global public enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
-        f"• Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
-        f"• Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
-        f"• Public Swing Alpha: {yes_no(SWING_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
-        f"• Public Crypto Alpha: {yes_no(CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
-        f"• Crypto no-action daily spam: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
-        "• Crypto auto alerts are event-driven: new action, action cleared, or gate change."
-    )
-    return (base + extra)[:MAX_TELEGRAM_MESSAGE]
-
-
-_V482_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v482status", "publicstatus", "v481status", "v48status", "activeonlystatus", "cleanupstatus"}:
-        send(_v482_status_text())
-        return
-    if text_lower in {"postchannelterms", "publicterms"}:
-        ok, info = send_public_signal(public_channel_terms_text())
-        send(f"Public terms status: {info if ok else 'FAILED - ' + info}")
-        return
-    if text_lower in {"testchannel", "testpublic"}:
-        ok, info = send_public_signal("✅ Public channel test from v4.8.2. If you see this, public forwarding works.\n\n" + public_signal_footer())
-        send(f"Public test status: {info if ok else 'FAILED - ' + info}")
-        return
-    if text_lower in {"publicdashboard", "publicmonthlydashboard", "testpublicdashboard"}:
-        try:
-            core_plan, growth_plan, spec_plan, crypto_plan, errors = _v463_prepare_dashboard_plans()
-            _v482_send_public_monthly_bundle(core_plan, growth_plan, spec_plan, crypto_plan, errors)
-            send("Public dashboard test sent if PUBLIC_SIGNAL_ENABLED=1 and SIGNAL_CHANNEL_ID is configured.")
-        except Exception as exc:
-            logger.exception(f"[V4.8.2 PUBLIC DASHBOARD TEST ERROR] {exc}")
-            send(f"Public dashboard test failed: {exc}")
-        return
-    return _V482_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
 # Label cleanup for v4.8.2 on user-facing reports.
 def _v482_label_cleanup(text: Any) -> str:
     out = str(text)
@@ -21427,29 +15015,20 @@ def _v482_label_cleanup(text: Any) -> str:
     out = out.replace("V4.8.2.2", "V4.8.2")
     return out[:MAX_TELEGRAM_MESSAGE]
 
-_V482_PORTFOLIO_BASE = format_combined_portfolio_report
 
-def format_combined_portfolio_report() -> str:  # type: ignore[override]
+def _V483_FORMAT_PORTFOLIO_BASE() -> str:  # type: ignore[override]
     return _v482_label_cleanup(_V482_PORTFOLIO_BASE())
 
-_V482_RISK_BASE = format_riskmatrix_status
 
-def format_riskmatrix_status() -> str:  # type: ignore[override]
+def _V483_FORMAT_RISK_BASE() -> str:  # type: ignore[override]
     return _v482_label_cleanup(_V482_RISK_BASE())
 
-_V482_STRESS_BASE = format_stress_status
 
-def format_stress_status() -> str:  # type: ignore[override]
+def _V483_FORMAT_STRESS_BASE() -> str:  # type: ignore[override]
     return _v482_label_cleanup(_V482_STRESS_BASE())
 
-_V482_VALIDATION_BASE = format_validation_status
 
-def format_validation_status() -> str:  # type: ignore[override]
-    return _v482_label_cleanup(_V482_VALIDATION_BASE())
-
-_V482_EXPORT_BASE = export_state_bundle
-
-def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
+def _V483_EXPORT_BASE(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V482_EXPORT_BASE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -21484,9 +15063,12 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
 # - Do not change active strategy scoring, allocation, ledgers, IBKR behavior, or
 #   order execution behavior.
 
-V483_VERSION = "v4.8.3-final-freeze-20-45-15-10-10-monitor"
-V483_LOGIC_LABEL = "v4.8.3 final freeze: active-only Core/Growth/SPEC/Swing/Crypto with public alerts"
-V483_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V496_VERSION = "v4.9.6-final-freeze-depositcash-20-45-15-10-10-monitor"
+V496_LOGIC_LABEL = "v4.9.6: v4.9.4 review-fixed strategy with depositcash accounting"
+V496_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
+V483_VERSION = V496_VERSION
+V483_LOGIC_LABEL = V496_LOGIC_LABEL
+V483_ALLOCATION_LABEL = V496_ALLOCATION_LABEL
 V483_CRYPTO_ALERT_ON_GATE_OPEN = os.getenv("V483_CRYPTO_ALERT_ON_GATE_OPEN", "1").strip() != "0"
 
 if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
@@ -21496,45 +15078,24 @@ if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
 def _v483_label_cleanup(text: Any) -> str:
     out = str(text)
     replacements = [
-        ("v4.8.2", "v4.8.3"), ("V4.8.2", "V4.8.3"),
-        ("v4.8.1", "v4.8.3"), ("V4.8.1", "V4.8.3"),
-        ("v4.8", "v4.8.3"), ("V4.8", "V4.8.3"),
-        ("v4.6.3", "v4.8.3"), ("V4.6.3", "V4.8.3"),
-        ("v4.6.2", "v4.8.3"), ("V4.6.2", "V4.8.3"),
-        ("v4.4.3", "v4.8.3"), ("V4.4.3", "V4.8.3"),
-        ("v4.3", "v4.8.3"), ("V4.3", "V4.8.3"),
-        ("v3.8", "v4.8.3"), ("V3.8", "V4.8.3"),
-        ("v3.7", "v4.8.3"), ("V3.7", "V4.8.3"),
-        ("v3.6", "v4.8.3"), ("V3.6", "V4.8.3"),
+        ("v4.8.3", "v4.9.6"), ("V4.8.3", "V4.9.6"),
+        ("v4.8.2", "v4.9.6"), ("V4.8.2", "V4.9.6"),
+        ("v4.8.1", "v4.9.6"), ("V4.8.1", "V4.9.6"),
+        ("v4.8", "v4.9.6"), ("V4.8", "V4.9.6"),
+        ("v4.7.1", "v4.9.6"), ("V4.7.1", "V4.9.6"),
+        ("v4.7", "v4.9.6"), ("V4.7", "V4.9.6"),
+        ("v4.6.3", "v4.9.6"), ("V4.6.3", "V4.9.6"),
+        ("v4.6.2", "v4.9.6"), ("V4.6.2", "V4.9.6"),
+        ("v4.4.3", "v4.9.6"), ("V4.4.3", "V4.9.6"),
+        ("v4.3", "v4.9.6"), ("V4.3", "V4.9.6"),
+        ("v3.8", "v4.9.6"), ("V3.8", "V4.9.6"),
+        ("v3.7", "v4.9.6"), ("V3.7", "V4.9.6"),
+        ("v3.6", "v4.9.6"), ("V3.6", "V4.9.6"),
     ]
     for old, new in replacements:
         out = out.replace(old, new)
-    # Undo accidental repeated replacements caused by generic v4.8 -> v4.8.3.
-    while "v4.8.3.3" in out or "V4.8.3.3" in out:
-        out = out.replace("v4.8.3.3", "v4.8.3").replace("V4.8.3.3", "V4.8.3")
     return out[:MAX_TELEGRAM_MESSAGE]
 
-
-def v483_status_text() -> str:
-    try:
-        base = _v482_status_text()
-    except Exception:
-        base = "🛠️ V4.8.3 FINAL FREEZE STATUS\n"
-    base = _v483_label_cleanup(base)
-    extra = (
-        "\n\n✅ v4.8.3 final checks:\n"
-        f"• Strategy display: {STRATEGY_VERSION}\n"
-        f"• Allocation: {V483_ALLOCATION_LABEL}\n"
-        "• Active sleeves only: Core, Growth, SPEC, Swing Alpha, Crypto.\n"
-        "• Legacy VCP/Bear/Options are removed from live operation and command path.\n"
-        "• Crypto auto alerts are action/event driven; daily no-action crypto spam is off.\n"
-        "• Public channel uses percentage guidance only; no private share counts.\n"
-        "• IBKR reconciliation remains read-only; no broker orders are placed."
-    )
-    return (base + extra)[:MAX_TELEGRAM_MESSAGE]
-
-
-_V483_OLD_CRYPTO_AUTO = maybe_send_crypto_alpha_auto_signal
 
 def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: ignore[override]
     """Event-only crypto auto alerts.
@@ -21618,10 +15179,6 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: i
 
 
 # Final label wrappers.
-_V483_FORMAT_PORTFOLIO_BASE = format_combined_portfolio_report
-_V483_FORMAT_RISK_BASE = format_riskmatrix_status
-_V483_FORMAT_STRESS_BASE = format_stress_status
-_V483_FORMAT_VALIDATION_BASE = format_validation_status
 
 try:
     _V483_FORMAT_INSTITUTIONAL_BASE = format_institutional_status
@@ -21671,10 +15228,6 @@ def format_stress_status() -> str:  # type: ignore[override]
     return _v483_label_cleanup(_V483_FORMAT_STRESS_BASE())
 
 
-def format_validation_status() -> str:  # type: ignore[override]
-    return _v483_label_cleanup(_V483_FORMAT_VALIDATION_BASE())
-
-
 if _V483_FORMAT_INSTITUTIONAL_BASE is not None:
     def format_institutional_status() -> str:  # type: ignore[override]
         return _v483_label_cleanup(_V483_FORMAT_INSTITUTIONAL_BASE())
@@ -21704,58 +15257,27 @@ if _V483_FORMAT_SLEEVE_BASE is not None:
         return _v483_label_cleanup(_V483_FORMAT_SLEEVE_BASE())
 
 
-_V483_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus"}:
-        send(v483_status_text())
-        return
-    if text_lower in {"bearstatus", "vcpstatus"}:
-        send(
-            "ℹ️ V4.8.3 ACTIVE-ONLY STATUS\n\n"
-            "Legacy VCP, Bear/inverse, and Options strategies are removed from live operation.\n"
-            "Swing Alpha owns the tactical stock signal path.\n\n"
-            "Use: swingstatus, swingplan, swingbuy, swingsell."
-        )
-        return
-    if text_lower.split(" ")[0] in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
-        send(
-            "❌ Legacy VCP/Bear bought/sold commands are disabled in v4.8.3.\n\n"
-            "Use the active ledger commands only:\n"
-            "• corebuy / coresell\n"
-            "• growthbuy / growthsell\n"
-            "• specbuy / specsell\n"
-            "• swingbuy / swingsell\n"
-            "• cryptobuy / cryptosell"
-        )
-        return
-    return _V483_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
-
-_V483_EXPORT_BASE = export_state_bundle
-
 def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignore[override]
     zip_path = _V483_EXPORT_BASE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
-            z.writestr("v483_final_freeze.json", json.dumps(safe_convert({
-                "version": V483_VERSION,
-                "strategy_logic": V483_LOGIC_LABEL,
-                "allocation": V483_ALLOCATION_LABEL,
+            z.writestr("v496_final_freeze.json", json.dumps(safe_convert({
+                "version": V496_VERSION,
+                "strategy_logic": V496_LOGIC_LABEL,
+                "allocation": V496_ALLOCATION_LABEL,
+                "cash_accounting": "depositcash records external principal; setcash is disabled; withdrawals use deposit-adjusted HWM",
                 "crypto_alerts": "event/action driven; daily no-action spam disabled; passive gate-closed alerts disabled",
                 "public_channel": "enabled when PUBLIC_SIGNAL_ENABLED=1 and SIGNAL_CHANNEL_ID is configured; percentage guidance only",
                 "ibkr": "read-only reconciliation only; no broker orders placed",
             }), indent=2))
+            z.writestr("cash_deposits.table.json", json.dumps(safe_convert(load_cash_deposits()), indent=2))
+            z.writestr("cash_flow_summary.json", json.dumps(safe_convert(cash_deposit_summary()), indent=2))
     except Exception as exc:
-        print(f"[V4.8.3 EXPORT WARNING] {exc}")
+        print(f"[V4.9.6 EXPORT WARNING] {exc}")
     return zip_path
 
 
-
 # Final crypto label cleanup after v4.8.3 auto-alert override.
-_V483_FORMAT_CRYPTO_BASE = format_crypto_alpha_plan
 
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v483_label_cleanup(_V483_FORMAT_CRYPTO_BASE(plan))
@@ -21768,7 +15290,6 @@ except Exception:
     pass
 
 
-
 # =============================================================================
 # V4.8.3 FINAL USER-FACING POLISH OVERRIDE
 # =============================================================================
@@ -21776,12 +15297,20 @@ except Exception:
 # It does not change strategy scoring, allocation, risk, ledgers, IBKR, or execution.
 
 def v483_final_status_text() -> str:
+    snapshot = compute_equity_snapshot_data()
     return (
-        "🧊 V4.8.3 FINAL FREEZE STATUS\n\n"
+        "V4.9.6 FINAL FREEZE STATUS\n\n"
         f"Strategy display: {STRATEGY_VERSION}\n"
-        "Strategy logic: active-only Core/Growth/SPEC/Swing/Crypto with public strategic alerts and actionable crypto checks\n"
+        "Strategy logic: v4.9.4 review-fixed active-only Core/Growth/SPEC/Swing/Crypto. No scoring/allocation change.\n"
         "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
         "Disabled from live operation: legacy VCP 0%, Bear/inverse 0%, Options 0%\n\n"
+        "Cash accounting:\n"
+        "- depositcash records external deposits as principal.\n"
+        "- setcash is disabled. Use IBKR reconciliation for broker cash checks.\n"
+        "- Withdrawal signals use a deposit-adjusted high-water mark.\n"
+        f"Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
+        f"Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
+        f"Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n\n"
         f"Public channel enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
         f"Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
         f"Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
@@ -21790,19 +15319,16 @@ def v483_final_status_text() -> str:
         f"Crypto daily no-action alerts: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
         f"Crypto gate-open info alerts: {yes_no(V483_CRYPTO_ALERT_ON_GATE_OPEN)}\n"
         f"IBKR reconciliation: {yes_no(IBKR_RECON_ENABLED)} read-only\n\n"
-        "Expected automatic alerts:\n"
-        "• Monthly Core/Growth/SPEC dashboard after market close in rebalance window.\n"
-        "• Public monthly dashboard/details if public channel is enabled.\n"
-        "• Swing Alpha private/public entry/exit alerts near tactical scan window when valid.\n"
-        "• Crypto private/public alerts only when actionable by default; no daily no-action spam.\n\n"
         "No broker orders are placed by this bot."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
 def v483_final_help_text() -> str:
     return (
-        "Commands v4.8.3:\n"
-        "portfolio | equity | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus\n"
+        "Commands v4.9.6:\n"
+        "portfolio | equity | summary | pnl | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus\n"
+        "depositcash AMOUNT [note] | depositstatus | showdeposits | download_deposits\n"
+        "withdrawplan | withdrawdone AMOUNT [note] | showwithdrawals | download_withdrawals\n"
         "wealthplan | corestatus | coreportfolio | corebuy TICKER QTY at PRICE fee FEE | coresell TICKER QTY at PRICE\n"
         "growthplan | growthstatus | growthportfolio | growthbuy TICKER QTY at PRICE | growthsell TICKER QTY at PRICE\n"
         "specplan | specstatus | specportfolio | specbuy TICKER QTY at PRICE | specsell TICKER QTY at PRICE\n"
@@ -21810,60 +15336,99 @@ def v483_final_help_text() -> str:
         "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptobuy TICKER UNITS at PRICE | cryptosell TICKER UNITS at PRICE\n"
         "brokerstatus | brokerreconcile | brokersyncpreview | brokersyncapply CONFIRM\n"
         "monthlydashboard | publicdashboard | testpublic | postchannelterms\n"
-        "download_state | download_institutional | withdrawplan | withdrawdone AMOUNT | panic | resume\n\n"
-        "Removed legacy commands: bought/sold/editbuy/editsell/voidbuy. Use swingbuy/swingsell for Swing Alpha."
+        "download_state | download_institutional | panic | resume\n\n"
+        "Removed/disabled legacy commands: setcash, bought/sold/editbuy/editsell/voidbuy. Use depositcash and sleeve-specific buy/sell commands."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
 def format_validation_status() -> str:  # type: ignore[override]
     return (
-        "🧪 VALIDATION STATUS v4.8.3\n\n"
-        "Strategy: v4.8.3 active-only clean + public strategic alerts + actionable crypto checks\n"
+        "VALIDATION STATUS v4.9.6\n\n"
+        "Strategy: v4.9.4 review-fixed active-only strategy with v4.9.6 depositcash accounting.\n"
         "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
+        "v4.9.6 change scope:\n"
+        "- Strategy scoring, allocation, scan logic, ledgers, IBKR behavior, and execution remain unchanged.\n"
+        "- setcash is disabled. Use depositcash to record manual external deposits.\n"
+        "- Deposits increase principal/performance base and adjust withdrawal HWM upward.\n"
+        "- Withdrawals are blocked unless there is profit above the deposit-adjusted HWM.\n\n"
         "Known limitations:\n"
-        "- v4.8.3 is aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.\n"
+        "- The strategy remains aggressive and growth/swing/crypto-led; live drawdowns can exceed historical tests.\n"
         "- Swing Alpha MACD+VAH and Crypto BTC/ETH/SOL hybrid require forward validation.\n"
         "- Backtests are not broker-grade execution guarantees.\n"
-        "- Manual execution and read-only IBKR reconciliation are still required.\n"
-        "- Crypto permission/gate/action required before crypto trades.\n"
-        "- Core UCITS fee drag is controlled by cost-aware execution and minimum order rules.\n\n"
-        "Live validation rules:\n"
-        "• Core/Growth/SPEC remain monthly rotation sleeves; daily checks are monitoring unless monthly-lock allows action.\n"
-        "• Swing Alpha is tactical and separate; use swingbuy/swingsell only.\n"
-        "• Crypto is tactical and separate; auto alerts are actionable-only by default.\n"
-        "• Public channel uses percentage guidance only, not private shares/cash.\n"
-        "• Use brokerreconcile/brokersyncpreview after manual fills.\n"
-        "• Do not treat external legacy IBKR positions as bot-managed strategy positions.\n"
-        "• No broker order automation in v4.8.3; IBKR reconciliation remains read-only."
+        "- Manual execution and read-only IBKR reconciliation are still required.\n\n"
+        "No broker order automation in v4.9.6; IBKR reconciliation remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
-
-_V483_FINAL_OLD_HANDLE_COMMAND = handle_command
-
-def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
-    text_clean = (text or "").strip()
-    text_lower = text_clean.lower()
-    if text_lower in {"v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
-        send(v483_final_status_text())
-        return
-    if text_lower in {"help", "/help"}:
-        send(v483_final_help_text())
-        return
-    if text_lower in {"testchannel", "testpublic"}:
-        ok, info = send_public_signal("✅ Public channel test from v4.8.3. If you see this, public forwarding works.\n\n" + public_signal_footer())
-        send(f"Public test status: {info if ok else 'FAILED - ' + info}")
-        return
-    return _V483_FINAL_OLD_HANDLE_COMMAND(text_clean, update_id=update_id)
-
 
 
 # V4.8.3 final command-output label cleanup.
 # Some status commands are produced inline by the command router rather than by
 # named formatter functions. Intercept them last so all visible labels are v4.8.3.
-_V483_FINAL_HANDLE_COMMAND = handle_command
+
+def format_crypto_portfolio_report() -> str:
+    details = crypto_position_market_value_details()
+    rows = details.get("rows", []) or []
+    snapshot = compute_equity_snapshot_data()
+    msg = (f"🪙 CRYPTO_ALPHA PORTFOLIO\n\n"
+           f"💵 Shared cash: {format_money(snapshot['cash'])}\n"
+           f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+           f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+           f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+           f"✅ Realized Crypto P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+           f"💼 Total equity: {format_money(snapshot['equity'])}\n\n")
+    if not rows:
+        return msg + "No crypto positions recorded yet. Use cryptoplan, then cryptobuy after broker/exchange execution."
+    for row in rows:
+        msg += (f"📦 {row['ticker']}\n"
+                f"Units: {format_core_shares(row['units'])}\n"
+                f"Avg: {round(float(row['avg_entry_price']), 8)} | Now: {round(float(row['mark_price']), 8)}\n"
+                f"Value: {format_money(float(row['market_value']))}\n"
+                f"P/L: {format_money(float(row['unrealized_profit']))} ({format_pct(row.get('unrealized_pct'))})\n"
+                f"Stop: {row.get('stop')} | High: {row.get('highest')}\n\n")
+    return msg[:MAX_TELEGRAM_MESSAGE]
+
+def format_crypto_pnl_report() -> str:
+    details = crypto_position_market_value_details()
+    trades = load_crypto_trades()
+    buys = [t for t in trades if str(t.get("side")).upper() == "BUY"]
+    sells = [t for t in trades if str(t.get("side")).upper() == "SELL"]
+    return (f"🪙 CRYPTO_ALPHA P/L\n\n"
+            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"📏 Cost basis: {format_money(float(details.get('cost_basis', 0) or 0))}\n"
+            f"📈 Unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+            f"✅ Realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+            f"💰 Total Crypto P/L: {format_money(float(details.get('total_profit', 0) or 0))}\n\n"
+            f"Buy records: {len(buys)}\nSell records: {len(sells)}")
+
+def format_crypto_exposure_report() -> str:
+    snapshot = compute_equity_snapshot_data()
+    details = crypto_position_market_value_details()
+    equity = float(snapshot.get("equity", 0) or 0)
+    alloc = dynamic_portfolio_allocation_targets()
+    target_pct = float(alloc.get("crypto_alpha_pct", 0) or 0)
+    actual_pct = 0.0 if equity <= 0 else (float(details.get("value", 0) or 0) / equity) * 100
+    return (f"🪙 CRYPTO EXPOSURE\n\n"
+            f"💼 Total equity: {format_money(equity)}\n"
+            f"🪙 Crypto value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"🎯 Target Crypto: {round(target_pct, 2)}% of account\n"
+            f"📊 Actual Crypto: {round(actual_pct, 2)}% of account\n"
+            f"📐 Drift: {round(actual_pct - target_pct, 2)} percentage points\n\n"
+            "Use cryptoplan for BUY/HOLD/SELL actions.")
 
 def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type: ignore[override]
+    global PANIC_MODE, last_signals, portfolio
     text_clean = (text or "").strip()
     text_lower = text_clean.lower()
+    if text_lower == "cryptoportfolio":
+        send(format_crypto_portfolio_report())
+        return
+    if text_lower == "cryptopnl":
+        send(format_crypto_pnl_report())
+        return
+    if text_lower == "cryptoexposure":
+        send(format_crypto_exposure_report())
+        return
+
+    # ---- merged from handle_command ----
     if text_lower == "equity":
         send(_v483_label_cleanup(_v48_equity_text()))
         return
@@ -21876,7 +15441,1148 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     if text_lower == "sleevestatus":
         send(_v483_label_cleanup(_v48_sleevestatus_text()))
         return
-    return _V483_FINAL_HANDLE_COMMAND(text_clean, update_id=update_id)
+
+    # ---- merged from _V483_FINAL_HANDLE_COMMAND ----
+    if text_lower in {"v496status", "v495status", "v494status", "v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
+        send(v483_final_status_text())
+        return
+    if text_lower in {"help", "/help"}:
+        send(v483_final_help_text())
+        return
+    if text_lower in {"testchannel", "testpublic"}:
+        ok, info = send_public_signal("✅ Public channel test from v4.8.3. If you see this, public forwarding works.\n\n" + public_signal_footer())
+        send(f"Public test status: {info if ok else 'FAILED - ' + info}")
+        return
+
+    # ---- merged from _V483_FINAL_OLD_HANDLE_COMMAND ----
+    if text_lower in {"bearstatus", "vcpstatus"}:
+        send(
+            "ℹ️ V4.9.6 ACTIVE-ONLY STATUS\n\n"
+            "Legacy VCP, Bear/inverse, and Options strategies are removed from live operation.\n"
+            "Swing Alpha owns the tactical stock signal path.\n\n"
+            "Use: swingstatus, swingplan, swingbuy, swingsell."
+        )
+        return
+    if text_lower.split(" ")[0] in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
+        send(
+            "❌ Legacy VCP/Bear bought/sold commands are disabled in v4.9.6.\n\n"
+            "Use the active ledger commands only:\n"
+            "• corebuy / coresell\n"
+            "• growthbuy / growthsell\n"
+            "• specbuy / specsell\n"
+            "• swingbuy / swingsell\n"
+            "• cryptobuy / cryptosell"
+        )
+        return
+
+    # ---- merged from _V483_OLD_HANDLE_COMMAND ----
+    if text_lower in {"postchannelterms", "publicterms"}:
+        ok, info = send_public_signal(public_channel_terms_text())
+        send(f"Public terms status: {info if ok else 'FAILED - ' + info}")
+        return
+    if text_lower in {"publicdashboard", "publicmonthlydashboard", "testpublicdashboard"}:
+        try:
+            core_plan, growth_plan, spec_plan, crypto_plan, errors = _v463_prepare_dashboard_plans()
+            _v482_send_public_monthly_bundle(core_plan, growth_plan, spec_plan, crypto_plan, errors)
+            send("Public dashboard test sent if PUBLIC_SIGNAL_ENABLED=1 and SIGNAL_CHANNEL_ID is configured.")
+        except Exception as exc:
+            logger.exception(f"[V4.8.2 PUBLIC DASHBOARD TEST ERROR] {exc}")
+            send(f"Public dashboard test failed: {exc}")
+        return
+
+    # ---- merged from _V481_OLD_HANDLE_COMMAND ----
+    first = text_lower.split()[0] if text_lower else ""
+    if text_lower == "portfolio":
+        send(format_combined_portfolio_report())
+        return
+    if text_lower in {"bearstatus", "vcpstatus", "vcpscanstatus"}:
+        send("ℹ️ v4.8.1: Legacy VCP/Bear/Options strategies were removed from the live bot. Swing Alpha owns the tactical stock signal path.")
+        return
+
+    # ---- merged from _V48_OLD_HANDLE_COMMAND ----
+    if text_lower in {"v47status", "v471status", "cleanupstatus", "activelevers", "activeledgers"}:
+        send(_v47_status_text())
+        return
+
+    # ---- merged from _V47_OLD_HANDLE_COMMAND ----
+    if text_lower == "cryptostatus":
+        send(_v463_cryptostatus_text())
+        return
+    if text_lower == "cryptoplan":
+        send("🪙 Crypto tactical plan started. v4.6.3 scores BTC/ETH/SOL hybrid daily breakout + 4h compression modules.")
+        plan = compute_crypto_alpha_plan()
+        save_crypto_plan_signal(plan)
+        send(format_crypto_alpha_plan(plan))
+        return
+
+    # ---- merged from _V463_FINAL_OLD_HANDLE_COMMAND ----
+    if text_lower in {"v463status", "dashboardstatus", "v462status", "deploycheck"}:
+        send(_v463_status_text())
+        return
+    if text_lower in {"monthlydashboard", "rebalancedashboard", "dashboard"}:
+        send_v463_monthly_dashboard(force=True, preview_only=True)
+        return
+    if text_lower in {"cryptocheck", "cryptoalert", "cryptoscan"}:
+        maybe_send_crypto_alpha_auto_signal(force=True)
+        return
+
+    # ---- merged from _V462_OLD_HANDLE_COMMAND ----
+    if text_lower in {"v461status", "v46status", "v45status", "v443status", "v442status", "v441status", "v44status", "v43status", "coststatus", "hotfixstatus", "monthlylockstatus"}:
+        send(_v461_status_text())
+        return
+    if text_lower == "validationstatus":
+        send(format_validation_status())
+        return
+    if text_lower == "allocationplan":
+        send(format_portfolio_allocation_plan())
+        return
+    if text_lower == "forcescan":
+        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.6.2.")
+        ok = scan_swing_alpha_market(force=True, verbose=True)
+        send("✅ Manual Swing Alpha scan complete." if ok else "⚠️ Manual Swing Alpha scan did not complete cleanly.")
+        return
+    if text_lower == "swingplan":
+        send("🎯 Swing Alpha plan started. This scans strong leaders for MACD + VAH reclaim swing setups. Live entries are also sent automatically during the tactical scan window.")
+        plan = compute_swing_alpha_plan()
+        save_swing_alpha_plan(plan)
+        send(format_swing_alpha_plan(plan))
+        return
+    if text_lower == "swingstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_swing_alpha_signal()
+        details = swing_alpha_position_market_value_details()
+        m_ok, m_reason = swing_alpha_market_filter_ok()
+        send(
+            "🎯 SWING_ALPHA STATUS v4.6.2\n\n"
+            f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
+            f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
+            f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
+            f"Target now: {alloc.get('swing_alpha_pct')}% of account\n"
+            "Strategy: MACD + VAH reclaim\n"
+            f"Universe size: {len(SWING_ALPHA_UNIVERSE)}\n"
+            f"Max signals per scan: {SWING_ALPHA_MAX_SIGNALS_PER_SCAN}\n"
+            f"Max positions: {SWING_ALPHA_MAX_OPEN_POSITIONS} | Max per cluster: {SWING_ALPHA_MAX_PER_CLUSTER}\n"
+            f"Market filter: {yes_no(m_ok)} — {m_reason}\n"
+            f"Swing value: {format_money(float(details.get('value',0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "swingplan — manual preview/plan\n"
+            "forcescan — manual Swing Alpha signal scan\n"
+            "swingbuy TICKER SHARES at PRICE\n"
+            "swingsell TICKER SHARES at PRICE\n"
+            "swingportfolio | swingpnl | swingexposure"
+        )
+        return
+
+    # ---- merged from _V461_OLD_HANDLE_COMMAND ----
+    if text_lower == "swingportfolio":
+        send(format_swing_alpha_portfolio_report())
+        return
+    if text_lower == "swingpnl":
+        send(format_swing_alpha_pnl_report())
+        return
+    if text_lower == "swingexposure":
+        send(format_swing_alpha_exposure_report())
+        return
+    swing_cmd = re.fullmatch(r"(?i)\s*(swingbuy|swingsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+(partial))?\s*", text_clean)
+    if swing_cmd:
+        action = swing_cmd.group(1).lower()
+        ticker = normalize_ticker(swing_cmd.group(2))
+        shares = float(swing_cmd.group(3))
+        price = float(swing_cmd.group(4))
+        partial_ok = bool(swing_cmd.group(5))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "swingbuy":
+            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
+        else:
+            ok, msg = record_swing_alpha_sell(ticker, shares, price, update_id=update_id)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    # ---- merged from _V45_OLD_HANDLE_COMMAND ----
+
+
+    if text_lower in {"brokerhelp", "ibkrhelp"}:
+        send(
+            "🏦 IBKR RECONCILIATION COMMANDS v4.4.3\n\n"
+            "brokerstatus — fetch/store latest IBKR snapshot and show account summary\n"
+            "brokerpositions — show bot-managed positions as seen by IBKR\n"
+            "brokerexternal — show external legacy broker positions outside bot scope\n"
+            "brokerreconcile — compare IBKR vs bot ledgers\n"
+            "brokersyncpreview — preview cash/avg-cost sync for bot-managed positions\n"
+            "brokersyncapply CONFIRM — supervised sync of bot cash + matching managed positions from IBKR\n\n"
+            "No broker orders are placed in v4.4.3."
+        )
+        return
+
+    if text_lower in {"brokerping", "bridgeping"}:
+        try:
+            ok, info, snap = _v42_fetch_snapshot()
+            if ok and isinstance(snap, dict):
+                conn = snap.get("connection") or {}
+                send(
+                    "🏓 IBKR BRIDGE PING v4.4.3\n\n"
+                    f"Status: ✅ OK\n"
+                    f"Source: {info}\n"
+                    f"Account: {conn.get('account_selected') or (snap.get('managed_accounts') or ['n/a'])[0]}\n"
+                    f"Created UTC: {snap.get('created_utc', 'n/a')}\n"
+                    "No broker orders are placed."
+                )
+            else:
+                send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {info}")
+        except Exception as exc:
+            send(f"🏓 IBKR BRIDGE PING v4.4.3\n\n❌ {exc}")
+        return
+
+
+    # ---- merged from _V443_OLD_HANDLE_COMMAND ----
+
+
+    # Confirmed partial-fill recording for monthly ledgers.
+    core_partial = re.fullmatch(
+        r"(?i)\s*corebuy\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+fee\s+([0-9]+(?:\.[0-9]+)?))?\s+partial\s*",
+        text_clean,
+    )
+    if core_partial:
+        ticker = normalize_ticker(core_partial.group(1))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        shares = float(core_partial.group(2)); price = float(core_partial.group(3)); fee = float(core_partial.group(4) or 0.0)
+        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee, partial_ok=True)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    monthly_partial = re.fullmatch(
+        r"(?i)\s*(growthbuy|specbuy)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+partial\s*",
+        text_clean,
+    )
+    if monthly_partial:
+        action = monthly_partial.group(1).lower()
+        ticker = normalize_ticker(monthly_partial.group(2))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        shares = float(monthly_partial.group(3)); price = float(monthly_partial.group(4))
+        if action == "growthbuy":
+            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
+        else:
+            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id, partial_ok=True)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    # Manual ledger correction commands. These do not touch cash or trade history.
+    edit_cmd = re.fullmatch(
+        r"(?i)\s*(editcore|editgrowth|editspec|editcrypto)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+CONFIRM\s*",
+        text_clean,
+    )
+    if edit_cmd:
+        cmd = edit_cmd.group(1).lower()
+        ticker = normalize_ticker(edit_cmd.group(2))
+        qty = float(edit_cmd.group(3)); avg = float(edit_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        note = f"v4.4.2 manual ledger edit at {ny_now().strftime('%Y-%m-%d %H:%M %Z')}"
+        if cmd == "editcore":
+            ok, msg = _v442_set_monthly_position("core_positions", "core_position_id", ticker, qty, avg, note)
+        elif cmd == "editgrowth":
+            ok, msg = _v442_set_monthly_position("growth_positions", "growth_position_id", ticker, qty, avg, note)
+        elif cmd == "editspec":
+            ok, msg = _v442_set_monthly_position("spec_positions", "spec_position_id", ticker, qty, avg, note)
+        else:
+            ok, msg = _v442_set_crypto_position(ticker, qty, avg, note)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+
+    # ---- merged from _V43_OLD_HANDLE_COMMAND ----
+
+    # New optional-fee Core command:
+    # corebuy CMOD.L 2.18 at 33.4225 fee 4
+    # corebuyfee CMOD.L 2.18 at 33.4225 fee 4
+    core_fee_cmd = re.fullmatch(
+        r"(?i)\s*(corebuy|corebuyfee)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s+(?:fee|fees|commission|comm)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if core_fee_cmd:
+        ticker = normalize_ticker(core_fee_cmd.group(2))
+        shares = float(core_fee_cmd.group(3))
+        price = float(core_fee_cmd.group(4))
+        fee = float(core_fee_cmd.group(5))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        ok, msg = record_core_buy(ticker, shares, price, update_id=update_id, fee=fee)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    if text_lower in {"v42status", "brokerhotfixstatus", "hotfixstatus"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.3 COST-AWARE / IBKR RECON STATUS\n\n"
+            f"Strategy display: {STRATEGY_VERSION}\n"
+            f"V4.2 layer: {V42_VERSION}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
+            f"IBKR recon enabled: {yes_no(IBKR_RECON_ENABLED)}\n"
+            f"Bridge URL configured: {yes_no(bool(IBKR_BRIDGE_URL))}\n"
+            "Core fee syntax enabled:\n"
+            "corebuy TICKER SHARES at FILL_PRICE fee COMMISSION\n"
+            "IBKR core symbol aliases enabled for LSE UCITS.\n"
+            "Read-only reconciliation only. No broker orders are placed."
+        )
+        return
+
+
+    # ---- merged from _V421_OLD_HANDLE_COMMAND ----
+    if text_lower in {"brokerstatus", "ibkrstatus"}:
+        send(format_brokerstatus()); return
+    if text_lower in {"brokerpositions", "ibkrpositions"}:
+        send(format_brokerpositions()); return
+    if text_lower in {"brokerexternal", "ibkrexternal"}:
+        send(format_brokerexternal()); return
+    if text_lower in {"brokerreconcile", "ibkrreconcile"}:
+        send(format_brokerreconcile()); return
+    if text_lower in {"brokersyncpreview", "ibkrsyncpreview"}:
+        send(format_brokersyncpreview()); return
+    if text_lower == "brokersyncapply confirm":
+        ok, msg = broker_sync_apply_confirmed()
+        send(msg if ok else f"❌ BROKER SYNC REJECTED\n\n{msg}")
+        return
+    if text_lower.startswith("brokersyncapply"):
+        send("⚠️ Dangerous sync command. To apply the preview, send exactly:\n\nbrokersyncapply CONFIRM")
+        return
+
+    # ---- merged from _V42_OLD_HANDLE_COMMAND ----
+    if text_lower in {"hotfixstatus", "v411hotfix"}:
+        market_ok, reason = growth_alpha_market_filter_ok()
+        send(
+            "🛠️ V4.1.1 HOTFIX STATUS\n\n"
+            f"Version: {V411_HOTFIX_VERSION}\n"
+            f"Growth market filter: {yes_no(market_ok)} — {reason}\n"
+            f"SPEC blocklist: {', '.join(sorted(SPEC_ALPHA_BLOCKLIST))}\n"
+            f"SPEC universe size: {len(SPEC_ALPHA_UNIVERSE)}\n"
+            f"Core public enabled: {yes_no(CORE_PUBLIC_SIGNAL_ENABLED)}\n"
+            f"SPEC public enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+            "Diagnostics now include Growth and Crypto holdings."
+        )
+        return
+
+    # ---- merged from _V411_HOTFIX_OLD_HANDLE_COMMAND ----
+
+    # ---- merged from _V411_HOTFIX_OLD_BEAR_STATUS_COMMAND ----
+
+
+    crypto_cmd = re.fullmatch(
+        r"(?i)\s*(cryptobuy|cryptosell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if crypto_cmd:
+        action = crypto_cmd.group(1).lower()
+        ticker = normalize_ticker(crypto_cmd.group(2))
+        units = float(crypto_cmd.group(3))
+        price = float(crypto_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "cryptobuy":
+            ok, msg = record_crypto_buy(ticker, units, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "cryptosell":
+            ok, msg = record_crypto_sell(ticker, units, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+
+    # ---- merged from _V41_OLD_HANDLE_COMMAND ----
+
+    if text_lower == "growthplan":
+        send("🚀 Growth Alpha plan started. This can take a minute because it scores the high-growth universe.")
+        plan = compute_growth_alpha_plan()
+        save_growth_plan_signal(plan)
+        send(format_growth_alpha_plan(plan))
+        return
+    if text_lower == "growthstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        latest = load_latest_growth_plan()
+        details = growth_position_market_value_details()
+        send(
+            "🚀 EXPANDED GROWTH_ALPHA STATUS v4\n\n"
+            f"Enabled: {yes_no(GROWTH_ALPHA_ENABLED)}\n"
+            f"Ledger enabled: {yes_no(GROWTH_ALPHA_LEDGER_ENABLED)}\n"
+            f"Target now: {alloc.get('growth_alpha_pct')}% of account\n"
+            f"Universe size: {len(GROWTH_ALPHA_UNIVERSE)}\n"
+            f"Top N: {GROWTH_ALPHA_TOP_N} | Max per cluster: {GROWTH_ALPHA_MAX_PER_CLUSTER}\n"
+            f"Growth value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "growthplan\n"
+            "growthbuy TICKER SHARES at PRICE\n"
+            "growthsell TICKER SHARES at PRICE\n"
+            "growthportfolio | growthpnl | growthexposure"
+        )
+        return
+    if text_lower == "growthportfolio":
+        send(format_growth_portfolio_report())
+        return
+    if text_lower == "growthpnl":
+        send(format_growth_pnl_report())
+        return
+    if text_lower == "growthexposure":
+        send(format_growth_exposure_report())
+        return
+
+    growth_cmd = re.fullmatch(
+        r"(?i)\s*(growthbuy|growthsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text_clean,
+    )
+    if growth_cmd:
+        action = growth_cmd.group(1).lower()
+        ticker = normalize_ticker(growth_cmd.group(2))
+        shares = float(growth_cmd.group(3))
+        price = float(growth_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "growthbuy":
+            ok, msg = record_growth_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "growthsell":
+            ok, msg = record_growth_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+
+    # ---- merged from _V310_OLD_HANDLE_COMMAND ----
+
+
+    if text_lower == "wealthstatus":
+        alloc = dynamic_portfolio_allocation_targets()
+        send(
+            "🏛️ WEALTH / CORE LEDGER STATUS v3.9\n\n"
+            f"Enabled: {yes_no(WEALTH_SLEEVE_ENABLED)}\n"
+            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
+            f"Universe: USD-priced UCITS/ETP core candidates\n"
+            f"Dynamic allocation: {yes_no(WEALTH_DYNAMIC_ALLOCATION_ENABLED)}\n"
+            f"Vol weighting: {yes_no(WEALTH_VOL_WEIGHTING_ENABLED)}\n"
+            f"Cluster control: {yes_no(WEALTH_CLUSTER_CONTROL_ENABLED)}\n"
+            f"Top assets: {WEALTH_CORE_TOP_N}\n"
+            f"Current core target: {alloc.get('core_wealth_pct')}% of account\n"
+            f"Long VCP target: {alloc.get('long_vcp_tactical_pct')}% of account\n"
+            f"Bear stock target: {alloc.get('bear_inverse_tactical_pct')}% of account\n"
+            f"Cash reserve target: {alloc.get('cash_reserve_pct')}% of account\n"
+            f"Last wealth month: {get_meta('last_wealth_core_month')}\n"
+            f"Public channel: ❌ never used for this sleeve\n\n"
+            "Commands:\n"
+            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
+            "corebuy TICKER SHARES at PRICE — record core buy\n"
+            "coresell TICKER SHARES at PRICE — record core sell\n"
+            "coreportfolio | corepnl | coreexposure | corestatus\n"
+            "allocationplan | riskstatus | sleevestatus"
+        )
+        return
+
+
+    # ---- merged from _V39_OLD_HANDLE_COMMAND ----
+
+    if text_lower in {"institutionalstatus", "institutional_status"}:
+        send(format_institutional_status())
+        return
+    if text_lower == "datahealth":
+        send(format_datahealth_status())
+        return
+    if text_lower == "riskmatrix":
+        send(format_riskmatrix_status())
+        return
+    if text_lower == "stressstatus":
+        send(format_stress_status())
+        return
+    if text_lower == "executionstatus":
+        send(format_execution_status())
+        return
+    if text_lower == "driftstatus":
+        send(format_drift_status())
+        return
+    if text_lower == "download_institutional":
+        path = download_institutional_report()
+        send_document(path, caption="institutional_snapshot.json")
+        return
+
+
+    # ---- merged from _V38_OLD_HANDLE_COMMAND ----
+    if text_lower == "wealthplan":
+        plan = compute_wealth_core_plan()
+        save_core_plan_signal(plan)
+        send(format_wealth_core_plan(plan))
+        if PUBLIC_SIGNAL_ENABLED and CORE_PUBLIC_SIGNAL_ENABLED:
+            ok, info = send_public_signal(format_public_core_plan(plan))
+            if not ok:
+                send(f"⚠️ Core public plan failed:\n{info}")
+        return
+    if text_lower == "specplan":
+        send("⚡ SPEC_ALPHA plan started. This can take several minutes because it scores the broad medium/weak universe.")
+        plan = compute_spec_alpha_plan()
+        save_spec_plan_signal(plan)
+        send(format_spec_alpha_plan(plan))
+        if PUBLIC_SIGNAL_ENABLED and SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED:
+            ok, info = send_public_signal(format_public_spec_plan(plan))
+            if not ok:
+                send(f"⚠️ SPEC_ALPHA public plan failed:\n{info}")
+        return
+    if text_lower in {"specstatus", "specledger"}:
+        latest = load_latest_spec_plan()
+        send(f"⚡ SPEC_ALPHA STATUS v3.7\n\nEnabled: {yes_no(SPEC_ALPHA_ENABLED)}\nLedger enabled: {yes_no(SPEC_ALPHA_LEDGER_ENABLED)}\nPublic enabled: {yes_no(SPEC_ALPHA_PUBLIC_SIGNAL_ENABLED)}\nTarget allocation: {round(SPEC_ALPHA_ACCOUNT_ALLOC_PCT * 100, 2)}%\nMode: {SPEC_ALPHA_SCORE_MODE} | Top N: {SPEC_ALPHA_TOP_N}\nUniverse size: {len(SPEC_ALPHA_UNIVERSE)}\nOpen SPEC positions: {len(load_spec_positions()) if SPEC_ALPHA_LEDGER_ENABLED else 0}\nLatest active plan: {None if latest is None else latest.get('plan_date')}\n\nCommands:\nspecplan\nspecbuy TICKER SHARES at PRICE\nspecsell TICKER SHARES at PRICE\nspecportfolio | specpnl | specexposure")
+        return
+    if text_lower == "specportfolio":
+        send(format_spec_portfolio_report())
+        return
+    if text_lower == "specpnl":
+        send(format_spec_pnl_report())
+        return
+    if text_lower == "specexposure":
+        send(format_spec_exposure_report())
+        return
+
+    if text_lower.startswith("ensembleplan") or text_lower.startswith("ensemblescan"):
+        send("ℹ️ ensembleplan is not part of v4.9.6. This freeze uses v4.9.4 review-fixed strategy logic and keeps Swing Alpha as the 10% tactical sleeve.")
+        return
+
+    spec_trade_cmd = re.fullmatch(r"(?i)\s*(specbuy|specsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*", text_clean)
+    if spec_trade_cmd:
+        action = spec_trade_cmd.group(1).lower()
+        ticker = normalize_ticker(spec_trade_cmd.group(2))
+        shares = float(spec_trade_cmd.group(3))
+        price = float(spec_trade_cmd.group(4))
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "specbuy":
+            ok, msg = record_spec_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if action == "specsell":
+            ok, msg = record_spec_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+    # ---- merged from _old_handle_command ----
+    global portfolio, last_signals
+
+    global PANIC_MODE
+
+    text = (text or "").strip()
+
+    if not text:
+
+        return
+
+    text_lower = text.lower()
+
+    audit("COMMAND", text)
+
+    if text_lower == "panic":
+
+        PANIC_MODE = True
+
+        audit("PANIC_ON")
+
+        send(
+
+            "🚨 PANIC MODE ENABLED\n\n"
+
+            "🔒 Scanning disabled.\n"
+
+            "🛡️ Position management still active."
+
+        )
+
+        return
+
+    if text_lower == "resume":
+
+        PANIC_MODE = False
+
+        audit("PANIC_OFF")
+
+        send("✅ Bot resumed.\n\n🔎 Scanning enabled again.")
+
+        return
+
+
+    if text_lower == "pnl":
+        send(format_realized_pnl_report())
+        return
+
+    if text_lower == "winrate":
+
+        send(f"🏆 Win Rate: {win_rate()}%")
+
+        return
+
+    if text_lower == "expectancy":
+
+        e = expectancy_summary()
+
+        p = position_level_summary()
+
+        send(
+
+            "📈 EXPECTANCY\n\n"
+
+            f"🧾 Trades: {e['trades']}\n"
+
+            f"🎯 R-trades: {e['r_trades']}\n"
+
+            f"📊 Avg R/trade: {e['avg_r']}\n"
+
+            f"📍 Median R: {e['median_r']}\n"
+
+            f"✅ Avg win R: {e['avg_win_r']}\n"
+
+            f"❌ Avg loss R: {e['avg_loss_r']}\n"
+
+            f"⚖️ Profit factor: {e['profit_factor']}\n\n"
+
+            f"📦 Position-level count: {p['positions_closed_or_partially_closed']}\n"
+
+            f"📊 Avg position R: {p['avg_position_r']}\n"
+
+            f"📍 Median position R: {p['median_position_r']}"
+
+        )
+
+        return
+
+    if text_lower == "stats":
+
+        best, worst = ticker_stats()
+
+        send(
+
+            f"📊 TICKER STATS\n\n"
+
+            f"📈 Best: {best[0]} ({format_money(best[1])})\n"
+
+            f"📉 Worst: {worst[0]} ({format_money(worst[1])})"
+
+        )
+
+        return
+
+    if text_lower == "duration":
+
+        send(f"⏱️ Avg Trade Duration: {avg_trade_duration()}")
+
+        return
+
+    if text_lower == "summary":
+        send(format_summary_report())
+        return
+
+    if text_lower == "resetscan":
+
+        with db_tx() as conn:
+
+            conn.execute(
+
+                "DELETE FROM meta WHERE key IN ('last_scan_day', 'last_scan_bar_date')"
+
+            )
+
+        send("🔄 Scan day reset.\n\nBot may scan again during the scan window.")
+
+        return
+
+
+    if text_lower in {"corestatus", "coreledger"}:
+        latest = load_latest_core_signal()
+        details = core_position_market_value_details()
+        alloc = dynamic_portfolio_allocation_targets()
+        send(
+            "🏛️ CORE LEDGER STATUS v3.6\n\n"
+            f"Enabled: {yes_no(CORE_LEDGER_ENABLED)}\n"
+            f"Strategy: {WEALTH_STRATEGY_VERSION}\n"
+            f"Core target now: {alloc.get('core_wealth_pct')}% of account\n"
+            f"Core value: {format_money(float(details.get('value', 0) or 0))}\n"
+            f"Core realized P/L: {format_money(float(details.get('realized_profit', 0) or 0))}\n"
+            f"Core unrealized P/L: {format_money(float(details.get('unrealized_profit', 0) or 0))}\n"
+            f"Active plan: {None if latest is None else latest.get('plan_date')}\n\n"
+            "Commands:\n"
+            "wealthplan — ranked BUY/ADD/HOLD/TRIM/SELL plan\n"
+            "corebuy TICKER SHARES at PRICE — record broker core buy\n"
+            "coresell TICKER SHARES at PRICE — record broker core sell\n"
+            "coreportfolio | corepnl | coreexposure"
+        )
+        return
+
+    if text_lower == "coreportfolio":
+        send(format_core_portfolio_report())
+        return
+
+    if text_lower == "corepnl":
+        send(format_core_pnl_report())
+        return
+
+    if text_lower == "coreexposure":
+        send(format_core_exposure_report())
+        return
+
+    core_cmd = re.fullmatch(
+        r"(?i)\s*(corebuy|coresell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+        text,
+    )
+
+    if core_cmd:
+        action = core_cmd.group(1).lower()
+        ticker = normalize_ticker(core_cmd.group(2))
+        shares = float(core_cmd.group(3))
+        price = float(core_cmd.group(4))
+
+        if not ticker:
+            send("Invalid ticker")
+            return
+
+        if action == "corebuy":
+            ok, msg = record_core_buy(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+        if action == "coresell":
+            ok, msg = record_core_sell(ticker, shares, price, update_id=update_id)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+
+    if text_lower in {"allocationplan", "allocplan"}:
+        send(format_portfolio_allocation_plan())
+        return
+
+    if text_lower == "riskstatus":
+        send(format_portfolio_risk_guard())
+        return
+
+
+    if text_lower == "withdrawinit":
+
+        snapshot = compute_equity_snapshot_data()
+
+        equity = float(snapshot["equity"])
+
+        set_withdrawal_hwm(equity)
+
+        send(
+
+            "🏔️ WITHDRAWAL HIGH-WATER MARK RESET\n\n"
+
+            f"💼 Current equity: {format_money(equity)}\n\n"
+
+            "Future withdrawal signals will only use profits above this level."
+
+        )
+
+        return
+
+    if text_lower == "withdrawplan":
+        plan = compute_withdrawal_plan()
+        if not plan["initialized"]:
+            send(
+                "🏦 WITHDRAWAL PLAN v4.9.6\n\n"
+                f"💼 Equity: {format_money(plan['equity'])}\n"
+                f"💵 Cash: {format_money(plan['cash'])}\n"
+                f"➕ Deposited cash: {format_money(plan.get('cash_deposited', plan.get('deposited_cash', 0)))}\n"
+                f"➖ Withdrawals: {format_money(plan.get('cash_withdrawn', plan.get('withdrawn_cash', 0)))}\n"
+                f"🔁 Net external cash: {format_money(plan.get('net_external_cash', plan.get('net_external_cash_flow', 0)))}\n\n"
+                f"⚠️ {plan['reason']}"
+            )
+            return
+
+        send(
+            "🏦 WITHDRAWAL PLAN v4.9.6\n\n"
+            f"📊 Phase: {plan['phase']}\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
+            f"➕ Deposited cash: {format_money(plan.get('cash_deposited', plan.get('deposited_cash', 0)))}\n"
+            f"➖ Withdrawals: {format_money(plan.get('cash_withdrawn', plan.get('withdrawn_cash', 0)))}\n"
+            f"🔁 Net external cash: {format_money(plan.get('net_external_cash', plan.get('net_external_cash_flow', 0)))}\n"
+            f"🏔️ Deposit-adjusted high-water mark: {format_money(plan['high_water_mark'])}\n"
+            f"📈 Trading profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
+            f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
+            f"🧮 Gross suggested: {format_money(plan['gross_suggested'])}\n"
+            f"💵 Cash cap: {format_money(plan['cash_cap'])}\n"
+            f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
+            f"🗓️ Days since withdrawal/review start: {plan['days_since_clock']}\n"
+            f"🚦 Eligible: {yes_no(plan['eligible'])}\n"
+            f"ℹ️ Reason: {plan['reason']}\n\n"
+            "Deposits are principal, not profit. withdrawdone will reject amounts above trading profit."
+        )
+        return
+
+    if text_lower.startswith("withdrawdone"):
+
+        parts = text.split(maxsplit=2)
+
+        if len(parts) < 2:
+
+            send("Usage: withdrawdone 250")
+
+            return
+
+        try:
+
+            amount = float(parts[1])
+
+        except ValueError:
+
+            send("Invalid amount")
+
+            return
+
+        note = parts[2] if len(parts) >= 3 else ""
+
+        ok, msg = record_withdrawal(
+
+            amount,
+
+            note=note,
+
+            update_id=update_id
+
+        )
+
+        send(msg if ok else "❌ ERROR: " + msg)
+
+        return
+
+    if text_lower == "showwithdrawals":
+
+        withdrawals = load_withdrawals()
+
+        if not withdrawals:
+
+            send("🏦 WITHDRAWALS\n\nNo withdrawals recorded yet.")
+
+            return
+
+        total = sum(float(w["amount"]) for w in withdrawals)
+
+        msg = (
+
+            "🏦 WITHDRAWALS\n\n"
+
+            f"💸 Total withdrawn: {format_money(total)}\n"
+
+            f"🧾 Count: {len(withdrawals)}\n\n"
+
+        )
+
+        for item in withdrawals[-10:]:
+
+            dt = datetime.fromtimestamp(
+
+                item["time"],
+
+                NY_TZ
+
+            ).strftime("%Y-%m-%d")
+
+            msg += (
+
+                f"📅 {dt}\n"
+
+                f"Amount: {format_money(item['amount'])}\n"
+
+                f"Equity before: {format_money(item['equity_before'])}\n"
+
+                f"HWM after: {format_money(item['high_water_mark_after'])}\n\n"
+
+            )
+
+        send(msg[:MAX_TELEGRAM_MESSAGE])
+
+        return
+
+
+    if text_lower in {"depositstatus", "cashstatus", "cashaccount", "showdeposits", "deposits", "cashflow", "cashflows"}:
+        send(format_cash_deposit_report())
+        return
+
+    if text_lower.startswith("depositcash"):
+        parts = text.split(maxsplit=2)
+        if len(parts) < 2:
+            send("Usage: depositcash 1000 optional note")
+            return
+        try:
+            amount = float(parts[1])
+        except ValueError:
+            send("Invalid deposit amount")
+            return
+        note = parts[2] if len(parts) >= 3 else ""
+        ok, msg = record_cash_deposit(amount, note=note, update_id=update_id)
+        send(msg if ok else "ERROR: " + msg)
+        return
+
+    if text_lower == "showportfolio_raw":
+
+        refresh_portfolio()
+
+        send_json_export(
+
+            portfolio,
+
+            "portfolio_raw.json",
+
+            "portfolio_raw.json"
+
+        )
+
+        return
+
+    if text_lower == "showtrades":
+
+        send_json_export(
+
+            load_trades(),
+
+            "trades_export.json",
+
+            "trades_export.json"
+
+        )
+
+        return
+
+    if text_lower == "showsignals":
+
+        last_signals = load_signals()
+
+        send_json_export(
+
+            last_signals,
+
+            "signals_export.json",
+
+            "signals_export.json"
+
+        )
+
+        return
+
+    if text_lower == "resetsignals":
+
+        clear_signals()
+
+        if update_id is not None:
+
+            mark_update_processed(update_id, "processed_resetsignals")
+
+        send("🔄 Signals reset.\n\nTrade history and portfolio are unchanged.")
+
+        return
+
+    if text_lower == "setupstats":
+
+        trades = load_trades()
+
+        breakout = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "breakout"]
+
+        pullback = [t for t in trades if t.get("entry_data", {}).get("setup_type") == "pullback"]
+
+        def stats(trades_list: List[Dict[str, Any]]) -> str:
+
+            if not trades_list:
+
+                return "0 trades"
+
+            total = sum(float(t.get("profit", 0)) for t in trades_list)
+
+            win = sum(1 for t in trades_list if float(t.get("profit", 0)) > 0)
+
+            wr = (win / len(trades_list)) * 100
+
+            r_vals = [float(t["r_multiple"]) for t in trades_list if t.get("r_multiple") is not None]
+
+            avg_r = round(sum(r_vals) / len(r_vals), 3) if r_vals else None
+
+            return f"{len(trades_list)} trades | P/L: {format_money(total)} | WR: {round(wr, 2)}% | Avg R: {avg_r}"
+
+        send(
+
+            f"⚙️ SETUP STATS\n\n"
+
+            f"🚀 Breakout: {stats(breakout)}\n"
+
+            f"🔁 Pullback: {stats(pullback)}"
+
+        )
+
+        return
+
+    if text_lower == "download_trades":
+
+        path = os.path.join(DATA_DIR, "trades_export.json")
+
+        with open(path, "w", encoding="utf-8") as f:
+
+            json.dump(safe_convert(load_trades()), f, indent=2)
+
+        send_document(path, caption="trades_export.json")
+
+        return
+
+    if text_lower == "download_state":
+
+        path = export_state_bundle(prefix="bot_state_export")
+
+        send_document(
+
+            path,
+
+            caption="bot_state_export.zip"
+
+        )
+
+        return
+
+    if text_lower == "download_portfolio":
+
+        refresh_portfolio()
+
+        send_json_export(
+
+            portfolio,
+
+            "portfolio_export.json",
+
+            "portfolio_export.json"
+
+        )
+
+        return
+
+    if text_lower == "download_signals":
+
+        send_json_export(
+
+            load_signals(),
+
+            "signals_export.json",
+
+            "signals_export.json"
+
+        )
+
+        return
+
+    if text_lower == "download_withdrawals":
+
+        send_json_export(
+
+            load_withdrawals(),
+
+            "withdrawals_export.json",
+
+            "withdrawals_export.json"
+
+        )
+
+        return
+
+    if text_lower == "download_deposits":
+        send_json_export(
+            load_cash_deposits(),
+            "cash_deposits_export.json",
+            "cash_deposits_export.json"
+        )
+        return
+
+    if text_lower == "resetall":
+
+        send(
+
+            "⚠️ DANGEROUS RESET COMMAND\n\n"
+
+            "This will export a backup, then clear:\n"
+
+            "positions, trades, signals, cooldowns, breakout memory, equity snapshots, withdrawals, and cash/deposit ledger.\n\n"
+
+            "It will NOT delete Telegram update history, so old commands will not be reprocessed.\n\n"
+
+            "To confirm, send exactly:\n"
+
+            "resetall CONFIRM-LIVE"
+
+        )
+
+        return
+
+    if text_lower == "resetall confirm-live":
+
+        ok, msg, backup_path = reset_all_paper_state(update_id=update_id)
+
+        if backup_path:
+
+            send_document(
+
+                backup_path,
+
+                caption="pre_reset_backup.zip"
+
+            )
+
+        send(msg if ok else "❌ ERROR: " + msg)
+
+        return
+
+
+    if text_lower.startswith("setcash"):
+        send(
+            "❌ setcash is disabled in v4.9.6.\n\n"
+            "Use depositcash AMOUNT optional note to record external cash deposits.\n"
+            "Use brokerreconcile / brokersyncpreview for IBKR reconciliation.\n\n"
+            "Reason: direct cash setting can make deposits look like trading profit and distort withdrawal logic."
+        )
+        return
+
+
+    trade_cmd = re.fullmatch(
+
+        r"(?i)\s*(bought|sold)\s+([A-Z0-9.\-]{1,15})\s+(\d+)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*",
+
+        text,
+
+    )
+
+    if not trade_cmd:
+
+        # Preserve original behavior: unknown short/invalid commands are ignored, but alert on likely trade commands.
+
+
+        return
+
+    action = trade_cmd.group(1).lower()
+
+    ticker = normalize_ticker(trade_cmd.group(2))
+
+    shares = int(trade_cmd.group(3))
+
+    price = float(trade_cmd.group(4))
+
+    if not ticker:
+
+        send("Invalid ticker")
+
+        return
+
+    if shares <= 0 or not is_finite_positive(price):
+
+        send("Shares and price must be positive")
+
+        return
+
 
 if __name__ == "__main__":
     main()
