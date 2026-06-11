@@ -2843,14 +2843,14 @@ def record_cash_deposit(
         f"amount={amount} equity_before={equity_before} cash_after={cash_after} hwm_after={hwm_after}",
     )
     return True, (
-        "CASH DEPOSIT RECORDED\n\n"
-        f"Amount: {format_money(amount)}\n"
-        f"Cash before: {format_money(cash_before)}\n"
-        f"Cash after: {format_money(cash_after)}\n"
-        f"Equity before: {format_money(equity_before)}\n"
-        f"Equity after: {format_money(equity_after)}\n"
-        f"Deposit-adjusted withdrawal HWM: {format_money(hwm_after)}\n\n"
-        "Deposits increase principal and do not count as profit."
+        "💵 CASH DEPOSIT RECORDED\n\n"
+        f"➕ Amount: {format_money(amount)}\n"
+        f"💵 Cash before: {format_money(cash_before)}\n"
+        f"💵 Cash after: {format_money(cash_after)}\n"
+        f"💼 Equity before: {format_money(equity_before)}\n"
+        f"💼 Equity after: {format_money(equity_after)}\n"
+        f"🏔️ Deposit-adjusted withdrawal HWM: {format_money(hwm_after)}\n\n"
+        "✅ Deposits increase principal and do not count as profit."
     )
 
 
@@ -2858,25 +2858,25 @@ def format_cash_deposit_report() -> str:
     summary = cash_deposit_summary()
     deposits = load_cash_deposits()
     msg = (
-        "CASH DEPOSITS v4.9.7\n\n"
-        f"Deposited cash: {format_money(summary['cash_deposited'])}\n"
-        f"Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
-        f"Net external cash: {format_money(summary['net_external_cash'])}\n"
-        f"Deposit records: {summary['deposit_count']}\n"
-        f"Withdrawal records: {summary['withdrawal_count']}\n\n"
+        "💵 CASH DEPOSITS v4.9.7\n\n"
+        f"➕ Deposited cash: {format_money(summary['cash_deposited'])}\n"
+        f"➖ Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
+        f"🔁 Net external cash: {format_money(summary['net_external_cash'])}\n"
+        f"🧾 Deposit records: {summary['deposit_count']}\n"
+        f"🏦 Withdrawal records: {summary['withdrawal_count']}\n\n"
     )
     if not deposits:
         return msg + "No cash deposits recorded yet. Use: depositcash AMOUNT optional note"
-    msg += "Recent deposits:\n"
+    msg += "📜 Recent deposits:\n"
     for item in deposits[-10:]:
         dt = datetime.fromtimestamp(float(item["time"]), NY_TZ).strftime("%Y-%m-%d")
         note = str(item.get("note") or "")
         msg += (
-            f"{dt} | {format_money(float(item['amount']))} | "
-            f"cash after {format_money(float(item['cash_after']))}"
+            f"• {dt} | ➕ {format_money(float(item['amount']))} | "
+            f"💵 cash after {format_money(float(item['cash_after']))}"
         )
         if note:
-            msg += f" | {note}"
+            msg += f" | 📝 {note}"
         msg += "\n"
     return msg[:MAX_TELEGRAM_MESSAGE]
 
@@ -2884,9 +2884,9 @@ def format_cash_deposit_report() -> str:
 def cash_flow_lines() -> str:
     summary = cash_deposit_summary()
     return (
-        f"Deposited cash: {format_money(summary['cash_deposited'])}\n"
-        f"Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
-        f"Net external cash: {format_money(summary['net_external_cash'])}"
+        f"➕ Deposited cash: {format_money(summary['cash_deposited'])}\n"
+        f"➖ Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
+        f"🔁 Net external cash: {format_money(summary['net_external_cash'])}"
     )
 
 
@@ -2894,42 +2894,42 @@ def format_withdrawal_plan_report() -> str:
     plan = compute_withdrawal_plan()
     if not plan["initialized"]:
         return (
-            "WITHDRAWAL PLAN v4.9.7\n\n"
-            f"Equity: {format_money(plan['equity'])}\n"
-            f"Cash: {format_money(plan['cash'])}\n"
+            "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+            f"💼 Equity: {format_money(plan['equity'])}\n"
+            f"💵 Cash: {format_money(plan['cash'])}\n"
             f"{cash_flow_lines()}\n\n"
-            f"Status: {plan['reason']}"
+            f"📌 Status: {plan['reason']}"
         )[:MAX_TELEGRAM_MESSAGE]
     return (
-        "WITHDRAWAL PLAN v4.9.7\n\n"
-        f"Phase: {plan['phase']}\n"
-        f"Equity: {format_money(plan['equity'])}\n"
-        f"Cash: {format_money(plan['cash'])}\n"
-        f"Deposit-adjusted HWM: {format_money(plan['high_water_mark'])}\n"
-        f"Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
-        f"Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
-        f"Gross suggested: {format_money(plan['gross_suggested'])}\n"
-        f"Cash cap: {format_money(plan['cash_cap'])}\n"
-        f"Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
+        "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+        f"📊 Phase: {plan['phase']}\n"
+        f"💼 Equity: {format_money(plan['equity'])}\n"
+        f"💵 Cash: {format_money(plan['cash'])}\n"
+        f"🏔️ Deposit-adjusted HWM: {format_money(plan['high_water_mark'])}\n"
+        f"📈 Profit above HWM: {format_money(plan['profit_above_hwm'])}\n\n"
+        f"📤 Withdrawal rate: {round(plan['rate'] * 100, 2)}%\n"
+        f"💰 Gross suggested: {format_money(plan['gross_suggested'])}\n"
+        f"🛡️ Cash cap: {format_money(plan['cash_cap'])}\n"
+        f"✅ Suggested withdrawal: {format_money(plan['suggested'])}\n\n"
         f"{cash_flow_lines()}\n\n"
-        f"Days since withdrawal/review start: {plan['days_since_clock']}\n"
-        f"Eligible: {yes_no(plan['eligible'])}\n"
-        f"Reason: {plan['reason']}\n\n"
-        "Deposits are principal, not strategy profit."
+        f"🕒 Days since withdrawal/review start: {plan['days_since_clock']}\n"
+        f"✅ Eligible: {yes_no(plan['eligible'])}\n"
+        f"📌 Reason: {plan['reason']}\n\n"
+        "🧾 Deposits are principal, not strategy profit."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
 def format_realized_pnl_report() -> str:
     perf = realized_performance_all_time()
     return (
-        "REALIZED P/L - ALL TIME v4.9.7\n\n"
-        f"Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
-        f"Performance base capital: {format_money(perf['base_capital'])}\n"
-        f"Trade records: {perf['trade_records']}\n\n"
-        f"Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
-        f"Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
-        f"Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
-        "Note: deposits/withdrawals are external cash flow, not realized strategy P/L."
+        "💰 REALIZED P/L - ALL TIME v4.9.7\n\n"
+        f"📈 Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        f"📏 Performance base capital: {format_money(perf['base_capital'])}\n"
+        f"🧾 Trade records: {perf['trade_records']}\n\n"
+        f"➕ Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
+        f"➖ Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
+        f"🔁 Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
+        "🧾 Note: deposits/withdrawals are external cash flow, not realized strategy P/L."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
@@ -2940,18 +2940,18 @@ def format_summary_report() -> str:
     duration = avg_trade_duration()
     e = expectancy_summary()
     return (
-        "SUMMARY v4.9.7\n\n"
-        f"Realized strategy P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
-        f"Performance base capital: {format_money(perf['base_capital'])}\n"
-        f"Win Rate: {wr}%\n"
-        f"Avg Duration: {duration}\n"
-        f"Avg R: {e['avg_r']}\n"
-        f"Profit Factor: {e['profit_factor']}\n\n"
-        f"Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
-        f"Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
-        f"Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
-        f"Best: {best[0]} ({format_money(best[1])})\n"
-        f"Worst: {worst[0]} ({format_money(worst[1])})"
+        "📊 SUMMARY v4.9.7\n\n"
+        f"💰 Realized strategy P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        f"📏 Performance base capital: {format_money(perf['base_capital'])}\n"
+        f"✅ Win Rate: {wr}%\n"
+        f"⏱️ Avg Duration: {duration}\n"
+        f"🎯 Avg R: {e['avg_r']}\n"
+        f"🧮 Profit Factor: {e['profit_factor']}\n\n"
+        f"➕ Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
+        f"➖ Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
+        f"🔁 Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
+        f"🏆 Best: {best[0]} ({format_money(best[1])})\n"
+        f"⚠️ Worst: {worst[0]} ({format_money(worst[1])})"
     )[:MAX_TELEGRAM_MESSAGE]
 
 def withdrawal_funny_note() -> str:
@@ -3136,12 +3136,12 @@ def record_withdrawal(
         f"cash_after={cash_after} hwm_before={hwm_before} hwm_after={hwm_after}",
     )
     return True, (
-        "WITHDRAWAL RECORDED\n\n"
-        f"Amount: {format_money(amount)}\n"
-        f"Equity before: {format_money(equity_before)}\n"
-        f"Cash before: {format_money(cash_before)}\n"
-        f"Cash after: {format_money(cash_after)}\n"
-        f"Deposit-adjusted HWM: {format_money(hwm_after)}"
+        "🏦 WITHDRAWAL RECORDED\n\n"
+        f"💸 Amount: {format_money(amount)}\n"
+        f"💼 Equity before: {format_money(equity_before)}\n"
+        f"💵 Cash before: {format_money(cash_before)}\n"
+        f"💵 Cash after: {format_money(cash_after)}\n"
+        f"🏔️ Deposit-adjusted HWM: {format_money(hwm_after)}"
     )
 
 def maybe_send_withdrawal_signal() -> None:
@@ -14448,43 +14448,43 @@ def _V48_OLD_COMBINED_PORTFOLIO_REPORT() -> str:  # type: ignore[override]
     equity = float(snapshot.get("equity", 0) or 0)
 
     msg = (
-        "PORTFOLIO v4.9.7\n\n"
-        f"Cash: {format_money(cash)}\n"
+        "📋 PORTFOLIO v4.9.7\n\n"
+        f"💵 Cash: {format_money(cash)}\n"
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
         f"➖ Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
-        f"Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n"
-        f"Core value: {format_money(core_value)}\n"
-        f"Growth Alpha value: {format_money(growth_value)}\n"
-        f"SPEC_ALPHA value: {format_money(spec_value)}\n"
-        f"Swing Alpha value: {format_money(swing_alpha_value)}\n"
-        f"Crypto Alpha value: {format_money(crypto_value)}\n"
-        f"Total active bot positions: {format_money(total_positions)}\n"
-        f"Total equity: {format_money(equity)}\n"
+        f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n"
+        f"🏛️ Core value: {format_money(core_value)}\n"
+        f"🚀 Growth Alpha value: {format_money(growth_value)}\n"
+        f"⚡ SPEC_ALPHA value: {format_money(spec_value)}\n"
+        f"🎯 Swing Alpha value: {format_money(swing_alpha_value)}\n"
+        f"🪙 Crypto Alpha value: {format_money(crypto_value)}\n"
+        f"📦 Total active bot positions: {format_money(total_positions)}\n"
+        f"🏦 Total equity: {format_money(equity)}\n"
     )
     if legacy_value > 0.01:
-        msg += f"\nLegacy tactical value: {format_money(legacy_value)} - inactive compatibility ledger; use cleanup/manual review.\n"
+        msg += f"\n⚠️ Legacy tactical value: {format_money(legacy_value)} — inactive compatibility ledger; use cleanup/manual review.\n"
     msg += "\n"
 
     try:
-        msg += _v47_rows_section("CORE WEALTH POSITIONS", core_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("🏛️ CORE WEALTH POSITIONS", core_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\nCORE WEALTH POSITIONS\nCore section error: {exc}\n\n"
+        msg += f"\n🏛️ CORE WEALTH POSITIONS\nCore section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("GROWTH_ALPHA POSITIONS", growth_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("🚀 GROWTH_ALPHA POSITIONS", growth_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\nGROWTH_ALPHA POSITIONS\nGrowth section error: {exc}\n\n"
+        msg += f"\n🚀 GROWTH_ALPHA POSITIONS\nGrowth section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("SPEC_ALPHA POSITIONS", spec_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("⚡ SPEC_ALPHA POSITIONS", spec_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\nSPEC_ALPHA POSITIONS\nSPEC section error: {exc}\n\n"
+        msg += f"\n⚡ SPEC_ALPHA POSITIONS\nSPEC section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("SWING_ALPHA POSITIONS", swing_alpha_position_market_value_details().get("rows", []), include_stop=True)
+        msg += _v47_rows_section("🎯 SWING_ALPHA POSITIONS", swing_alpha_position_market_value_details().get("rows", []), include_stop=True)
     except Exception as exc:
-        msg += f"\nSWING_ALPHA POSITIONS\nSwing Alpha section error: {exc}\n\n"
+        msg += f"\n🎯 SWING_ALPHA POSITIONS\nSwing Alpha section error: {exc}\n\n"
     try:
-        msg += _v47_rows_section("CRYPTO_ALPHA POSITIONS", crypto_position_market_value_details().get("rows", []))
+        msg += _v47_rows_section("🪙 CRYPTO_ALPHA POSITIONS", crypto_position_market_value_details().get("rows", []))
     except Exception as exc:
-        msg += f"\nCRYPTO_ALPHA POSITIONS\nCrypto section error: {exc}\n\n"
+        msg += f"\n🪙 CRYPTO_ALPHA POSITIONS\nCrypto section error: {exc}\n\n"
 
     if total_positions <= 0.01:
         msg += "No open active bot-managed positions.\n"
@@ -14528,23 +14528,23 @@ def _v47_equity_text() -> str:
     snapshot = compute_equity_snapshot_data()
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
     lines = [
-        "ACCOUNT EQUITY v4.9.7",
+        "💼 ACCOUNT EQUITY v4.9.7",
         "",
-        f"Cash: {format_money(snapshot['cash'])}",
-        f"Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}",
-        f"Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}",
-        f"Net external cash: {format_money(snapshot.get('net_external_cash', 0))}",
-        f"Performance base capital: {format_money(snapshot.get('performance_base_capital', get_performance_base_capital()))}",
-        f"Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
-        f"Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}",
-        f"SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}",
-        f"Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}",
-        f"Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}",
-        f"Total active bot positions: {format_money(snapshot['positions_value'])}",
-        f"Total Equity: {format_money(snapshot['equity'])}",
+        f"💵 Cash: {format_money(snapshot['cash'])}",
+        f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}",
+        f"➖ Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}",
+        f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash', 0))}",
+        f"📏 Performance base capital: {format_money(snapshot.get('performance_base_capital', get_performance_base_capital()))}",
+        f"🏛️ Core wealth positions: {format_money(snapshot.get('core_positions_value', 0))}",
+        f"🚀 Growth Alpha positions: {format_money(snapshot.get('growth_alpha_positions_value', 0))}",
+        f"⚡ SPEC_ALPHA positions: {format_money(snapshot.get('spec_positions_value', 0))}",
+        f"🎯 Swing Alpha positions: {format_money(snapshot.get('swing_alpha_positions_value', 0))}",
+        f"🪙 Crypto Alpha positions: {format_money(snapshot.get('crypto_alpha_positions_value', 0))}",
+        f"📦 Total active bot positions: {format_money(snapshot['positions_value'])}",
+        f"🏦 Total Equity: {format_money(snapshot['equity'])}",
     ]
     if legacy_value > 0.01:
-        lines.insert(7, f"Legacy tactical positions: {format_money(legacy_value)}")
+        lines.insert(7, f"⚠️ Legacy tactical positions: {format_money(legacy_value)}")
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
 
 def _v47_openrisk_text() -> str:
@@ -14755,28 +14755,28 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     snapshot = compute_equity_snapshot_data()
     return (
         "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.9.7\n\n"
-        "Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
+        "🛡️ Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
         f"🛡️ Risk guard: {risk.get('recommended_action')}\n"
         f"📉 Current DD: {risk.get('drawdown_pct')}% from {format_money(float(risk.get('high_equity', 0) or 0))}\n\n"
-        "Target account buckets:\n"
+        "🎯 Target account buckets:\n"
         f"🏦 Core UCITS/USD rotation: {plan.get('core_wealth_pct')}%\n"
         f"🚀 Growth Alpha rotation: {plan.get('growth_alpha_pct')}%\n"
         f"⚡ SPEC_ALPHA rotation: {plan.get('spec_alpha_pct')}%\n"
         f"🎯 Swing Alpha tactical: {plan.get('swing_alpha_pct')}%\n"
         f"🪙 Crypto Alpha tactical: {plan.get('crypto_alpha_pct')}%\n"
         f"💵 Cash reserve / unused: {plan.get('cash_reserve_pct')}%\n\n"
-        "Cash-flow ledger:\n"
-        f"➕ Deposited cash recorded: {format_money(float(snapshot.get('deposited_cash', 0) or 0))}\n"
-        f"➖ Withdrawals recorded: {format_money(float(snapshot.get('withdrawn_cash', 0) or 0))}\n"
-        f"🔁 Net external cash: {format_money(float(snapshot.get('net_external_cash_flow', 0) or 0))}\n"
+        "🧾 Cash-flow ledger:\n"
+        f"➕ Deposited cash recorded: {format_money(float(snapshot.get('cash_deposited', 0) or 0))}\n"
+        f"➖ Withdrawals recorded: {format_money(float(snapshot.get('cash_withdrawn', 0) or 0))}\n"
+        f"🔁 Net external cash: {format_money(float(snapshot.get('net_external_cash', 0) or 0))}\n"
         f"📏 Performance base capital: {format_money(float(snapshot.get('performance_base_capital', 0) or 0))}\n\n"
-        "Removed from live bot:\n"
+        "❌ Removed from live bot:\n"
         "• Legacy VCP: removed/replaced by Swing Alpha.\n"
         "• Bear / inverse sleeve: removed.\n"
         "• Options: not present in live bot.\n\n"
-        "Rules:\n"
+        "📋 Rules:\n"
         "• Core/Growth/SPEC are monthly rotation sleeves.\n"
         "• Swing Alpha and Crypto are tactical sleeves with separate ledgers.\n"
         "• Deposits raise cash, performance base, and withdrawal HWM; deposits are not profit.\n"
@@ -14887,15 +14887,18 @@ def _v48_sleevestatus_text() -> str:  # type: ignore[override]
         "🧭 ACTIVE SLEEVE STATUS v4.9.7\n\n"
         f"💼 Equity: {format_money(equity)}\n"
         f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n"
-        f"➕ Deposited cash recorded: {format_money(snapshot.get('deposited_cash', 0))}\n"
-        f"➖ Withdrawals recorded: {format_money(snapshot.get('withdrawn_cash', 0))}\n"
-        f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash_flow', 0))}\n\n"
+        f"📦 Total active bot positions: {format_money(snapshot.get('positions_value', 0))}\n\n"
+        "🧾 Cash-flow ledger:\n"
+        f"➕ Deposited cash recorded: {format_money(snapshot.get('cash_deposited', 0))}\n"
+        f"➖ Withdrawals recorded: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
+        f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n\n"
+        "🎯 Active sleeve values / targets:\n"
         f"🏛️ Core: {format_money(snapshot.get('core_positions_value', 0))} / target {alloc.get('core_wealth_pct')}%\n"
         f"🚀 Growth Alpha: {format_money(snapshot.get('growth_alpha_positions_value', 0))} / target {alloc.get('growth_alpha_pct')}%\n"
         f"⚡ SPEC_ALPHA: {format_money(snapshot.get('spec_positions_value', 0))} / target {alloc.get('spec_alpha_pct')}%\n"
         f"🎯 Swing Alpha: {format_money(snapshot.get('swing_alpha_positions_value', 0))} / target {alloc.get('swing_alpha_pct')}%\n"
         f"🪙 Crypto Alpha: {format_money(snapshot.get('crypto_alpha_positions_value', 0))} / target {alloc.get('crypto_alpha_pct')}%\n\n"
-        "Disabled live strategies:\n"
+        "❌ Disabled live strategies:\n"
         "• Long VCP: 0% — replaced by Swing Alpha.\n"
         "• Bear/inverse: 0% — disabled.\n"
         "• Options: 0% — research-only, not live."
@@ -15010,29 +15013,44 @@ def _v482_item_max_entry(item: Dict[str, Any]) -> Any:
 
 
 def _v482_public_plan_lines(label: str, plan: Optional[Dict[str, Any]], limit: int = 6) -> List[str]:
+    label_icon = {
+        "core": "🏛️",
+        "growth alpha": "🚀",
+        "spec alpha": "⚡",
+        "crypto alpha": "🪙",
+        "swing alpha": "🎯",
+    }.get(str(label).lower(), "📋")
     if not plan:
-        return [f"• {label}: unavailable"]
+        return [f"• {label_icon} {label}: unavailable"]
     acts = _v463_plan_actions(plan)
     if not acts:
-        return [f"• {label}: no actionable trade now"]
-    lines = [f"• {label}:"]
+        return [f"• {label_icon} {label}: no actionable trade now"]
+    lines = [f"• {label_icon} {label}:"]
     for item in acts[:limit]:
         action = str(item.get("action", "?")).upper()
+        action_text = {
+            "BUY": "🟢 BUY",
+            "ADD": "🟢 ADD",
+            "HOLD": "🟡 HOLD",
+            "TRIM": "🟠 TRIM",
+            "SELL": "🔴 SELL",
+            "AVOID": "🚫 AVOID",
+        }.get(action, f"⚪ {action}")
         ticker = str(item.get("ticker", "?")).upper()
         pct = _v482_item_target_pct(item, plan)
         price = _v482_item_price(item)
         max_entry = _v482_item_max_entry(item)
         stop = item.get("stop")
-        detail = f"  - {action} {ticker} | target guide {_v482_pct_text(pct)} of account"
+        detail = f"  - {action_text} {ticker} | 🎯 target guide {_v482_pct_text(pct)} of account"
         if price is not None:
-            detail += f" | ref {fmt_public_number(price)}"
+            detail += f" | 💵 ref {fmt_public_number(price)}"
         if max_entry is not None:
-            detail += f" | max {fmt_public_number(max_entry)}"
+            detail += f" | 🟡 max {fmt_public_number(max_entry)}"
         if stop is not None:
-            detail += f" | stop {fmt_public_number(stop)}"
+            detail += f" | 🔴 stop {fmt_public_number(stop)}"
         lines.append(detail)
     if len(acts) > limit:
-        lines.append(f"  - +{len(acts) - limit} more actionable item(s)")
+        lines.append(f"  - ➕ {len(acts) - limit} more actionable item(s)")
     return lines
 
 
@@ -15041,38 +15059,47 @@ def format_public_monthly_dashboard(core_plan: Optional[Dict[str, Any]], growth_
     lines.append("🗓️ MONTHLY BOT ACTION DASHBOARD")
     lines.append("")
     lines.append(f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}")
-    lines.append(f"Allocation model: {V482_ALLOCATION_LABEL}")
+    lines.append(f"🎯 Allocation model: {V482_ALLOCATION_LABEL}")
     lines.append("")
-    lines.append("Monthly rotation sleeves:")
-    for label, plan in (("Core", core_plan), ("Growth Alpha", growth_plan), ("SPEC Alpha", spec_plan)):
-        if errors.get(label.split()[0]):
-            lines.append(f"• {label}: error — {errors.get(label.split()[0])}")
+    lines.append("📋 Monthly rotation sleeves:")
+    for icon, label, key, plan in (
+        ("🏛️", "Core", "Core", core_plan),
+        ("🚀", "Growth Alpha", "Growth", growth_plan),
+        ("⚡", "SPEC Alpha", "SPEC", spec_plan),
+    ):
+        if errors.get(key):
+            lines.append(f"• {icon} {label}: ⚠️ error — {errors.get(key)}")
         else:
             acts = _v463_plan_actions(plan)
             if acts:
-                lines.append(f"• {label}: {len(acts)} actionable item(s). See public plan details below.")
+                lines.append(f"• {icon} {label}: ✅ {len(acts)} actionable item(s). See public plan details below.")
             else:
-                lines.append(f"• {label}: no actionable trade now.")
+                lines.append(f"• {icon} {label}: 🟡 no actionable trade now.")
     lines.append("")
-    lines.append("Tactical sleeves:")
+    lines.append("🎯 Tactical sleeves:")
     try:
         crypto_actions = _v463_plan_actions(crypto_plan)
-        lines.append(f"• Crypto Alpha: {len(crypto_actions)} actionable item(s) now." if crypto_actions else "• Crypto Alpha: no actionable trade now / gate may be off.")
+        lines.append(f"• 🪙 Crypto Alpha: ✅ {len(crypto_actions)} actionable item(s) now." if crypto_actions else "• 🪙 Crypto Alpha: 🟡 no actionable trade now / gate may be off.")
     except Exception:
-        lines.append("• Crypto Alpha: unavailable.")
-    lines.append("• Swing Alpha: tactical entries/exits are sent separately when valid setups trigger.")
+        lines.append("• 🪙 Crypto Alpha: ⚠️ unavailable.")
+    lines.append("• 🎯 Swing Alpha: tactical entries/exits are sent separately when valid setups trigger.")
     lines.append("")
-    lines.append("Public sizing note: use percentage guidance only; calculate your own shares/units.")
+    lines.append("📣 Public sizing note: use percentage guidance only; calculate your own shares/units.")
     lines.append("")
     lines.append(public_signal_footer())
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
 
 
 def format_public_monthly_plan(label: str, plan: Optional[Dict[str, Any]]) -> str:
-    lines = [f"📋 {label.upper()} PUBLIC PLAN", ""]
+    icon = {
+        "CORE": "🏛️",
+        "GROWTH ALPHA": "🚀",
+        "SPEC ALPHA": "⚡",
+    }.get(label.upper(), "📋")
+    lines = [f"{icon} {label.upper()} PUBLIC PLAN", ""]
     lines.extend(_v482_public_plan_lines(label, plan, limit=8))
     lines.append("")
-    lines.append("Use your own account size and execution. No exact private share counts are provided.")
+    lines.append("📣 Use your own account size and execution. No exact private share counts are provided.")
     lines.append("")
     lines.append(public_signal_footer())
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
@@ -15080,30 +15107,38 @@ def format_public_monthly_plan(label: str, plan: Optional[Dict[str, Any]]) -> st
 
 def format_public_crypto_plan(plan: Dict[str, Any], reason: str = "crypto action") -> str:
     gate = plan.get("gate", {}) or {}
-    lines = ["🪙 CRYPTO ALPHA ALERT", "", f"Reason: {reason}", f"🕒 NY time: {plan.get('ny_time')}"]
-    lines.append(f"Daily BTC gate: {yes_no(bool(gate.get('btc_ok')))}")
-    lines.append(f"4h module gate: {yes_no(bool(gate.get('gate2_ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200)")
+    lines = ["🪙 CRYPTO ALPHA ALERT", "", f"📌 Reason: {reason}", f"🕒 NY time: {plan.get('ny_time')}"]
+    lines.append(f"🚦 Daily BTC gate: {yes_no(bool(gate.get('btc_ok')))}")
+    lines.append(f"🚦 4h module gate: {yes_no(bool(gate.get('gate2_ok')))} ({gate.get('ok_count')}/{len(CRYPTO_ALPHA_INDICATORS)} above MA200)")
     lines.append("")
     acts = _v463_plan_actions(plan)
     if acts:
-        lines.append("Actionable crypto items:")
+        lines.append("📋 Actionable crypto items:")
         for item in acts[:6]:
             action = str(item.get("action", "?")).upper()
+            action_text = {
+                "BUY": "🟢 BUY",
+                "ADD": "🟢 ADD",
+                "HOLD": "🟡 HOLD",
+                "TRIM": "🟠 TRIM",
+                "SELL": "🔴 SELL",
+                "AVOID": "🚫 AVOID",
+            }.get(action, f"⚪ {action}")
             ticker = str(item.get("ticker", "?")).upper()
             pct = _v482_item_target_pct(item, plan)
             price = _v482_item_price(item)
             max_entry = _v482_item_max_entry(item)
             stop = item.get("stop")
-            line = f"• {action} {ticker} | target guide {_v482_pct_text(pct)} of account"
+            line = f"• {action_text} {ticker} | 🎯 target guide {_v482_pct_text(pct)} of account"
             if price is not None:
-                line += f" | ref {fmt_public_number(price)}"
+                line += f" | 💵 ref {fmt_public_number(price)}"
             if max_entry is not None:
-                line += f" | max {fmt_public_number(max_entry)}"
+                line += f" | 🟡 max {fmt_public_number(max_entry)}"
             if stop is not None:
-                line += f" | stop {fmt_public_number(stop)}"
+                line += f" | 🔴 stop {fmt_public_number(stop)}"
             lines.append(line)
     else:
-        lines.append("No public crypto trade action now.")
+        lines.append("🟡 No public crypto trade action now.")
     lines.append("")
     lines.append(public_signal_footer())
     return "\n".join(lines)[:MAX_TELEGRAM_MESSAGE]
@@ -15447,10 +15482,10 @@ def v483_final_status_text() -> str:
     snapshot = compute_equity_snapshot_data()
     return (
         "🧊 V4.9.7 FINAL FREEZE STATUS\n\n"
-        f"Strategy display: {STRATEGY_VERSION}\n"
-        "Strategy logic: v4.9.4 review-fixed active-only Core/Growth/SPEC/Swing/Crypto. No scoring/allocation change.\n"
-        "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
-        "Disabled from live operation: legacy VCP 0%, Bear/inverse 0%, Options 0%\n\n"
+        f"🧾 Strategy display: {STRATEGY_VERSION}\n"
+        "🧩 Strategy logic: v4.9.4 review-fixed active-only Core/Growth/SPEC/Swing/Crypto. No scoring/allocation change.\n"
+        "🎯 Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
+        "❌ Disabled from live operation: legacy VCP 0%, Bear/inverse 0%, Options 0%\n\n"
         "🧾 Cash accounting:\n"
         "➕ depositcash records external deposits as principal.\n"
         "❌ setcash is disabled. Use IBKR reconciliation for broker cash checks.\n"
@@ -15458,14 +15493,15 @@ def v483_final_status_text() -> str:
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
         f"➖ Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
         f"🔁 Net external cash: {format_money(snapshot.get('net_external_cash', 0))}\n\n"
-        f"Public channel enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
-        f"Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
-        f"Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
-        f"Public Swing Alpha signals: {yes_no(SWING_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
-        f"Public Crypto actionable alerts: {yes_no(CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED)}\n"
-        f"Crypto daily no-action alerts: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
-        f"Crypto gate-open info alerts: {yes_no(V483_CRYPTO_ALERT_ON_GATE_OPEN)}\n"
-        f"IBKR reconciliation: {yes_no(IBKR_RECON_ENABLED)} read-only\n\n"
+        "📣 Public channel:\n"
+        f"📣 Public channel enabled: {yes_no(PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0)}\n"
+        f"🗓️ Public monthly dashboard: {yes_no(V482_PUBLIC_MONTHLY_DASHBOARD_ENABLED)}\n"
+        f"📋 Public monthly details: {yes_no(V482_PUBLIC_MONTHLY_DETAIL_ENABLED)}\n"
+        f"🎯 Public Swing Alpha signals: {yes_no(SWING_ALPHA_PUBLIC_SIGNAL_ENABLED)}\n"
+        f"🪙 Public Crypto actionable alerts: {yes_no(CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED)}\n"
+        f"🔕 Crypto daily no-action alerts: {yes_no(V482_CRYPTO_SEND_NO_ACTION_DAILY)}\n"
+        f"🚦 Crypto gate-open info alerts: {yes_no(V483_CRYPTO_ALERT_ON_GATE_OPEN)}\n"
+        f"🏦 IBKR reconciliation: {yes_no(IBKR_RECON_ENABLED)} read-only\n\n"
         "📣 Expected automatic alerts:\n"
         "• 🗓️ Monthly Core/Growth/SPEC dashboard after market close in the monthly rebalance window.\n"
         "• 🚨 Core/Growth/SPEC critical hard-exit watch after close when portfolio/allocation risk requires it.\n"
