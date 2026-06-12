@@ -2858,7 +2858,7 @@ def format_cash_deposit_report() -> str:
     summary = cash_deposit_summary()
     deposits = load_cash_deposits()
     msg = (
-        "💵 CASH DEPOSITS v4.9.7\n\n"
+        "💵 CASH DEPOSITS v4.9.8\n\n"
         f"➕ Deposited cash: {format_money(summary['cash_deposited'])}\n"
         f"➖ Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
         f"🔁 Net external cash: {format_money(summary['net_external_cash'])}\n"
@@ -2894,14 +2894,14 @@ def format_withdrawal_plan_report() -> str:
     plan = compute_withdrawal_plan()
     if not plan["initialized"]:
         return (
-            "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+            "🏦 WITHDRAWAL PLAN v4.9.8\n\n"
             f"💼 Equity: {format_money(plan['equity'])}\n"
             f"💵 Cash: {format_money(plan['cash'])}\n"
             f"{cash_flow_lines()}\n\n"
             f"📌 Status: {plan['reason']}"
         )[:MAX_TELEGRAM_MESSAGE]
     return (
-        "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+        "🏦 WITHDRAWAL PLAN v4.9.8\n\n"
         f"📊 Phase: {plan['phase']}\n"
         f"💼 Equity: {format_money(plan['equity'])}\n"
         f"💵 Cash: {format_money(plan['cash'])}\n"
@@ -2921,15 +2921,35 @@ def format_withdrawal_plan_report() -> str:
 
 def format_realized_pnl_report() -> str:
     perf = realized_performance_all_time()
+    snapshot = compute_equity_snapshot_data()
+    unrealized_keys = (
+        "core_unrealized_profit",
+        "growth_alpha_unrealized_profit",
+        "spec_unrealized_profit",
+        "swing_alpha_unrealized_profit",
+        "crypto_alpha_unrealized_profit",
+    )
+    cost_basis_keys = (
+        "core_cost_basis",
+        "growth_alpha_cost_basis",
+        "spec_cost_basis",
+        "swing_alpha_cost_basis",
+        "crypto_alpha_cost_basis",
+    )
+    total_unrealized = round(sum(float(snapshot.get(k, 0) or 0) for k in unrealized_keys), 2)
+    open_cost_basis = round(sum(float(snapshot.get(k, 0) or 0) for k in cost_basis_keys), 2)
+    unrealized_pct = None if open_cost_basis <= 0 else (total_unrealized / open_cost_basis) * 100
     return (
-        "💰 REALIZED P/L - ALL TIME v4.9.7\n\n"
-        f"📈 Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        "💰 P/L - ALL TIME v4.9.8\n\n"
+        f"✅ Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
+        f"📈 Total unrealized strategy P/L: {format_money(total_unrealized)} ({format_pct(unrealized_pct)})\n"
+        f"📦 Open position cost basis: {format_money(open_cost_basis)}\n"
         f"📏 Performance base capital: {format_money(perf['base_capital'])}\n"
         f"🧾 Trade records: {perf['trade_records']}\n\n"
         f"➕ Deposited cash: {format_money(perf.get('cash_deposited', 0))}\n"
         f"➖ Withdrawn cash: {format_money(perf.get('cash_withdrawn', 0))}\n"
         f"🔁 Net external cash: {format_money(perf.get('net_external_cash', 0))}\n\n"
-        "🧾 Note: deposits/withdrawals are external cash flow, not realized strategy P/L."
+        "🧾 Note: deposits/withdrawals are external cash flow, not realized or unrealized strategy P/L."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
@@ -2940,7 +2960,7 @@ def format_summary_report() -> str:
     duration = avg_trade_duration()
     e = expectancy_summary()
     return (
-        "📊 SUMMARY v4.9.7\n\n"
+        "📊 SUMMARY v4.9.8\n\n"
         f"💰 Realized strategy P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
         f"📏 Performance base capital: {format_money(perf['base_capital'])}\n"
         f"✅ Win Rate: {wr}%\n"
@@ -14015,7 +14035,7 @@ def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optio
     except Exception as exc:
         win_text = f"n/a — {exc}"
     return (
-        "🗓️ MONTHLY ACTION DASHBOARD v4.9.7\n\n"
+        "🗓️ MONTHLY ACTION DASHBOARD v4.9.8\n\n"
         "This is the monthly control message. You should not need to manually run wealthplan/growthplan/specplan.\n\n"
         f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
         f"Monthly window: {win_text}\n"
@@ -14062,7 +14082,7 @@ def _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force: bool = False, preview_only: boo
             send(format_growth_alpha_plan(growth_plan))
         if spec_plan is not None:
             send(format_spec_alpha_plan(spec_plan))
-        # v4.9.7: do not send the full Crypto plan as part of the monthly dashboard.
+        # v4.9.8: do not send the full Crypto plan as part of the monthly dashboard.
         # Crypto is tactical and sends a private/public alert only when actionable
         # through maybe_send_crypto_alpha_auto_signal(), or when manually forced.
     if not preview_only:
@@ -14081,7 +14101,7 @@ def _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force: bool = False, preview_only: boo
 
 
 # =============================================================================
-# V4.9.7 MONTHLY-SLEEVE CRITICAL EXIT WATCH
+# V4.9.8 MONTHLY-SLEEVE CRITICAL EXIT WATCH
 # =============================================================================
 # Alert/routing only. This does not place broker orders and does not change
 # Core/Growth/SPEC scoring, monthly lock, allocation, ledgers, or IBKR behavior.
@@ -14188,7 +14208,7 @@ def maybe_send_monthly_sleeve_critical_exit_signal(force: bool = False) -> bool:
             return False
 
         msg = (
-            "🚨 CORE/GROWTH/SPEC CRITICAL EXIT WATCH v4.9.7\n\n"
+            "🚨 CORE/GROWTH/SPEC CRITICAL EXIT WATCH v4.9.8\n\n"
             "This is a hard-risk/allocation alert, not routine monthly rotation churn.\n\n"
             f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
             f"🌎 Market regime: {market_label(market)}\n"
@@ -14212,7 +14232,7 @@ def maybe_send_monthly_sleeve_critical_exit_signal(force: bool = False) -> bool:
         audit("V497_MONTHLY_SLEEVE_CRITICAL_EXIT", f"market={market} rows={len(rows)} reasons={reasons}")
         return True
     except Exception as exc:
-        logger.exception(f"[V4.9.7 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
+        logger.exception(f"[V4.9.8 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
         if force:
             send(f"⚠️ Monthly-sleeve critical exit watch failed: {exc}")
         return False
@@ -14226,11 +14246,11 @@ def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
     try:
         maybe_send_monthly_sleeve_critical_exit_signal(force=False)
     except Exception as exc:
-        logger.exception(f"[V4.9.7 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
+        logger.exception(f"[V4.9.8 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
     try:
         maybe_send_crypto_alpha_auto_signal(force=False)
     except Exception as exc:
-        logger.exception(f"[V4.9.7 CRYPTO AUTO ERROR] {exc}")
+        logger.exception(f"[V4.9.8 CRYPTO AUTO ERROR] {exc}")
     try:
         maybe_send_ibkr_reconcile_after_close()
     except Exception as exc:
@@ -14448,7 +14468,7 @@ def _V48_OLD_COMBINED_PORTFOLIO_REPORT() -> str:  # type: ignore[override]
     equity = float(snapshot.get("equity", 0) or 0)
 
     msg = (
-        "📋 PORTFOLIO v4.9.7\n\n"
+        "📋 PORTFOLIO v4.9.8\n\n"
         f"💵 Cash: {format_money(cash)}\n"
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
         f"➖ Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
@@ -14528,7 +14548,7 @@ def _v47_equity_text() -> str:
     snapshot = compute_equity_snapshot_data()
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
     lines = [
-        "💼 ACCOUNT EQUITY v4.9.7",
+        "💼 ACCOUNT EQUITY v4.9.8",
         "",
         f"💵 Cash: {format_money(snapshot['cash'])}",
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}",
@@ -14754,7 +14774,7 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     risk = plan.get("risk_guard", {}) or {}
     snapshot = compute_equity_snapshot_data()
     return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.9.7\n\n"
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v4.9.8\n\n"
         "🛡️ Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
@@ -14884,7 +14904,7 @@ def _v48_sleevestatus_text() -> str:  # type: ignore[override]
             return 0.0
 
     return (
-        "🧭 ACTIVE SLEEVE STATUS v4.9.7\n\n"
+        "🧭 ACTIVE SLEEVE STATUS v4.9.8\n\n"
         f"💼 Equity: {format_money(equity)}\n"
         f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n"
         f"📦 Total active bot positions: {format_money(snapshot.get('positions_value', 0))}\n\n"
@@ -15241,8 +15261,8 @@ def _V483_EXPORT_BASE(prefix: str = "bot_state_export") -> str:  # type: ignore[
 # - Do not change active strategy scoring, allocation, ledgers, IBKR behavior, or
 #   order execution behavior.
 
-V497_VERSION = "v4.9.7-final-freeze-depositcash-20-45-15-10-10-monitor"
-V497_LOGIC_LABEL = "v4.9.7: v4.9.4 review-fixed strategy with depositcash accounting, emoji restoration, and action-only crypto alerts"
+V497_VERSION = "v4.9.8-final-freeze-depositcash-20-45-15-10-10-monitor"
+V497_LOGIC_LABEL = "v4.9.8: v4.9.4 review-fixed strategy with depositcash accounting, emoji restoration, and action-only crypto alerts"
 V497_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
 V483_VERSION = V497_VERSION
 V483_LOGIC_LABEL = V497_LOGIC_LABEL
@@ -15260,19 +15280,19 @@ if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
 def _v483_label_cleanup(text: Any) -> str:
     out = str(text)
     replacements = [
-        ("v4.8.3", "v4.9.7"), ("V4.8.3", "V4.9.7"),
-        ("v4.8.2", "v4.9.7"), ("V4.8.2", "V4.9.7"),
-        ("v4.8.1", "v4.9.7"), ("V4.8.1", "V4.9.7"),
-        ("v4.8", "v4.9.7"), ("V4.8", "V4.9.7"),
-        ("v4.7.1", "v4.9.7"), ("V4.7.1", "V4.9.7"),
-        ("v4.7", "v4.9.7"), ("V4.7", "V4.9.7"),
-        ("v4.6.3", "v4.9.7"), ("V4.6.3", "V4.9.7"),
-        ("v4.6.2", "v4.9.7"), ("V4.6.2", "V4.9.7"),
-        ("v4.4.3", "v4.9.7"), ("V4.4.3", "V4.9.7"),
-        ("v4.3", "v4.9.7"), ("V4.3", "V4.9.7"),
-        ("v3.8", "v4.9.7"), ("V3.8", "V4.9.7"),
-        ("v3.7", "v4.9.7"), ("V3.7", "V4.9.7"),
-        ("v3.6", "v4.9.7"), ("V3.6", "V4.9.7"),
+        ("v4.8.3", "v4.9.8"), ("V4.8.3", "V4.9.8"),
+        ("v4.8.2", "v4.9.8"), ("V4.8.2", "V4.9.8"),
+        ("v4.8.1", "v4.9.8"), ("V4.8.1", "V4.9.8"),
+        ("v4.8", "v4.9.8"), ("V4.8", "V4.9.8"),
+        ("v4.7.1", "v4.9.8"), ("V4.7.1", "V4.9.8"),
+        ("v4.7", "v4.9.8"), ("V4.7", "V4.9.8"),
+        ("v4.6.3", "v4.9.8"), ("V4.6.3", "V4.9.8"),
+        ("v4.6.2", "v4.9.8"), ("V4.6.2", "V4.9.8"),
+        ("v4.4.3", "v4.9.8"), ("V4.4.3", "V4.9.8"),
+        ("v4.3", "v4.9.8"), ("V4.3", "V4.9.8"),
+        ("v3.8", "v4.9.8"), ("V3.8", "V4.9.8"),
+        ("v3.7", "v4.9.8"), ("V3.7", "V4.9.8"),
+        ("v3.6", "v4.9.8"), ("V3.6", "V4.9.8"),
     ]
     for old, new in replacements:
         out = out.replace(old, new)
@@ -15306,7 +15326,7 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: i
     try:
         plan = compute_crypto_alpha_plan()
     except Exception as exc:
-        logger.exception(f"[V4.9.7 CRYPTO AUTO CHECK ERROR] {exc}")
+        logger.exception(f"[V4.9.8 CRYPTO AUTO CHECK ERROR] {exc}")
         if force:
             send(f"⚠️ Crypto auto-check failed: {exc}")
         return False
@@ -15346,7 +15366,7 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: i
         set_meta("last_v463_crypto_action_signature", action_sig)
         return False
 
-    header = f"🪙 CRYPTO AUTO CHECK v4.9.7 — {reason}\n\n"
+    header = f"🪙 CRYPTO AUTO CHECK v4.9.8 — {reason}\n\n"
     send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
     if public_reason and PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED:
         ok, info = send_public_signal(format_public_crypto_plan(plan, reason=public_reason))
@@ -15443,7 +15463,7 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
     zip_path = _V483_EXPORT_BASE(prefix=prefix)
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as z:
-            z.writestr("v497_final_freeze.json", json.dumps(safe_convert({
+            z.writestr("v498_final_freeze.json", json.dumps(safe_convert({
                 "version": V497_VERSION,
                 "strategy_logic": V497_LOGIC_LABEL,
                 "allocation": V497_ALLOCATION_LABEL,
@@ -15455,11 +15475,11 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
             z.writestr("cash_deposits.table.json", json.dumps(safe_convert(load_cash_deposits()), indent=2))
             z.writestr("cash_flow_summary.json", json.dumps(safe_convert(cash_deposit_summary()), indent=2))
     except Exception as exc:
-        print(f"[V4.9.7 EXPORT WARNING] {exc}")
+        print(f"[V4.9.8 EXPORT WARNING] {exc}")
     return zip_path
 
 
-# Final crypto label cleanup after v4.9.7 auto-alert override.
+# Final crypto label cleanup after v4.9.8 auto-alert override.
 
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v483_label_cleanup(_V483_FORMAT_CRYPTO_BASE(plan))
@@ -15473,7 +15493,7 @@ except Exception:
 
 
 # =============================================================================
-# V4.9.7 FINAL USER-FACING POLISH OVERRIDE
+# V4.9.8 FINAL USER-FACING POLISH OVERRIDE
 # =============================================================================
 # This last block is intentionally label/alert routing only.
 # It does not change strategy scoring, allocation, risk, ledgers, IBKR, or execution.
@@ -15481,7 +15501,7 @@ except Exception:
 def v483_final_status_text() -> str:
     snapshot = compute_equity_snapshot_data()
     return (
-        "🧊 V4.9.7 FINAL FREEZE STATUS\n\n"
+        "🧊 V4.9.8 FINAL FREEZE STATUS\n\n"
         f"🧾 Strategy display: {STRATEGY_VERSION}\n"
         "🧩 Strategy logic: v4.9.4 review-fixed active-only Core/Growth/SPEC/Swing/Crypto. No scoring/allocation change.\n"
         "🎯 Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
@@ -15513,7 +15533,7 @@ def v483_final_status_text() -> str:
 
 def v483_final_help_text() -> str:
     return (
-        "Commands v4.9.7:\n"
+        "Commands v4.9.8:\n"
         "portfolio | equity | summary | pnl | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus\n"
         "depositcash AMOUNT [note] | depositstatus | showdeposits | download_deposits\n"
         "withdrawplan | withdrawdone AMOUNT [note] | showwithdrawals | download_withdrawals\n"
@@ -15531,10 +15551,10 @@ def v483_final_help_text() -> str:
 
 def format_validation_status() -> str:  # type: ignore[override]
     return (
-        "🧪 VALIDATION STATUS v4.9.7\n\n"
-        "Strategy: v4.9.4 review-fixed active-only strategy with v4.9.7 depositcash accounting.\n"
+        "🧪 VALIDATION STATUS v4.9.8\n\n"
+        "Strategy: v4.9.4 review-fixed active-only strategy with v4.9.8 depositcash accounting.\n"
         "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
-        "🧩 v4.9.7 change scope:\n"
+        "🧩 v4.9.8 change scope:\n"
         "- Strategy scoring, allocation, scan logic, ledgers, IBKR behavior, and execution remain unchanged.\n"
         "- setcash is disabled. Use depositcash to record manual external deposits.\n"
         "- Deposits increase principal/performance base and adjust withdrawal HWM upward.\n"
@@ -15549,11 +15569,11 @@ def format_validation_status() -> str:  # type: ignore[override]
         "• Core/Growth/SPEC hard-exit watch is sent automatically after close when risk/allocation is critical.\n"
         "• Crypto auto-alerts are action-only by default: BUY/ADD/TRIM/SELL or action-cleared.\n"
         "• Swing Alpha tactical entries/exits remain automatic near the scan/management windows.\n\n"
-        "🤖 No broker order automation in v4.9.7; IBKR reconciliation remains read-only."
+        "🤖 No broker order automation in v4.9.8; IBKR reconciliation remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
-# V4.9.7 final command-output label cleanup.
+# V4.9.8 final command-output label cleanup.
 # Some status commands are produced inline by the command router rather than by
 # named formatter functions. Intercept them last so all visible labels are v4.8.3.
 
@@ -15636,21 +15656,21 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     # ---- merged from _V483_FINAL_HANDLE_COMMAND ----
-    if text_lower in {"v497status", "v496status", "v495status", "v494status", "v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
+    if text_lower in {"v498status", "v497status", "v496status", "v495status", "v494status", "v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
         send(v483_final_status_text())
         return
     if text_lower in {"help", "/help"}:
         send(v483_final_help_text())
         return
     if text_lower in {"testchannel", "testpublic"}:
-        ok, info = send_public_signal("✅ Public channel test from v4.9.7. If you see this, public forwarding works.\n\n" + public_signal_footer())
+        ok, info = send_public_signal("✅ Public channel test from v4.9.8. If you see this, public forwarding works.\n\n" + public_signal_footer())
         send(f"Public test status: {info if ok else 'FAILED - ' + info}")
         return
 
     # ---- merged from _V483_FINAL_OLD_HANDLE_COMMAND ----
     if text_lower in {"bearstatus", "vcpstatus"}:
         send(
-            "ℹ️ V4.9.7 ACTIVE-ONLY STATUS\n\n"
+            "ℹ️ V4.9.8 ACTIVE-ONLY STATUS\n\n"
             "Legacy VCP, Bear/inverse, and Options strategies are removed from live operation.\n"
             "Swing Alpha owns the tactical stock signal path.\n\n"
             "Use: swingstatus, swingplan, swingbuy, swingsell."
@@ -15658,7 +15678,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     if text_lower.split(" ")[0] in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
         send(
-            "❌ Legacy VCP/Bear bought/sold commands are disabled in v4.9.7.\n\n"
+            "❌ Legacy VCP/Bear bought/sold commands are disabled in v4.9.8.\n\n"
             "Use the active ledger commands only:\n"
             "• corebuy / coresell\n"
             "• growthbuy / growthsell\n"
@@ -15736,7 +15756,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         send(format_portfolio_allocation_plan())
         return
     if text_lower == "forcescan":
-        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.9.7.")
+        send("🔎 Manual Swing Alpha scan started. This replaces the disabled VCP/Bear tactical scan path in v4.9.8.")
         ok = scan_swing_alpha_market(force=True, verbose=True)
         send("✅ Manual Swing Alpha scan complete." if ok else "⚠️ Manual Swing Alpha scan did not complete cleanly.")
         return
@@ -15752,7 +15772,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         details = swing_alpha_position_market_value_details()
         m_ok, m_reason = swing_alpha_market_filter_ok()
         send(
-            "🎯 SWING_ALPHA STATUS v4.9.7\n\n"
+            "🎯 SWING_ALPHA STATUS v4.9.8\n\n"
             f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
             f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
             f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
@@ -16148,7 +16168,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     if text_lower.startswith("ensembleplan") or text_lower.startswith("ensemblescan"):
-        send("ℹ️ ensembleplan is not part of v4.9.7. This freeze uses v4.9.4 review-fixed strategy logic and keeps Swing Alpha as the 10% tactical sleeve.")
+        send("ℹ️ ensembleplan is not part of v4.9.8. This freeze uses v4.9.4 review-fixed strategy logic and keeps Swing Alpha as the 10% tactical sleeve.")
         return
 
     spec_trade_cmd = re.fullmatch(r"(?i)\s*(specbuy|specsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*", text_clean)
@@ -16389,7 +16409,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         plan = compute_withdrawal_plan()
         if not plan["initialized"]:
             send(
-                "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+                "🏦 WITHDRAWAL PLAN v4.9.8\n\n"
                 f"💼 Equity: {format_money(plan['equity'])}\n"
                 f"💵 Cash: {format_money(plan['cash'])}\n"
                 f"➕ Deposited cash: {format_money(plan.get('cash_deposited', plan.get('deposited_cash', 0)))}\n"
@@ -16400,7 +16420,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
             return
 
         send(
-            "🏦 WITHDRAWAL PLAN v4.9.7\n\n"
+            "🏦 WITHDRAWAL PLAN v4.9.8\n\n"
             f"📊 Phase: {plan['phase']}\n"
             f"💼 Equity: {format_money(plan['equity'])}\n"
             f"💵 Cash: {format_money(plan['cash'])}\n"
@@ -16739,7 +16759,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
     if text_lower.startswith("setcash"):
         send(
-            "❌ setcash is disabled in v4.9.7.\n\n"
+            "❌ setcash is disabled in v4.9.8.\n\n"
             "Use depositcash AMOUNT optional note to record external cash deposits.\n"
             "Use brokerreconcile / brokersyncpreview for IBKR reconciliation.\n\n"
             "Reason: direct cash setting can make deposits look like trading profit and distort withdrawal logic."
