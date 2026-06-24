@@ -2858,7 +2858,7 @@ def format_cash_deposit_report() -> str:
     summary = cash_deposit_summary()
     deposits = load_cash_deposits()
     msg = (
-        "💵 CASH DEPOSITS v5.0\n\n"
+        "💵 CASH DEPOSITS v5.1\n\n"
         f"➕ Deposited cash: {format_money(summary['cash_deposited'])}\n"
         f"➖ Withdrawn cash: {format_money(summary['cash_withdrawn'])}\n"
         f"🔁 Net external cash: {format_money(summary['net_external_cash'])}\n"
@@ -2894,14 +2894,14 @@ def format_withdrawal_plan_report() -> str:
     plan = compute_withdrawal_plan()
     if not plan["initialized"]:
         return (
-            "🏦 WITHDRAWAL PLAN v5.0\n\n"
+            "🏦 WITHDRAWAL PLAN v5.1\n\n"
             f"💼 Equity: {format_money(plan['equity'])}\n"
             f"💵 Cash: {format_money(plan['cash'])}\n"
             f"{cash_flow_lines()}\n\n"
             f"📌 Status: {plan['reason']}"
         )[:MAX_TELEGRAM_MESSAGE]
     return (
-        "🏦 WITHDRAWAL PLAN v5.0\n\n"
+        "🏦 WITHDRAWAL PLAN v5.1\n\n"
         f"📊 Phase: {plan['phase']}\n"
         f"💼 Equity: {format_money(plan['equity'])}\n"
         f"💵 Cash: {format_money(plan['cash'])}\n"
@@ -2940,7 +2940,7 @@ def format_realized_pnl_report() -> str:
     open_cost_basis = round(sum(float(snapshot.get(k, 0) or 0) for k in cost_basis_keys), 2)
     unrealized_pct = None if open_cost_basis <= 0 else (total_unrealized / open_cost_basis) * 100
     return (
-        "💰 P/L - ALL TIME v5.0\n\n"
+        "💰 P/L - ALL TIME v5.1\n\n"
         f"✅ Realized strategy P/L: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
         f"📈 Total unrealized strategy P/L: {format_money(total_unrealized)} ({format_pct(unrealized_pct)})\n"
         f"📦 Open position cost basis: {format_money(open_cost_basis)}\n"
@@ -2960,7 +2960,7 @@ def format_summary_report() -> str:
     duration = avg_trade_duration()
     e = expectancy_summary()
     return (
-        "📊 SUMMARY v5.0\n\n"
+        "📊 SUMMARY v5.1\n\n"
         f"💰 Realized strategy P/L all-time: {format_money(perf['profit'])} ({format_pct(perf['pct'])})\n"
         f"📏 Performance base capital: {format_money(perf['base_capital'])}\n"
         f"✅ Win Rate: {wr}%\n"
@@ -12995,7 +12995,7 @@ def _v498_compute_swing_alpha_tactical_plan() -> Dict[str, Any]:
 
 
 # =============================================================================
-# V5.0 SWING BLEND UPGRADE
+# V5.1 SWING BLEND UPGRADE
 # =============================================================================
 # Purpose:
 # - Keep total Swing Alpha allocation at 10%.
@@ -13006,11 +13006,11 @@ def _v498_compute_swing_alpha_tactical_plan() -> Dict[str, Any]:
 #   swingbuy, swingsell, swingportfolio, swingpnl, swingexposure.
 # - No broker orders are placed. This remains manual execution + ledger recording.
 
-V500_VERSION = "v5.0-final-freeze-swing-blend-public-growth-20-45-15-10-10-monitor"
-V500_SWING_LOGIC_LABEL = "Swing Blend 10% = 5% Tactical MACD+VAH + 5% Weekly RS63 vol-adjusted rotation"
+V500_VERSION = "v5.1-final-freeze-swing-late-entry-fee-aware-20-45-15-10-10-monitor"
+V500_SWING_LOGIC_LABEL = "Swing Blend 10% = 5% Tactical MACD+VAH + 5% Weekly RS63 vol-adjusted rotation + v5.1 late-entry/fee-aware execution"
 V500_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Blend 10 / Crypto 10 / VCP 0 / Bear 0 / Options 0"
 V497_VERSION = V500_VERSION
-V497_LOGIC_LABEL = "v5.0: v4.9.8 active-only baseline + Swing Blend + public Growth plan routing fix"
+V497_LOGIC_LABEL = "v5.1: v4.9.8 active-only baseline + Swing Blend + public Growth plan routing fix"
 V497_ALLOCATION_LABEL = V500_ALLOCATION_LABEL
 V483_VERSION = V500_VERSION
 V483_LOGIC_LABEL = V497_LOGIC_LABEL
@@ -13467,7 +13467,132 @@ def _v46_validate_swing_quote(ticker: str, price: float) -> Tuple[bool, str, Opt
         return False, f"Swing Alpha trade rejected: your price is too far from live quote. Live quote: {round(quote,4)} | Your price: {round(price,4)} | Max deviation: {round(SWING_ALPHA_QUOTE_DEVIATION_LIMIT*100,2)}%", quote
     return True, "OK", quote
 
-def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False) -> Tuple[bool, str]:
+
+
+# ---- V5.1 Swing late-entry and commission-aware execution helpers ----
+SWING_LATE_ENTRY_ENABLED = os.getenv("SWING_LATE_ENTRY_ENABLED", "1") != "0"
+SWING_LATE_ENTRY_MAX_TRADING_DAYS = int(os.getenv("SWING_LATE_ENTRY_MAX_TRADING_DAYS", "1"))
+SWING_LATE_ENTRY_REQUIRE_ACTIONABLE = os.getenv("SWING_LATE_ENTRY_REQUIRE_ACTIONABLE", "1") != "0"
+SWING_LATE_ENTRY_REQUIRE_BELOW_MAX_ENTRY = os.getenv("SWING_LATE_ENTRY_REQUIRE_BELOW_MAX_ENTRY", "1") != "0"
+SWING_LATE_ENTRY_REQUIRE_ABOVE_STOP = os.getenv("SWING_LATE_ENTRY_REQUIRE_ABOVE_STOP", "1") != "0"
+SWING_LATE_ENTRY_MIN_STOP_DISTANCE_PCT = float(os.getenv("SWING_LATE_ENTRY_MIN_STOP_DISTANCE_PCT", "0.02"))
+SWING_LATE_ENTRY_REQUIRE_VAH_VALID = os.getenv("SWING_LATE_ENTRY_REQUIRE_VAH_VALID", "1") != "0"
+SWING_LATE_ENTRY_VAH_TOLERANCE_PCT = float(os.getenv("SWING_LATE_ENTRY_VAH_TOLERANCE_PCT", "0.005"))
+SWING_MANUAL_RECONCILE_ENABLED = os.getenv("SWING_MANUAL_RECONCILE_ENABLED", "1") != "0"
+
+
+def _v51_parse_fee_tail(raw_tail: str) -> Tuple[float, bool, bool, bool]:
+    """Return (fee, partial, check, confirm) from a Swing command suffix."""
+    tail = (raw_tail or "").strip()
+    fee = 0.0
+    m = re.search(r"(?i)(?:fee|commission)\s+([0-9]+(?:\.[0-9]+)?)", tail)
+    if m:
+        fee = float(m.group(1))
+    partial = bool(re.search(r"(?i)(?:^|\s)partial(?:\s|$)", tail))
+    check = bool(re.search(r"(?i)(?:^|\s)CHECK(?:\s|$)", tail))
+    confirm = bool(re.search(r"(?i)(?:^|\s)CONFIRM(?:\s|$)", tail))
+    return fee, partial, check, confirm
+
+
+def _v51_validate_fee(fee: float) -> Tuple[bool, str]:
+    try:
+        fee = float(fee)
+    except Exception:
+        return False, "Fee/commission must be numeric."
+    if not math.isfinite(fee) or fee < 0:
+        return False, "Fee/commission must be finite and non-negative."
+    return True, "OK"
+
+
+def _v51_trading_days_since(plan_date: str) -> Optional[int]:
+    try:
+        pdate = pd.to_datetime(plan_date).date()
+        today = ny_now().date()
+        if pdate > today:
+            return None
+        schedule = NYSE.schedule(start_date=pdate, end_date=today)
+        if schedule.empty:
+            return None
+        return max(0, len(schedule.index) - 1)
+    except Exception:
+        return None
+
+
+def _v51_recent_swing_target_for_ticker(ticker: str, max_trading_days: Optional[int] = None) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[int]]:
+    ticker = str(ticker).upper()
+    max_days = SWING_LATE_ENTRY_MAX_TRADING_DAYS if max_trading_days is None else int(max_trading_days)
+    conn = db_connect()
+    try:
+        rows = conn.execute("SELECT * FROM swing_alpha_signals ORDER BY time DESC LIMIT 40").fetchall()
+    finally:
+        conn.close()
+    for row in rows:
+        plan = json_loads_dict(row["plan_json"])
+        target = swing_alpha_target_for_ticker(plan, ticker)
+        if target is None:
+            continue
+        days = _v51_trading_days_since(str(row["plan_date"]))
+        if days is None:
+            continue
+        if days <= max_days:
+            enriched = dict(target)
+            enriched["_source_plan_id"] = row["id"]
+            enriched["_source_plan_date"] = row["plan_date"]
+            enriched["_source_signal_time"] = float(row["time"])
+            return plan, enriched, days
+    return None, None, None
+
+
+def _v51_late_entry_check_text(ticker: str, price: float) -> Tuple[bool, str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[int]]:
+    if not SWING_LATE_ENTRY_ENABLED:
+        return False, "Swing late-entry support is disabled.", None, None, None
+    plan, target, days = _v51_recent_swing_target_for_ticker(ticker)
+    if target is None:
+        return False, f"No recent Swing entry target found for {ticker} within {SWING_LATE_ENTRY_MAX_TRADING_DAYS} trading day(s). Run swingplan again.", plan, target, days
+    reasons: List[str] = []
+    warnings: List[str] = []
+    action = str(target.get("action", "")).upper()
+    if SWING_LATE_ENTRY_REQUIRE_ACTIONABLE and action not in {"BUY", "ADD"}:
+        reasons.append(f"recent target action is {action or 'n/a'}, not BUY/ADD")
+    max_entry = float(target.get("max_valid_entry", 0) or 0)
+    if SWING_LATE_ENTRY_REQUIRE_BELOW_MAX_ENTRY and max_entry > 0 and price > max_entry:
+        reasons.append(f"price {round(price,4)} is above max entry {round(max_entry,4)}")
+    stop = float(target.get("stop", 0) or 0)
+    if SWING_LATE_ENTRY_REQUIRE_ABOVE_STOP and stop > 0:
+        min_ok = stop * (1.0 + SWING_LATE_ENTRY_MIN_STOP_DISTANCE_PCT)
+        if price <= min_ok:
+            reasons.append(f"price {round(price,4)} is too close to stop {round(stop,4)}; minimum distance is {round(SWING_LATE_ENTRY_MIN_STOP_DISTANCE_PCT*100,2)}%")
+    vah = float(target.get("vah_proxy", 0) or 0)
+    if SWING_LATE_ENTRY_REQUIRE_VAH_VALID and vah > 0:
+        if price < vah * (1.0 - SWING_LATE_ENTRY_VAH_TOLERANCE_PCT):
+            reasons.append(f"price {round(price,4)} is below VAH/reclaim proxy {round(vah,4)}; the original reclaim setup may have failed")
+    if days is not None and days > 0:
+        warnings.append(f"late entry from {days} trading day(s) after signal")
+    if stop > 0:
+        risk_pct = (price - stop) / price * 100.0
+        warnings.append(f"stop distance from entry: {round(risk_pct,2)}%")
+    lines = [
+        f"🎯 SWING LATE-ENTRY CHECK v5.1 — {ticker}",
+        "",
+        f"Signal date: {target.get('_source_plan_date')} | trading days old: {days}",
+        f"Action: {action or 'n/a'}",
+        f"Your fill/reference price: {round(price,4)}",
+        f"Signal price: {target.get('signal_price') or target.get('price')}",
+        f"Max entry: {target.get('max_valid_entry')}",
+        f"Stop: {target.get('stop')}",
+        f"VAH proxy: {target.get('vah_proxy')}",
+    ]
+    if reasons:
+        lines += ["", "❌ Late entry NOT accepted:"] + [f"• {r}" for r in reasons]
+        lines += ["", "If you already bought it in the broker and only need the ledger to match IBKR, use:", f"swingfixbuy {ticker} SHARES at FILL_PRICE fee COMMISSION CONFIRM"]
+        return False, "\n".join(lines), plan, target, days
+    lines += ["", "✅ Late entry is acceptable under v5.1 guardrails."]
+    if warnings:
+        lines += ["", "Notes:"] + [f"• {w}" for w in warnings]
+    lines += ["", "To record after broker fill, send:", f"swinglatebuy {ticker} SHARES at FILL_PRICE fee COMMISSION CONFIRM"]
+    return True, "\n".join(lines), plan, target, days
+
+def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: Optional[int] = None, partial_ok: bool = False, fee: float = 0.0, allow_recent_signal: bool = False, manual_reconcile: bool = False, skip_quote_check: bool = False) -> Tuple[bool, str]:
     if not SWING_ALPHA_LEDGER_ENABLED:
         return False, "Swing Alpha ledger is disabled."
     ticker = normalize_ticker(ticker or "")
@@ -13477,33 +13602,68 @@ def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: 
         return False, f"{ticker} is not in the Swing Alpha universe."
     if shares <= 0 or price <= 0 or not math.isfinite(shares) or not math.isfinite(price):
         return False, "Shares and price must be positive finite numbers."
+    ok_fee, fee_msg = _v51_validate_fee(fee)
+    if not ok_fee:
+        return False, fee_msg
+    fee = float(fee)
     if (not SWING_ALPHA_ALLOW_FRACTIONAL_SHARES) and abs(shares - round(shares)) > 1e-9:
         return False, "Fractional Swing Alpha shares are disabled."
-    amount = shares * price
-    if amount < SWING_ALPHA_MIN_TRADE_DOLLARS and not partial_ok:
+    gross_amount = shares * price
+    amount = gross_amount + fee
+    effective_avg = amount / shares if shares > 0 else price
+    if amount < SWING_ALPHA_MIN_TRADE_DOLLARS and not partial_ok and not manual_reconcile:
         return False, f"Swing Alpha buy rejected: order {format_money(amount)} is below minimum {format_money(SWING_ALPHA_MIN_TRADE_DOLLARS)}. Use 'partial' only for real broker partial fills already filled."
+
     latest = load_latest_swing_alpha_signal()
     target = swing_alpha_target_for_ticker(latest or {}, ticker) if latest else None
-    if SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY and target is None:
-        return False, "No active Swing Alpha plan target for this ticker. Run swingplan first."
-    if target is not None:
+    plan_for_id = latest
+    recent_days = None
+    if target is None and (allow_recent_signal or manual_reconcile):
+        recent_plan, recent_target, recent_days = _v51_recent_swing_target_for_ticker(ticker)
+        if recent_target is not None:
+            target = recent_target
+            plan_for_id = recent_plan
+
+    if manual_reconcile and not SWING_MANUAL_RECONCILE_ENABLED:
+        return False, "Swing manual reconciliation is disabled."
+    if SWING_ALPHA_REQUIRE_ACTIVE_PLAN_FOR_BUY and target is None and not manual_reconcile:
+        return False, "No active or recent Swing Alpha plan target for this ticker. Run swingplan first, or use swingfixbuy ... CONFIRM only for a real broker fill already executed."
+    if allow_recent_signal and not manual_reconcile:
+        late_ok, late_msg, _, _, _ = _v51_late_entry_check_text(ticker, price)
+        if not late_ok:
+            return False, late_msg
+    if target is not None and not manual_reconcile:
         if str(target.get("action", "")).upper() == "WATCH" and not partial_ok:
             return False, "This Swing target is WATCH only. Wait for an actionable BUY/ADD signal, or use partial only for a real broker fill already executed."
         max_entry = float(target.get("max_valid_entry", 0) or 0)
         if max_entry > 0 and price > max_entry and not partial_ok:
             return False, f"Entry above max limit guide. Max {round(max_entry,4)}, your price {round(price,4)}."
-    ok, msg, quote = _v46_validate_swing_quote(ticker, price)
-    if not ok:
-        return False, msg
+
+    quote = None
+    if not skip_quote_check:
+        ok, msg, quote = _v46_validate_swing_quote(ticker, price)
+        if not ok:
+            return False, msg + "\n\nIf this is a real IBKR fill from earlier and the current quote moved, use swingfixbuy TICKER SHARES at FILL_PRICE fee COMMISSION CONFIRM."
+
     sub = str((target or {}).get("sub_sleeve") or (target or {}).get("strategy_subsleeve") or "TACTICAL_MACD_VAH").upper()
     note = SWING_WEEKLY_RS_SETUP_TYPE if "WEEKLY" in sub or "RS" in sub else SWING_TACTICAL_SETUP_TYPE
+    if allow_recent_signal and not manual_reconcile:
+        note = f"late_entry_{recent_days}_trading_day; {note}"
+    if manual_reconcile:
+        note = f"manual_ibkr_reconcile; fill_price={round(price, 6)}; fee={round(fee, 6)}; {note}"
+    elif fee > 0:
+        note = f"fee={round(fee, 6)}; fill_price={round(price, 6)}; {note}"
     if partial_ok:
         note = f"partial fill; {note}"
+
     with db_tx() as conn:
         cash = get_cash(conn)
         if amount > cash * CASH_USAGE_BUFFER:
-            return False, f"Not enough cash. Need {format_money(amount)}, available with buffer {format_money(cash * CASH_USAGE_BUFFER)}."
+            return False, f"Not enough cash. Need {format_money(amount)}, available with buffer {format_money(cash * CASH_USAGE_BUFFER)}. If cash is wrong, use depositcash or broker reconciliation before recording."
         row = conn.execute("SELECT * FROM swing_alpha_positions WHERE ticker = ?", (ticker,)).fetchone()
+        plan_id = None if plan_for_id is None else plan_for_id.get("plan_id")
+        target_pct = None if target is None else float(target.get("target_account_pct", 0) or 0)
+        now = now_ts()
         if row:
             old_shares = float(row["shares"])
             old_cost = float(row["cost_basis"])
@@ -13515,20 +13675,27 @@ def record_swing_alpha_buy(ticker: str, shares: float, price: float, update_id: 
             stop = float(row["stop"] or 0) or float((target or {}).get("stop", price * 0.92) or price * 0.92)
             old_notes = str(row["notes"] or "")
             merged_notes = old_notes if note.lower() in old_notes.lower() else (old_notes + ("; " if old_notes else "") + note)
-            conn.execute("""UPDATE swing_alpha_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=?, highest=?, stop=?, target_account_pct=?, last_plan_id=?, notes=? WHERE ticker=?""", (round(new_shares, 8), round(avg, 8), round(new_cost, 6), now_ts(), highest, stop, None if target is None else float(target.get("target_account_pct", 0) or 0), None if latest is None else latest.get("plan_id"), merged_notes, ticker))
+            conn.execute("""UPDATE swing_alpha_positions SET shares=?, avg_entry_price=?, cost_basis=?, last_update_time=?, highest=?, stop=?, target_account_pct=?, last_plan_id=?, notes=? WHERE ticker=?""", (round(new_shares, 8), round(avg, 8), round(new_cost, 6), now, highest, stop, target_pct, plan_id, merged_notes[:500], ticker))
         else:
-            pos_id = f"SWING_{ticker}_{int(now_ts())}_{uuid.uuid4().hex[:8]}"
+            pos_id = f"SWING_{ticker}_{int(now)}_{uuid.uuid4().hex[:8]}"
             highest = float(quote or price)
             stop = float((target or {}).get("stop", price * 0.92) or price * 0.92)
-            conn.execute("""INSERT INTO swing_alpha_positions(ticker, swing_position_id, strategy_version, shares, avg_entry_price, cost_basis, entry_time, last_update_time, highest, stop, sleeve, target_account_pct, last_plan_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SWING_ALPHA', ?, ?, ?)""", (ticker, pos_id, SWING_ALPHA_STRATEGY_VERSION, round(shares,8), round(price,8), round(amount,6), now_ts(), now_ts(), highest, stop, None if target is None else float(target.get("target_account_pct", 0) or 0), None if latest is None else latest.get("plan_id"), note))
-        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares,8), round(price,8), round(amount,6), now_ts(), SWING_ALPHA_STRATEGY_VERSION, None if latest is None else latest.get("plan_id"), "broker_partial_fill" if partial_ok else f"manual_broker_fill_{note.replace(';','').replace(' ','_')}", now_ts()))
+            conn.execute("""INSERT INTO swing_alpha_positions(ticker, swing_position_id, strategy_version, shares, avg_entry_price, cost_basis, entry_time, last_update_time, highest, stop, sleeve, target_account_pct, last_plan_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SWING_ALPHA', ?, ?, ?)""", (ticker, pos_id, SWING_ALPHA_STRATEGY_VERSION, round(shares, 8), round(effective_avg, 8), round(amount, 6), now, now, highest, stop, target_pct, plan_id, note[:500]))
+        reason = "manual_ibkr_reconcile_buy" if manual_reconcile else ("late_swing_entry_buy" if allow_recent_signal else "manual_broker_fill")
+        if partial_ok and not manual_reconcile:
+            reason = "broker_partial_fill"
+        if fee > 0:
+            reason += f"_fee_{round(fee, 4)}"
+        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'BUY', ?, ?, ?, NULL, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares, 8), round(price, 8), round(amount, 6), now, SWING_ALPHA_STRATEGY_VERSION, plan_id, reason, now))
         set_cash_tx(conn, cash - amount)
         mark_update_processed_tx(conn, update_id, "swing_alpha_buy")
-    extra = "\n\n🧩 v5.0: recorded as broker partial fill below normal Swing Alpha minimum-order threshold." if partial_ok else ""
     sub_label = "📈 Weekly RS63" if note.startswith(SWING_WEEKLY_RS_SETUP_TYPE) or SWING_WEEKLY_RS_SETUP_TYPE in note else "🎯 Tactical MACD+VAH"
-    return True, (f"🎯 SWING_ALPHA BUY RECORDED {ticker}\n\n🧩 Sub-sleeve: {sub_label}\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Amount: {format_money(amount)}\n🎯 Plan action: {None if target is None else target.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(load_portfolio()['cash'])}{extra}")
+    fee_line = f"\n🧾 Fee/commission: {format_money(fee)}\n📌 Effective avg cost: {round(effective_avg, 4)}" if fee > 0 else ""
+    mode_line = "\n🛠️ Mode: Manual IBKR reconciliation" if manual_reconcile else ("\n⏳ Mode: Approved late Swing entry" if allow_recent_signal else "")
+    warn_line = "\n⚠️ Manual reconciliation bypasses active-plan validation because the broker fill already happened." if manual_reconcile else ""
+    return True, (f"🎯 SWING_ALPHA BUY RECORDED {ticker}\n\n🧩 Sub-sleeve: {sub_label}{mode_line}\n📦 Shares: {format_core_shares(shares)}\n💵 Fill price: {round(price,4)}{fee_line}\n💰 Total cost: {format_money(amount)}\n🔴 Stop used: {round(float((target or {}).get('stop', price * 0.92) or price * 0.92), 4)}\n🎯 Plan action: {None if target is None else target.get('action')}\n📐 Target account weight: {None if target is None else target.get('target_account_pct')}%\n💵 Cash left: {format_money(load_portfolio()['cash'])}{warn_line}")
 
-def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None) -> Tuple[bool, str]:
+def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id: Optional[int] = None, fee: float = 0.0, skip_quote_check: bool = False) -> Tuple[bool, str]:
     if not SWING_ALPHA_LEDGER_ENABLED:
         return False, "Swing Alpha ledger is disabled."
     ticker = normalize_ticker(ticker or "")
@@ -13536,9 +13703,14 @@ def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id:
         return False, "Invalid ticker."
     if shares <= 0 or price <= 0 or not math.isfinite(shares) or not math.isfinite(price):
         return False, "Shares and price must be positive finite numbers."
-    ok, msg, quote = _v46_validate_swing_quote(ticker, price)
-    if not ok:
-        return False, msg
+    ok_fee, fee_msg = _v51_validate_fee(fee)
+    if not ok_fee:
+        return False, fee_msg
+    fee = float(fee)
+    if not skip_quote_check:
+        ok, msg, quote = _v46_validate_swing_quote(ticker, price)
+        if not ok:
+            return False, msg
     with db_tx() as conn:
         row = conn.execute("SELECT * FROM swing_alpha_positions WHERE ticker = ?", (ticker,)).fetchone()
         if row is None:
@@ -13546,24 +13718,30 @@ def record_swing_alpha_sell(ticker: str, shares: float, price: float, update_id:
         current_shares = float(row["shares"])
         if shares > current_shares + 1e-8:
             return False, f"Cannot sell {format_core_shares(shares)}; only {format_core_shares(current_shares)} shares recorded."
-        avg = float(row["avg_entry_price"])
         cost_basis = float(row["cost_basis"])
-        proceeds = shares * price
+        gross_proceeds = shares * price
+        net_proceeds = gross_proceeds - fee
+        if net_proceeds < 0:
+            return False, "Sell fee cannot exceed gross proceeds."
         cost_removed = cost_basis * (shares / current_shares)
-        realized = proceeds - cost_removed
+        realized = net_proceeds - cost_removed
         remaining = current_shares - shares
         pos_id = row["swing_position_id"]
+        now = now_ts()
         if remaining <= 1e-8:
             conn.execute("DELETE FROM swing_alpha_positions WHERE ticker=?", (ticker,))
         else:
             remaining_cost = cost_basis - cost_removed
-            conn.execute("UPDATE swing_alpha_positions SET shares=?, cost_basis=?, avg_entry_price=?, last_update_time=? WHERE ticker=?", (round(remaining,8), round(remaining_cost,6), round(remaining_cost/remaining,8), now_ts(), ticker))
+            conn.execute("UPDATE swing_alpha_positions SET shares=?, cost_basis=?, avg_entry_price=?, last_update_time=? WHERE ticker=?", (round(remaining,8), round(remaining_cost,6), round(remaining_cost/remaining,8), now, ticker))
         cash = get_cash(conn)
-        set_cash_tx(conn, cash + proceeds)
-        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares,8), round(price,8), round(proceeds,6), round(realized,6), now_ts(), SWING_ALPHA_STRATEGY_VERSION, None, "manual_broker_exit", now_ts()))
+        set_cash_tx(conn, cash + net_proceeds)
+        reason = "manual_broker_exit" if fee <= 0 else f"manual_broker_exit_fee_{round(fee,4)}"
+        conn.execute("""INSERT INTO swing_alpha_trades(id, swing_position_id, ticker, side, shares, price, amount, realized_profit, time, strategy_version, plan_id, reason, created_at) VALUES (?, ?, ?, 'SELL', ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (uuid.uuid4().hex, pos_id, ticker, round(shares,8), round(price,8), round(net_proceeds,6), round(realized,6), now, SWING_ALPHA_STRATEGY_VERSION, None, reason, now))
         mark_update_processed_tx(conn, update_id, "swing_alpha_sell")
     pct = None if cost_removed <= 0 else (realized / cost_removed) * 100
-    return True, (f"🎯 SWING_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Price: {round(price,4)}\n💰 Proceeds: {format_money(proceeds)}\n📊 Realized Swing Alpha P/L: {format_money(realized)} ({format_pct(pct)})\n💵 Cash now: {format_money(load_portfolio()['cash'])}")
+    fee_line = f"\n🧾 Fee/commission: {format_money(fee)}\n💰 Net proceeds: {format_money(net_proceeds)}" if fee > 0 else ""
+    return True, (f"🎯 SWING_ALPHA SELL RECORDED {ticker}\n\n📦 Shares: {format_core_shares(shares)}\n💵 Fill price: {round(price,4)}{fee_line}\n💰 Gross proceeds: {format_money(gross_proceeds)}\n📊 Realized Swing Alpha P/L: {format_money(realized)} ({format_pct(pct)})\n💵 Cash now: {format_money(load_portfolio()['cash'])}")
+
 
 # ---- Include Swing Alpha in equity and reports ----
 
@@ -13883,7 +14061,7 @@ def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
     equity = float((compute_equity_snapshot_data() or {}).get("equity", 0) or 0)
     risk_pct = (risk_dollars / equity * 100.0) if equity > 0 else 0.0
     return (
-        "📈 SWING BLEND ENTRY SIGNAL v5.0\n\n"
+        "📈 SWING BLEND ENTRY SIGNAL v5.1\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🧬 Sleeve: {sleeve_label}\n"
         f"⚙️ Setup: {setup_label}\n"
@@ -13903,7 +14081,7 @@ def _v461_swing_entry_message(item: Dict[str, Any]) -> str:
         "Rules:\n"
         "• Do not chase above max entry.\n"
         "• Use Swing Alpha ledger only; do not use bought/sold/corebuy/growthbuy/specbuy.\n"
-        "• v5.0 Swing Blend uses the existing 10% Swing sleeve only; no extra allocation."
+        "• v5.1 Swing Blend uses the existing 10% Swing sleeve only; no extra allocation."
     )[:MAX_TELEGRAM_MESSAGE]
 
 def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
@@ -13914,7 +14092,7 @@ def _v461_swing_exit_message(item: Dict[str, Any]) -> str:
     price = float(item.get("price", 0) or 0)
     reason = str(item.get("reason", "Swing Alpha exit rule triggered."))
     return (
-        "📉 SWING BLEND EXIT SIGNAL v5.0\n\n"
+        "📉 SWING BLEND EXIT SIGNAL v5.1\n\n"
         f"🏷️ Ticker: {ticker}\n"
         f"🧬 Sleeve: 🎯 SWING_BLEND\n"
         f"📌 Reason: {reason}\n"
@@ -13933,7 +14111,7 @@ def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
     is_weekly_rs = ("weekly" in setup_type) or ("rs63" in setup_type)
     setup_label = "Weekly RS63 Vol-Adjusted" if is_weekly_rs else "MACD + VAH Reclaim"
     return (
-        "📈 SWING BLEND ENTRY SIGNAL v5.0\n\n"
+        "📈 SWING BLEND ENTRY SIGNAL v5.1\n\n"
         f"🏷️ Ticker: {ticker}\n"
         "🧬 Sleeve: Swing Blend\n"
         f"⚙️ Setup: {setup_label}\n\n"
@@ -13947,7 +14125,7 @@ def _v461_public_swing_entry(item: Dict[str, Any]) -> str:
 def _v461_public_swing_exit(item: Dict[str, Any]) -> str:
     ticker = str(item.get("ticker", "")).upper()
     return (
-        "📉 SWING BLEND EXIT SIGNAL v5.0\n\n"
+        "📉 SWING BLEND EXIT SIGNAL v5.1\n\n"
         f"🏷️ Ticker: {ticker}\n"
         "🧬 Sleeve: Swing Blend\n"
         f"📌 Reason: {item.get('reason', 'Exit rule triggered')}\n"
@@ -13962,24 +14140,24 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     expected_bar = expected_daily_bar_date()
     if not force and not SWING_ALPHA_AUTO_SIGNAL_REPEAT_SAME_DAY:
         if get_meta("last_swing_alpha_auto_scan_day") == today:
-            print("[V5.0 SWING BLEND SCAN SKIP] Swing Alpha already scanned today.")
+            print("[V5.1 SWING BLEND SCAN SKIP] Swing Alpha already scanned today.")
             return True
     if PANIC_MODE:
-        print("[V5.0 SWING BLEND SCAN BLOCKED] PANIC_MODE")
+        print("[V5.1 SWING BLEND SCAN BLOCKED] PANIC_MODE")
         return True
     if daily_drawdown_exceeded():
-        print("[V5.0 SWING BLEND SCAN BLOCKED] Daily loss limit")
+        print("[V5.1 SWING BLEND SCAN BLOCKED] Daily loss limit")
         return True
     guard = portfolio_risk_guard_details()
     if guard.get("block_new_entries"):
-        print("[V5.0 SWING BLEND SCAN BLOCKED] Hard drawdown guard")
+        print("[V5.1 SWING BLEND SCAN BLOCKED] Hard drawdown guard")
         maybe_send_portfolio_risk_guard_alert(guard)
         return True
     try:
         plan = compute_swing_alpha_plan()
         save_swing_alpha_plan(plan)
     except Exception as exc:
-        logger.exception(f"[V5.0 SWING BLEND SCAN ERROR] {exc}")
+        logger.exception(f"[V5.1 SWING BLEND SCAN ERROR] {exc}")
         send(f"⚠️ Swing Alpha scan failed: {exc}")
         return False
 
@@ -14016,7 +14194,7 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
     if verbose:
         send(format_swing_alpha_plan(plan))
     print(
-        "[V5.0 SWING BLEND SCAN SUMMARY] "
+        "[V5.1 SWING BLEND SCAN SUMMARY] "
         f"market_ok={plan.get('market_ok')} scored={plan.get('scored_count')} "
         f"entries={len(entries)} exits={len(exits)} sent={sent}"
     )
@@ -14029,7 +14207,7 @@ def scan_swing_alpha_market(force: bool = False, verbose: bool = False) -> bool:
 def scan_market() -> bool:  # type: ignore[override]
     if SWING_ALPHA_AUTO_SIGNAL_ENABLED and SWING_ALPHA_ENABLED and SWING_ALPHA_ACCOUNT_ALLOC_PCT > 0:
         return scan_swing_alpha_market(force=False, verbose=False)
-    print("[V5.0 SCAN SKIP] Swing Alpha auto signals disabled and VCP/Bear are disabled.")
+    print("[V5.1 SCAN SKIP] Swing Alpha auto signals disabled and VCP/Bear are disabled.")
     try:
         set_meta("last_scan_day", ny_date_str())
         bar = expected_daily_bar_date()
@@ -14274,7 +14452,7 @@ def manage_swing_alpha_positions() -> None:
                 sub_label = "📈 Weekly RS63" if is_weekly else "🎯 Tactical MACD+VAH"
                 item = {"ticker": ticker, "price": mark, "reason": exit_reason}
                 msg = (
-                    "📉 SWING BLEND EXIT SIGNAL v5.0\n\n"
+                    "📉 SWING BLEND EXIT SIGNAL v5.1\n\n"
                     f"🏷️ Ticker: {ticker}\n"
                     "🧬 Sleeve: 🎯 SWING_BLEND\n"
                     f"🧩 Sub-sleeve: {sub_label}\n"
@@ -14431,7 +14609,7 @@ def _v463_dashboard_text(core_plan: Optional[Dict[str, Any]], growth_plan: Optio
     except Exception as exc:
         win_text = f"n/a — {exc}"
     return (
-        "🗓️ MONTHLY ACTION DASHBOARD v5.0\n\n"
+        "🗓️ MONTHLY ACTION DASHBOARD v5.1\n\n"
         "This is the monthly control message. You should not need to manually run wealthplan/growthplan/specplan.\n\n"
         f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
         f"Monthly window: {win_text}\n"
@@ -14478,7 +14656,7 @@ def _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force: bool = False, preview_only: boo
             send(format_growth_alpha_plan(growth_plan))
         if spec_plan is not None:
             send(format_spec_alpha_plan(spec_plan))
-        # v5.0: do not send the full Crypto plan as part of the monthly dashboard.
+        # v5.1: do not send the full Crypto plan as part of the monthly dashboard.
         # Crypto is tactical and sends a private/public alert only when actionable
         # through maybe_send_crypto_alpha_auto_signal(), or when manually forced.
     if not preview_only:
@@ -14497,7 +14675,7 @@ def _V482_OLD_SEND_V463_MONTHLY_DASHBOARD(force: bool = False, preview_only: boo
 
 
 # =============================================================================
-# V5.0 MONTHLY-SLEEVE CRITICAL EXIT WATCH
+# V5.1 MONTHLY-SLEEVE CRITICAL EXIT WATCH
 # =============================================================================
 # Alert/routing only. This does not place broker orders and does not change
 # Core/Growth/SPEC scoring, monthly lock, allocation, ledgers, or IBKR behavior.
@@ -14604,7 +14782,7 @@ def maybe_send_monthly_sleeve_critical_exit_signal(force: bool = False) -> bool:
             return False
 
         msg = (
-            "🚨 CORE/GROWTH/SPEC CRITICAL EXIT WATCH v5.0\n\n"
+            "🚨 CORE/GROWTH/SPEC CRITICAL EXIT WATCH v5.1\n\n"
             "This is a hard-risk/allocation alert, not routine monthly rotation churn.\n\n"
             f"🕒 NY time: {ny_now().strftime('%Y-%m-%d %H:%M %Z')}\n"
             f"🌎 Market regime: {market_label(market)}\n"
@@ -14628,7 +14806,7 @@ def maybe_send_monthly_sleeve_critical_exit_signal(force: bool = False) -> bool:
         audit("V497_MONTHLY_SLEEVE_CRITICAL_EXIT", f"market={market} rows={len(rows)} reasons={reasons}")
         return True
     except Exception as exc:
-        logger.exception(f"[V5.0 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
+        logger.exception(f"[V5.1 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
         if force:
             send(f"⚠️ Monthly-sleeve critical exit watch failed: {exc}")
         return False
@@ -14642,11 +14820,11 @@ def maybe_send_wealth_core_signal() -> None:  # type: ignore[override]
     try:
         maybe_send_monthly_sleeve_critical_exit_signal(force=False)
     except Exception as exc:
-        logger.exception(f"[V5.0 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
+        logger.exception(f"[V5.1 MONTHLY SLEEVE CRITICAL EXIT ERROR] {exc}")
     try:
         maybe_send_crypto_alpha_auto_signal(force=False)
     except Exception as exc:
-        logger.exception(f"[V5.0 CRYPTO AUTO ERROR] {exc}")
+        logger.exception(f"[V5.1 CRYPTO AUTO ERROR] {exc}")
     try:
         maybe_send_ibkr_reconcile_after_close()
     except Exception as exc:
@@ -14772,7 +14950,7 @@ def format_swing_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[overri
     if not blend.get("enabled"):
         return _v463_label_cleanup(_V463_FINAL_OLD_SWING_PLAN_FORMAT(plan))
     msg = (
-        "🎯 SWING_ALPHA PLAN v5.0 — BLEND\n\n"
+        "🎯 SWING_ALPHA PLAN v5.1 — BLEND\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"💼 Account equity: {format_money(float(plan.get('account_equity', 0) or 0))}\n"
         f"🎯 Total Swing target: {plan.get('target_swing_pct')}% / {format_money(float(plan.get('target_swing_value', 0) or 0))}\n"
@@ -14919,7 +15097,7 @@ def _V48_OLD_COMBINED_PORTFOLIO_REPORT() -> str:  # type: ignore[override]
     equity = float(snapshot.get("equity", 0) or 0)
 
     msg = (
-        "📋 PORTFOLIO v5.0\n\n"
+        "📋 PORTFOLIO v5.1\n\n"
         f"💵 Cash: {format_money(cash)}\n"
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}\n"
         f"➖ Withdrawn cash: {format_money(snapshot.get('cash_withdrawn', 0))}\n"
@@ -14999,7 +15177,7 @@ def _v47_equity_text() -> str:
     snapshot = compute_equity_snapshot_data()
     legacy_value = float(snapshot.get("swing_positions_value", 0) or 0)
     lines = [
-        "💼 ACCOUNT EQUITY v5.0",
+        "💼 ACCOUNT EQUITY v5.1",
         "",
         f"💵 Cash: {format_money(snapshot['cash'])}",
         f"➕ Deposited cash: {format_money(snapshot.get('cash_deposited', 0))}",
@@ -15225,7 +15403,7 @@ def format_portfolio_allocation_plan() -> str:  # type: ignore[override]
     risk = plan.get("risk_guard", {}) or {}
     snapshot = compute_equity_snapshot_data()
     return (
-        "🏛️ INSTITUTIONAL ALLOCATION PLAN v5.0\n\n"
+        "🏛️ INSTITUTIONAL ALLOCATION PLAN v5.1\n\n"
         "🛡️ Private bot only. This is portfolio guidance, not an automatic trade.\n\n"
         f"🕒 NY time: {plan.get('ny_time')}\n"
         f"🌎 Market: {market_label(str(plan.get('market', 'UNKNOWN')))} ({plan.get('market_score')}/8)\n"
@@ -15355,7 +15533,7 @@ def _v48_sleevestatus_text() -> str:  # type: ignore[override]
             return 0.0
 
     return (
-        "🧭 ACTIVE SLEEVE STATUS v5.0\n\n"
+        "🧭 ACTIVE SLEEVE STATUS v5.1\n\n"
         f"💼 Equity: {format_money(equity)}\n"
         f"💵 Cash: {format_money(snapshot.get('cash', 0))} ({round(pct(snapshot.get('cash', 0)), 2)}%)\n"
         f"📦 Total active bot positions: {format_money(snapshot.get('positions_value', 0))}\n\n"
@@ -15712,8 +15890,8 @@ def _V483_EXPORT_BASE(prefix: str = "bot_state_export") -> str:  # type: ignore[
 # - Do not change active strategy scoring, allocation, ledgers, IBKR behavior, or
 #   order execution behavior.
 
-V497_VERSION = "v5.0-final-freeze-swing-blend-public-growth-20-45-15-10-10-monitor"
-V497_LOGIC_LABEL = "v5.0: v4.9.8 accounting/reporting baseline + Swing Blend 50% tactical / 50% weekly RS63 + fixed public Growth routing"
+V497_VERSION = "v5.1-final-freeze-swing-late-entry-fee-aware-20-45-15-10-10-monitor"
+V497_LOGIC_LABEL = "v5.1: v4.9.8 accounting/reporting baseline + Swing Blend 50% tactical / 50% weekly RS63 + fixed public Growth routing"
 V497_ALLOCATION_LABEL = "Core 20 / Growth 45 / SPEC 15 / Swing Blend 10 (5 Tactical + 5 Weekly RS63) / Crypto 10 / VCP 0 / Bear 0 / Options 0"
 V483_VERSION = V497_VERSION
 V483_LOGIC_LABEL = V497_LOGIC_LABEL
@@ -15731,19 +15909,19 @@ if os.getenv("ALLOW_STRATEGY_VERSION_OVERRIDE", "0").strip() != "1":
 def _v483_label_cleanup(text: Any) -> str:
     out = str(text)
     replacements = [
-        ("v4.8.3", "v5.0"), ("V4.8.3", "V5.0"),
-        ("v4.8.2", "v5.0"), ("V4.8.2", "V5.0"),
-        ("v4.8.1", "v5.0"), ("V4.8.1", "V5.0"),
-        ("v4.8", "v5.0"), ("V4.8", "V5.0"),
-        ("v4.7.1", "v5.0"), ("V4.7.1", "V5.0"),
-        ("v4.7", "v5.0"), ("V4.7", "V5.0"),
-        ("v4.6.3", "v5.0"), ("V4.6.3", "V5.0"),
-        ("v4.6.2", "v5.0"), ("V4.6.2", "V5.0"),
-        ("v4.4.3", "v5.0"), ("V4.4.3", "V5.0"),
-        ("v4.3", "v5.0"), ("V4.3", "V5.0"),
-        ("v3.8", "v5.0"), ("V3.8", "V5.0"),
-        ("v3.7", "v5.0"), ("V3.7", "V5.0"),
-        ("v3.6", "v5.0"), ("V3.6", "V5.0"),
+        ("v4.8.3", "v5.1"), ("V4.8.3", "V5.1"),
+        ("v4.8.2", "v5.1"), ("V4.8.2", "V5.1"),
+        ("v4.8.1", "v5.1"), ("V4.8.1", "V5.1"),
+        ("v4.8", "v5.1"), ("V4.8", "V5.1"),
+        ("v4.7.1", "v5.1"), ("V4.7.1", "V5.1"),
+        ("v4.7", "v5.1"), ("V4.7", "V5.1"),
+        ("v4.6.3", "v5.1"), ("V4.6.3", "V5.1"),
+        ("v4.6.2", "v5.1"), ("V4.6.2", "V5.1"),
+        ("v4.4.3", "v5.1"), ("V4.4.3", "V5.1"),
+        ("v4.3", "v5.1"), ("V4.3", "V5.1"),
+        ("v3.8", "v5.1"), ("V3.8", "V5.1"),
+        ("v3.7", "v5.1"), ("V3.7", "V5.1"),
+        ("v3.6", "v5.1"), ("V3.6", "V5.1"),
     ]
     for old, new in replacements:
         out = out.replace(old, new)
@@ -15777,7 +15955,7 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: i
     try:
         plan = compute_crypto_alpha_plan()
     except Exception as exc:
-        logger.exception(f"[V5.0 CRYPTO AUTO CHECK ERROR] {exc}")
+        logger.exception(f"[V5.1 CRYPTO AUTO CHECK ERROR] {exc}")
         if force:
             send(f"⚠️ Crypto auto-check failed: {exc}")
         return False
@@ -15817,7 +15995,7 @@ def maybe_send_crypto_alpha_auto_signal(force: bool = False) -> bool:  # type: i
         set_meta("last_v463_crypto_action_signature", action_sig)
         return False
 
-    header = f"🪙 CRYPTO AUTO CHECK v5.0 — {reason}\n\n"
+    header = f"🪙 CRYPTO AUTO CHECK v5.1 — {reason}\n\n"
     send((header + format_crypto_alpha_plan(plan))[:MAX_TELEGRAM_MESSAGE])
     if public_reason and PUBLIC_SIGNAL_ENABLED and SIGNAL_CHANNEL_ID != 0 and CRYPTO_ALPHA_PUBLIC_SIGNAL_ENABLED and V482_PUBLIC_CRYPTO_ACTION_ENABLED:
         ok, info = send_public_signal(format_public_crypto_plan(plan, reason=public_reason))
@@ -15926,11 +16104,11 @@ def export_state_bundle(prefix: str = "bot_state_export") -> str:  # type: ignor
             z.writestr("cash_deposits.table.json", json.dumps(safe_convert(load_cash_deposits()), indent=2))
             z.writestr("cash_flow_summary.json", json.dumps(safe_convert(cash_deposit_summary()), indent=2))
     except Exception as exc:
-        print(f"[V5.0 EXPORT WARNING] {exc}")
+        print(f"[V5.1 EXPORT WARNING] {exc}")
     return zip_path
 
 
-# Final crypto label cleanup after v5.0 auto-alert override.
+# Final crypto label cleanup after v5.1 auto-alert override.
 
 def format_crypto_alpha_plan(plan: Dict[str, Any]) -> str:  # type: ignore[override]
     return _v483_label_cleanup(_V483_FORMAT_CRYPTO_BASE(plan))
@@ -15944,7 +16122,7 @@ except Exception:
 
 
 # =============================================================================
-# V5.0 FINAL USER-FACING POLISH OVERRIDE
+# V5.1 FINAL USER-FACING POLISH OVERRIDE
 # =============================================================================
 # This last block is intentionally label/alert routing only.
 # It does not change strategy scoring, allocation, risk, ledgers, IBKR, or execution.
@@ -15952,9 +16130,9 @@ except Exception:
 def v483_final_status_text() -> str:
     snapshot = compute_equity_snapshot_data()
     return (
-        "🧊 V5.0 FINAL FREEZE STATUS\n\n"
+        "🧊 V5.1 FINAL FREEZE STATUS\n\n"
         f"🧾 Strategy display: {STRATEGY_VERSION}\n"
-        "🧩 Strategy logic: v4.9.8 active-only Core/Growth/SPEC/Crypto + v5.0 Swing Blend. Only Swing sleeve and public Growth routing changed.\n"
+        "🧩 Strategy logic: v4.9.8 active-only Core/Growth/SPEC/Crypto + v5.1 Swing Blend. Only Swing sleeve and public Growth routing changed.\n"
         "🎯 Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n"
         "❌ Disabled from live operation: legacy VCP 0%, Bear/inverse 0%, Options 0%\n\n"
         "🧾 Cash accounting:\n"
@@ -15984,14 +16162,14 @@ def v483_final_status_text() -> str:
 
 def v483_final_help_text() -> str:
     return (
-        "Commands v5.0:\n"
+        "Commands v5.1:\n"
         "portfolio | equity | summary | pnl | scanstatus | openrisk | riskmatrix | stressstatus | validationstatus\n"
         "depositcash AMOUNT [note] | depositstatus | showdeposits | download_deposits\n"
         "withdrawplan | withdrawdone AMOUNT [note] | showwithdrawals | download_withdrawals\n"
         "wealthplan | corestatus | coreportfolio | corebuy TICKER QTY at PRICE fee FEE | coresell TICKER QTY at PRICE\n"
         "growthplan | growthstatus | growthportfolio | growthbuy TICKER QTY at PRICE | growthsell TICKER QTY at PRICE\n"
         "specplan | specstatus | specportfolio | specbuy TICKER QTY at PRICE | specsell TICKER QTY at PRICE\n"
-        "swingstatus | swingplan | swingportfolio | swingbuy TICKER QTY at PRICE | swingsell TICKER QTY at PRICE\n"
+        "swingstatus | swingplan | swingportfolio | swingbuy TICKER QTY at PRICE [fee COMMISSION] | swingsell TICKER QTY at PRICE [fee COMMISSION] | swinglatebuy | swingfixbuy\n"
         "cryptostatus | cryptoplan | cryptocheck | cryptoportfolio | cryptobuy TICKER UNITS at PRICE | cryptosell TICKER UNITS at PRICE\n"
         "brokerstatus | brokerreconcile | brokersyncpreview | brokersyncapply CONFIRM\n"
         "monthlydashboard | criticalexitcheck | publicdashboard | testpublic | postchannelterms\n"
@@ -16002,10 +16180,10 @@ def v483_final_help_text() -> str:
 
 def format_validation_status() -> str:  # type: ignore[override]
     return (
-        "🧪 VALIDATION STATUS v5.0\n\n"
-        "Strategy: v4.9.8 active-only strategy with v5.0 Swing Blend and depositcash accounting.\n"
+        "🧪 VALIDATION STATUS v5.1\n\n"
+        "Strategy: v4.9.8 active-only strategy with v5.1 Swing Blend and depositcash accounting.\n"
         "Allocation: Core 20 / Growth 45 / SPEC 15 / Swing Alpha 10 / Crypto 10\n\n"
-        "🧩 v5.0 change scope:\n"
+        "🧩 v5.1 change scope:\n"
         "- Core/Growth/SPEC/Crypto scoring, allocation, ledgers, IBKR behavior, and execution remain unchanged. Swing plan logic is intentionally upgraded to a 50/50 Tactical + Weekly RS blend.\n"
         "- setcash is disabled. Use depositcash to record manual external deposits.\n"
         "- Deposits increase principal/performance base and adjust withdrawal HWM upward.\n"
@@ -16020,11 +16198,11 @@ def format_validation_status() -> str:  # type: ignore[override]
         "• Core/Growth/SPEC hard-exit watch is sent automatically after close when risk/allocation is critical.\n"
         "• Crypto auto-alerts are action-only by default: BUY/ADD/TRIM/SELL or action-cleared.\n"
         "• Swing Alpha tactical entries/exits remain automatic near the scan/management windows.\n\n"
-        "🤖 No broker order automation in v5.0; IBKR reconciliation remains read-only."
+        "🤖 No broker order automation in v5.1; IBKR reconciliation remains read-only."
     )[:MAX_TELEGRAM_MESSAGE]
 
 
-# V5.0 final command-output label cleanup.
+# V5.1 final command-output label cleanup.
 # Some status commands are produced inline by the command router rather than by
 # named formatter functions. Intercept them last so all visible labels are v4.8.3.
 
@@ -16107,21 +16285,21 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     # ---- merged from _V483_FINAL_HANDLE_COMMAND ----
-    if text_lower in {"v500status", "v50status", "v5status", "v498status", "v497status", "v496status", "v495status", "v494status", "v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
+    if text_lower in {"v510status", "v51status", "v5.1status", "v500status", "v50status", "v5status", "v498status", "v497status", "v496status", "v495status", "v494status", "v483status", "v482status", "v481status", "v48status", "publicstatus", "activeonlystatus", "cleanupstatus", "hotfixstatus", "freezestatus"}:
         send(v483_final_status_text())
         return
     if text_lower in {"help", "/help"}:
         send(v483_final_help_text())
         return
     if text_lower in {"testchannel", "testpublic"}:
-        ok, info = send_public_signal("✅ Public channel test from v5.0. If you see this, public forwarding works.\n\n" + public_signal_footer())
+        ok, info = send_public_signal("✅ Public channel test from v5.1. If you see this, public forwarding works.\n\n" + public_signal_footer())
         send(f"Public test status: {info if ok else 'FAILED - ' + info}")
         return
 
     # ---- merged from _V483_FINAL_OLD_HANDLE_COMMAND ----
     if text_lower in {"bearstatus", "vcpstatus"}:
         send(
-            "ℹ️ V5.0 ACTIVE-ONLY STATUS\n\n"
+            "ℹ️ V5.1 ACTIVE-ONLY STATUS\n\n"
             "Legacy VCP, Bear/inverse, and Options strategies are removed from live operation.\n"
             "Swing Alpha owns the tactical stock signal path.\n\n"
             "Use: swingstatus, swingplan, swingbuy, swingsell."
@@ -16129,7 +16307,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
     if text_lower.split(" ")[0] in {"bought", "sold", "editbuy", "editsell", "voidbuy"}:
         send(
-            "❌ Legacy VCP/Bear bought/sold commands are disabled in v5.0.\n\n"
+            "❌ Legacy VCP/Bear bought/sold commands are disabled in v5.1.\n\n"
             "Use the active ledger commands only:\n"
             "• corebuy / coresell\n"
             "• growthbuy / growthsell\n"
@@ -16223,7 +16401,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         details = swing_alpha_position_market_value_details()
         m_ok, m_reason = swing_alpha_market_filter_ok()
         send(
-            "🎯 SWING_ALPHA STATUS v5.0\n\n"
+            "🎯 SWING_ALPHA STATUS v5.1\n\n"
             f"Enabled: {yes_no(SWING_ALPHA_ENABLED)}\n"
             f"Ledger enabled: {yes_no(SWING_ALPHA_LEDGER_ENABLED)}\n"
             f"Live entry/exit signals: {yes_no(SWING_ALPHA_AUTO_SIGNAL_ENABLED)}\n"
@@ -16245,6 +16423,22 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     # ---- merged from _V461_OLD_HANDLE_COMMAND ----
+
+    if text_lower in {"swinglatehelp", "swingfeehelp", "swingfixhelp"}:
+        send(
+            "🎯 SWING v5.1 EXECUTION HELP\n\n"
+            "Normal broker fill with fee:\n"
+            "• swingbuy TICKER SHARES at FILL_PRICE fee COMMISSION\n"
+            "• swingsell TICKER SHARES at FILL_PRICE fee COMMISSION\n\n"
+            "Late entry from a recent signal:\n"
+            "• swinglatebuy TICKER SHARES at FILL_PRICE fee COMMISSION CHECK\n"
+            "• swinglatebuy TICKER SHARES at FILL_PRICE fee COMMISSION CONFIRM\n\n"
+            "Already executed broker fill / ledger reconciliation:\n"
+            "• swingfixbuy TICKER SHARES at FILL_PRICE fee COMMISSION CONFIRM\n\n"
+            "Use the actual IBKR trade fill price excluding commission, then add commission separately."
+        )
+        return
+
     if text_lower == "swingportfolio":
         send(format_swing_alpha_portfolio_report())
         return
@@ -16254,20 +16448,63 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
     if text_lower == "swingexposure":
         send(format_swing_alpha_exposure_report())
         return
-    swing_cmd = re.fullmatch(r"(?i)\s*(swingbuy|swingsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(?:\s+(partial))?\s*", text_clean)
+    late_cmd = re.fullmatch(
+        r"(?i)\s*(swinglatebuy|swingfixbuy|swingmanualbuy)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(.*)\s*",
+        text_clean,
+    )
+    if late_cmd:
+        action = late_cmd.group(1).lower()
+        ticker = normalize_ticker(late_cmd.group(2))
+        shares = float(late_cmd.group(3))
+        price = float(late_cmd.group(4))
+        fee, partial_ok, check, confirm = _v51_parse_fee_tail(late_cmd.group(5) or "")
+        if not ticker:
+            send("Invalid ticker")
+            return
+        if action == "swinglatebuy":
+            ok_check, check_msg, _, _, _ = _v51_late_entry_check_text(ticker, price)
+            if check and not confirm:
+                send(check_msg)
+                return
+            if not confirm:
+                send(check_msg + "\n\nTo record the fill, repeat with CONFIRM if accepted.")
+                return
+            if not ok_check:
+                send("❌ ERROR: " + check_msg)
+                return
+            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok, fee=fee, allow_recent_signal=True)
+            send(msg if ok else "❌ ERROR: " + msg)
+            return
+        if not confirm:
+            send(
+                "❌ swingfixbuy requires CONFIRM because it bypasses active-plan validation for an already-executed broker fill.\n\n"
+                f"Usage:\nswingfixbuy {ticker} {format_core_shares(shares)} at {round(price,4)} fee COMMISSION CONFIRM"
+            )
+            return
+        ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok, fee=fee, manual_reconcile=True, skip_quote_check=True)
+        send(msg if ok else "❌ ERROR: " + msg)
+        return
+
+    swing_cmd = re.fullmatch(
+        r"(?i)\s*(swingbuy|swingsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)(.*)\s*",
+        text_clean,
+    )
     if swing_cmd:
         action = swing_cmd.group(1).lower()
         ticker = normalize_ticker(swing_cmd.group(2))
         shares = float(swing_cmd.group(3))
         price = float(swing_cmd.group(4))
-        partial_ok = bool(swing_cmd.group(5))
+        fee, partial_ok, check, confirm = _v51_parse_fee_tail(swing_cmd.group(5) or "")
         if not ticker:
             send("Invalid ticker")
             return
+        if check or confirm:
+            send("❌ CHECK/CONFIRM is only used with swinglatebuy or swingfixbuy. For normal swingbuy/swingsell, remove CHECK/CONFIRM.")
+            return
         if action == "swingbuy":
-            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok)
+            ok, msg = record_swing_alpha_buy(ticker, shares, price, update_id=update_id, partial_ok=partial_ok, fee=fee)
         else:
-            ok, msg = record_swing_alpha_sell(ticker, shares, price, update_id=update_id)
+            ok, msg = record_swing_alpha_sell(ticker, shares, price, update_id=update_id, fee=fee)
         send(msg if ok else "❌ ERROR: " + msg)
         return
 
@@ -16623,7 +16860,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         return
 
     if text_lower.startswith("ensembleplan") or text_lower.startswith("ensemblescan"):
-        send("ℹ️ ensembleplan is not part of v5.0. This freeze uses the 100% active allocation with Swing Blend inside the existing 10% Swing sleeve. Use swingplan or swingscan instead; do not allocate extra capital.")
+        send("ℹ️ ensembleplan is not part of v5.1. This freeze uses the 100% active allocation with Swing Blend inside the existing 10% Swing sleeve. Use swingplan or swingscan instead; do not allocate extra capital.")
         return
 
     spec_trade_cmd = re.fullmatch(r"(?i)\s*(specbuy|specsell)\s+([A-Z0-9.\-]{1,15})\s+([0-9]+(?:\.[0-9]+)?)\s+(?:at|@)\s+([0-9]+(?:\.[0-9]+)?)\s*", text_clean)
@@ -16864,7 +17101,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
         plan = compute_withdrawal_plan()
         if not plan["initialized"]:
             send(
-                "🏦 WITHDRAWAL PLAN v5.0\n\n"
+                "🏦 WITHDRAWAL PLAN v5.1\n\n"
                 f"💼 Equity: {format_money(plan['equity'])}\n"
                 f"💵 Cash: {format_money(plan['cash'])}\n"
                 f"➕ Deposited cash: {format_money(plan.get('cash_deposited', plan.get('deposited_cash', 0)))}\n"
@@ -16875,7 +17112,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
             return
 
         send(
-            "🏦 WITHDRAWAL PLAN v5.0\n\n"
+            "🏦 WITHDRAWAL PLAN v5.1\n\n"
             f"📊 Phase: {plan['phase']}\n"
             f"💼 Equity: {format_money(plan['equity'])}\n"
             f"💵 Cash: {format_money(plan['cash'])}\n"
@@ -17214,7 +17451,7 @@ def handle_command(text: str, update_id: Optional[int] = None) -> None:  # type:
 
     if text_lower.startswith("setcash"):
         send(
-            "❌ setcash is disabled in v5.0.\n\n"
+            "❌ setcash is disabled in v5.1.\n\n"
             "Use depositcash AMOUNT optional note to record external cash deposits.\n"
             "Use brokerreconcile / brokersyncpreview for IBKR reconciliation.\n\n"
             "Reason: direct cash setting can make deposits look like trading profit and distort withdrawal logic."
